@@ -28,7 +28,7 @@ Prioritize efficiency with template-based semi-personalization.
 
 ## Subject Line
 
-- **15–20 characters** is optimal. Should fit in the first view on a smartphone
+- **40–60 characters (6–8 words)** is optimal. Keep it scannable on mobile
 - Convey recipient benefits or challenges
 - Avoid generic subjects like "Proposal", "Announcement", "Notice"
 - Vary the subject for each prospect. Never use the same subject for all outreach
@@ -72,15 +72,17 @@ Prioritize efficiency with template-based semi-personalization.
 > I'm reaching out after seeing your robust career support program — including a joint job fair with roughly 700 companies and mock interviews.
 > With a career support program at this scale, I imagine ensuring sufficient individual mock interview practice time for each student is a real challenge.
 
-## Required Legal Disclosures (Act on Regulation of Transmission of Specified Electronic Mail)
+## Required Legal Disclosures
 
-Outbound emails to publicly listed email addresses are legal, but the following disclosures are **required by law**. Always include them as part of the signature block:
+Outbound email regulations vary by country. Always comply with the laws applicable to your recipients' location (e.g., CAN-SPAM in the US, GDPR in the EU/UK, CASL in Canada, Spam Act in Australia). Common requirements across most jurisdictions:
 
-- Sender's name or corporate name (acceptable if included in signature)
-- Sender's address (acceptable if included in signature)
-- **Opt-out notice**: A line such as "If you would prefer not to receive further emails, please reply to this message."
+- **Sender identification**: Sender's name or company name (acceptable if included in signature)
+- **Physical or postal address**: A valid mailing address (acceptable if included in signature)
+- **Opt-out mechanism**: A clear and easy way for recipients to opt out — e.g., "If you prefer not to receive further emails, please reply to this message." Process opt-out requests promptly
 
-Verify that these are included in the signature block in SALES_STRATEGY.md. If not, add the opt-out notice at the end of the email.
+Verify that these are included in the signature block in SALES_STRATEGY.md. If the opt-out notice is missing, add it at the end of the email.
+
+> Note: If targeting recipients in specific countries, research the applicable regulations for those jurisdictions before sending.
 
 ## Sending Method
 
@@ -101,7 +103,7 @@ Check each email against these patterns that significantly lower response rates 
 
 ## Notes
 
-- Body text should be **150–250 characters** (excluding signature and legal disclosures). Shorter emails have higher response rates
+- Body text should be **75–150 words** (excluding signature and legal disclosures). Shorter emails have higher response rates
 - One CTA per email
 - No attachments (for first contact)
 - Polite but not overly formal. Excessive formality creates distance

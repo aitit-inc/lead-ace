@@ -164,6 +164,61 @@ lead-ace/                           ← git repo root
 
 ---
 
+## フェーズ1.7: 法人番号システムのグローバル化
+
+**目標:** 日本の国税庁法人番号に依存した組織識別の仕組みを、グローバル対応の汎用識別子に置き換える
+
+### 背景・問題
+
+現在の build-list スキルおよびスクリプト群は、日本固有の**法人番号（13桁）**に強く依存している：
+
+- `check_corporate_number.py`: 国税庁（NTA）APIを叩いて法人番号を取得
+- `organizations` テーブル: 法人番号を Primary Key として使用
+- 「法人番号が取得できない候補は登録不可」というルール（`add_prospects.py`）
+- `build-list/SKILL.md` に法人番号検索のフロー・対処法が詳細記述されている
+
+日本以外の企業・組織には法人番号が存在しないため、このままではグローバルユーザーが利用できない。
+
+### 設計方針（要検討・合意が必要）
+
+以下の方針を決定してから実装に入ること：
+
+#### 組織識別子の設計
+
+| 案 | 内容 | メリット | デメリット |
+|---|---|---|---|
+| A | 法人番号を廃止し、公式URLをPKに変更 | シンプル・グローバル対応 | URLが変わると別組織扱いになる |
+| B | 法人番号をオプション化し、代替として公式URL + 組織名のペアを使用 | 後方互換・柔軟 | 重複チェックが複雑になる |
+| C | 国別IDフィールド（`country_code` + `business_id`）を導入 | 将来性・型安全 | 設計コストが高い |
+
+**推奨:** 案Bをベースに検討（法人番号がある場合は使い、ない場合はURL+名前で代替）
+
+#### 影響範囲
+
+- `plugin/scripts/sales-db.sql`: `organizations` テーブルのスキーマ変更
+- `plugin/scripts/add_prospects.py`: 法人番号必須バリデーションの廃止
+- `plugin/scripts/check_corporate_number.py`: グローバル化または廃止
+- `plugin/scripts/check_duplicate.py`: 重複チェックロジックの修正
+- `plugin/migrations/`: 新マイグレーション追加
+- `plugin/skills/build-list/SKILL.md`: 法人番号検索フローの削除・置換
+- `plugin/skills/build-list/references/enrich-contacts.md`: 同上
+
+#### スクリプト移行時の注意
+
+フェーズ2（バックエンド構築）と同時期に対応する場合は、Drizzleスキーマ側で先に設計を確定させること（二度変更しないように）。
+
+### タスク
+
+- [ ] 組織識別子の設計方針をユーザーと合意
+- [ ] `organizations` テーブルのスキーマ変更（PK・必須フィールドの再定義）
+- [ ] `add_prospects.py` の法人番号必須バリデーション廃止・代替重複チェック実装
+- [ ] `check_corporate_number.py` の扱い決定（廃止 or グローバル版に置換 or 日本向けオプションとして残す）
+- [ ] `build-list` スキルから法人番号前提のフローを削除・汎用フローに置換
+- [ ] マイグレーション追加（既存ユーザーのデータ互換性確保）
+- [ ] `check_corporate_number.py` に代わる組織識別の方法を `enrich-contacts.md` に記述
+
+---
+
 ## フェーズ2: バックエンド構築（Cloudflare Workers + Supabase）
 
 **目標:** Web API Server と MCP Server を TypeScript で実装し、Supabase PostgreSQL を使うバックエンド基盤を作る

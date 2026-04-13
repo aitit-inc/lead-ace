@@ -98,6 +98,14 @@ Subject: {specific subject line that addresses the recipient's challenge}
 ## Search Keywords
 (Keyword list for finding prospects. Industry names, service categories, related terms, etc.)
 
+## Prospect Discovery Sources
+(Platforms and directories for finding prospect candidates. List sources relevant to your target market and region.)
+- Press release / news sites: (e.g., PR Newswire, Business Wire, GlobeNewswire, TechCrunch, or country-specific equivalents)
+- Company databases / directories: (e.g., LinkedIn, Crunchbase, Apollo, ZoomInfo, industry association member lists)
+- Startup / VC databases: (e.g., Crunchbase, AngelList, PitchBook, Product Hunt — if targeting startups)
+- Trade show / event exhibitor lists: (if applicable)
+- Country/region-specific directories: (if applicable)
+
 ## Environment & Tool Status
 - python3: ✅ or ❌
 - git (remote): ✅ or ❌ (❌ means risk of data loss)
@@ -110,6 +118,6 @@ Subject: {specific subject line that addresses the recipient's challenge}
 
 **Generation guidelines:**
 - Keep the elevator pitch specific and concise. Avoid jargon; make it easy to understand
-- Make targets as specific as possible (not "small businesses" but "SaaS companies with 50-200 employees"; not "schools" but "private middle-high schools in the Greater Tokyo area")
+- Make targets as specific as possible (not "small businesses" but "SaaS companies with 50-200 employees in the US"; not "retailers" but "DTC e-commerce brands with under 50 employees")
 - Structure messaging to lead with recipient benefits
 - List at least 10 search keywords

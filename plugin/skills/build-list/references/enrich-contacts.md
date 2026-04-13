@@ -43,14 +43,14 @@ If an email is found in the top page header/footer in step 1, stop here. If not,
 
 #### 2a. External Search (Do this first)
 
-Search with WebSearch using 1-2 queries:
+Check the "Prospect Discovery Sources" section of SALES_STRATEGY.md for the specific platforms and directories to use. Then search with WebSearch using 1-2 queries:
 - `"{company name}" email address` or `"{company name}" contact`
-- `site:prtimes.jp "{company name}"` (PR TIMES press releases often include PR contact emails)
+- Search on press release / news sites listed in SALES_STRATEGY.md (press releases often include PR contact emails)
 
-Priority sources to check:
-- **PR TIMES and other press release sites** — high rate of PR contact emails
-- **Startup databases** (INITIAL, STARTUP DB, etc.) company pages
-- **Industry directories and corporate information sites**
+Priority sources to check (based on SALES_STRATEGY.md's "Prospect Discovery Sources"):
+- **Press release / news sites** listed in SALES_STRATEGY.md — high rate of PR contact emails
+- **Company databases / startup databases** listed in SALES_STRATEGY.md — company pages often have contact info
+- **Industry directories and corporate information sites** listed in SALES_STRATEGY.md
 
 If found here, stop the search. If not, proceed to step 2b.
 

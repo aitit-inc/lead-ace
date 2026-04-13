@@ -65,7 +65,7 @@ Set conversion rates at each step using industry averages as initial values, the
 
 SALES_STRATEGY.md should list at least 10 search keywords. Cover the following patterns:
 - Direct industry name (e.g., "tax accounting firm", "SaaS company")
-- Industry × region (e.g., "Tokyo IT company")
-- Challenge-based (e.g., "DX adoption SMB", "labor shortage manufacturing")
+- Industry × region (e.g., "[City] [industry] company", "New York fintech startup")
+- Challenge-based (e.g., "digital transformation SMB", "labor shortage manufacturing")
 - Competitor customers (e.g., "{competitor name} users", "{competitor name} case studies")
 - Industry associations/directories (e.g., "{industry} association member list")

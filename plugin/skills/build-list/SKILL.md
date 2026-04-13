@@ -148,7 +148,7 @@ For each prospect, assign a match reason (why they're appropriate as a target, i
 - 5: Under consideration (indirect possibility)
 
 **Factor in email retrieval ease:** If the following signals are found during exploration, raise priority by 1 level for equal match quality (more email holders → higher outbound success rate):
-- Has press releases on PR TIMES (high rate of PR email inclusion)
+- Has press releases on press release distribution sites (high rate of PR contact email inclusion)
 - Listed in startup DB or industry directory (more public information available)
 - Email explicitly shown on official site (e.g., info@) discovered during exploration
 

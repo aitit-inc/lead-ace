@@ -173,7 +173,17 @@ Question: Price range (or pricing structure) and current sales challenges or con
   - Example: "Monthly subscription / usage-based / initial fee + monthly / spot pricing are common — which is closest to yours?"
 - If "up to you": Research common price ranges in the industry and propose
 
-#### Step 4-6: Sender Information
+#### Step 4-6: Prospect Discovery Sources
+Question: What platforms and directories should be used to find prospect candidates? (Depends on your target market, industry, and region)
+- Present examples organized by category:
+  - Press release / news sites: PR Newswire, Business Wire, GlobeNewswire, TechCrunch, or country-specific equivalents
+  - Company databases / directories: LinkedIn, Crunchbase, Apollo, ZoomInfo, industry association member lists
+  - Startup / VC databases: Crunchbase, AngelList, PitchBook, Product Hunt (especially if targeting startups)
+  - Trade show / event exhibitor lists (if applicable)
+  - Country/region-specific directories (if applicable)
+- If "up to you": Select reasonable defaults based on the user's target market (industry, country/region) and write selected sources into the "Prospect Discovery Sources" section of SALES_STRATEGY.md
+
+#### Step 4-7: Sender Information
 Question: Confirm the following in order (these are required for email sending)
 - Organization's phone number (may be needed when filling in contact forms)
 - Sender name (name displayed as email sender)
@@ -183,16 +193,16 @@ Question: Confirm the following in order (these are required for email sending)
 
 These are required for outbound processing so "up to you" is not allowed. Must be obtained from the user.
 
-#### Step 4-7: Scheduling and Response Definition
+#### Step 4-8: Scheduling and Response Definition
 Question: Confirm the following
-- Scheduling link (Timerex / Calendly, etc. URL. "None" if not applicable)
-  - "Do you use a scheduling tool? Timerex, Calendly, Cal.com are common options"
+- Scheduling link (Calendly / Cal.com / HubSpot Meetings, etc. URL. "None" if not applicable)
+  - "Do you use a scheduling tool? Calendly, Cal.com, HubSpot Meetings are popular options"
 - Response definition: What counts as a "response"
   - Show options: "Common responses counted as 'responded': ① Direct email reply ② Scheduling completion notification ③ Reply via contact form. Is this OK? Add if there are others"
 - Scheduling service name in use and notification sender email address
 - If "up to you": Use ①②③ above as default for response definition
 
-#### Step 4-8: Notification Settings
+#### Step 4-9: Notification Settings
 Question: Email address to receive daily-cycle completion notifications (or "none")
 - "We can send you a daily report notification when the daily sales cycle completes. Please provide an email address if you'd like notifications"
 
