@@ -191,7 +191,7 @@ lead-ace/                           ← git repo root
 
 ---
 
-## フェーズ1.7: 法人番号システムのグローバル化
+## フェーズ1.7: 法人番号システムのグローバル化 ✅ 完了
 
 **目標:** 日本の国税庁法人番号に依存した組織識別の仕組みを、グローバル対応の汎用識別子に置き換える
 
@@ -236,13 +236,15 @@ lead-ace/                           ← git repo root
 
 ### タスク
 
-- [ ] 組織識別子の設計方針をユーザーと合意
-- [ ] `organizations` テーブルのスキーマ変更（PK・必須フィールドの再定義）
-- [ ] `add_prospects.py` の法人番号必須バリデーション廃止・代替重複チェック実装
-- [ ] `check_corporate_number.py` の扱い決定（廃止 or グローバル版に置換 or 日本向けオプションとして残す）
-- [ ] `build-list` スキルから法人番号前提のフローを削除・汎用フローに置換
-- [ ] マイグレーション追加（既存ユーザーのデータ互換性確保）
-- [ ] `check_corporate_number.py` に代わる組織識別の方法を `enrich-contacts.md` に記述
+- [x] 組織識別子の設計方針をユーザーと合意（apex domain をPKに採用）
+- [x] `organizations` テーブルのスキーマ変更（`domain TEXT PK`、`country` 追加、`corporate_number` 廃止）
+- [x] `prospects.organization_id` を NOT NULL に厳格化（NULLレコードはカスケード削除）
+- [x] `add_prospects.py` の法人番号必須バリデーション廃止・ドメインベース重複チェック実装
+- [x] `check_corporate_number.py` 廃止（`lookup_corporate_numbers.py`, `link_organization.py`, `mark_org_lookup_status.py` も削除）
+- [x] `build-list` スキルから法人番号前提のフローを削除・汎用フローに置換
+- [x] マイグレーション追加（010: organizations/prospects 再構築、011: organization_id NOT NULL 強制）
+- [x] `enrich-contacts.md` を更新（corporate_number フィールド削除、organization_name オプション化）
+- [x] `data-migration-v050` スキル削除（v0.6.0 予定を前倒し）
 
 ---
 
