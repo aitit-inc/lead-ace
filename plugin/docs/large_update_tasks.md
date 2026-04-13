@@ -265,94 +265,42 @@ lead-ace/                           ← git repo root
 | Auth | Supabase Auth（JWT検証） |
 | 非同期ジョブ | Cloudflare Queues |
 
-### 2-1. backend/ プロジェクトのセットアップ
+### 2-1. backend/ プロジェクトのセットアップ ✅ 完了
 
-- [ ] **Cloudflare Workers + Wrangler のベストプラクティス確認**（上記「開発方針」セクション参照）
-- [ ] **Hono のベストプラクティス確認**（同上）
-- [ ] `backend/` に Hono + TypeScript + Drizzle ORM の初期セットアップ（`wrangler.toml` 含む）
-- [ ] インストール後、実際に入ったバージョン（Hono, Drizzle, Wrangler 等）をメモしておく
+- [x] **Cloudflare Workers + Wrangler のベストプラクティス確認**（Workers RPC が標準化、`nodejs_compat` フラグ必須）
+- [x] **Hono のベストプラクティス確認**（`c.env` 使用、`process.env` 禁止）
+- [x] `backend/` に Hono + TypeScript + Drizzle ORM の初期セットアップ（`wrangler.api.jsonc` / `wrangler.mcp.jsonc` 作成）
+- [x] 実際に入ったバージョン: Hono 最新、Drizzle ORM 最新、Wrangler 最新、MCP SDK 1.29.0、Zod 4.3.6
 
-### 2-2. Drizzle スキーマ定義
+### 2-2. Drizzle スキーマ定義 ✅ 完了
 
-現在の `scripts/sales-db.sql`（SQLite）を PostgreSQL 向け TypeScript スキーマに変換する。
+- [x] **Drizzle ORM + Supabase のベストプラクティス確認**（`postgres.js` + Transaction Pooler、`prepare: false` 必須）
+- [x] **「設計方針: 型安全・スキーマ厳密化」セクションの確認事項をユーザーと合意**（ENUM 化 / org_lookup_status 削除 / JSONB 定義等）
+- [x] `backend/src/db/schema.ts` にDrizzleスキーマ定義（6 ENUM + 7 テーブル）
+- [x] `drizzle-kit generate` でマイグレーションファイル生成（`drizzle/0000_empty_white_tiger.sql`）
+- [ ] Supabase local でのマイグレーション動作確認（2-5 の docker compose 起動後に確認）
 
-**開始前に以下を行う:**
-- [ ] **Drizzle ORM + Supabase のベストプラクティス確認**（上記「開発方針」セクション参照）
-- [ ] **「設計方針: 型安全・スキーマ厳密化」セクションの確認事項をユーザーと合意**してからスキーマを書き始める
+### 2-3. Web API Server の実装 (Hono) ✅ 完了
 
-**変換方針（SQLite → PostgreSQL）:**
-- `INTEGER PRIMARY KEY AUTOINCREMENT` → `.generatedAlwaysAsIdentity()`
-- `INTEGER` (0/1フラグ) → `boolean()`
-- `TEXT DEFAULT (datetime('now', 'localtime'))` → `timestamp('created_at', { withTimezone: true }).defaultNow()`
-- `TEXT` (JSON文字列) → `jsonb()`
+- [x] **Supabase Auth（JWT検証）のベストプラクティス確認**（`jose` でローカル検証、高セキュリティなら `getUser()` 必要）
+- [x] 各エンドポイントの実装（全11エンドポイント + `/health` + 評価履歴）
+- [x] Supabase Auth JWT 検証ミドルウェア（`jose` 使用）
+- [x] プロジェクト数制限ロジック（無料: 1プロジェクト）
+- [ ] 冪等性キー対応（`Idempotency-Key` ヘッダー）— 後回し可
+- [ ] 監査ログ — 後回し可
 
-対象テーブル: `projects`, `organizations`, `prospects`, `project_prospects`, `outreach_logs`, `responses`, `evaluations`（`applied_migrations` は Drizzle 管理に移管するため不要）
+### 2-4. MCP Server の実装 (Cloudflare Workers) ✅ 完了
 
-- [ ] `backend/src/db/schema.ts` にDrizzleスキーマ定義
-- [ ] `drizzle-kit generate` でマイグレーションファイル生成
-- [ ] Supabase local でのマイグレーション動作確認
-
-### 2-3. Web API Server の実装 (Hono)
-
-DB に直接触るのはこのサーバーのみ。MCP Server もここを経由する。
-
-- [ ] **Supabase Auth（JWT検証）のベストプラクティス確認**（上記「開発方針」セクション参照）
-
-**主要エンドポイント:**
-
-| エンドポイント | 用途 | 対応する現スクリプト |
-|---|---|---|
-| `POST /projects` | プロジェクト作成 + ライセンスチェック | `init_db.py`, `license.py` |
-| `DELETE /projects/:id` | プロジェクト削除 | `delete_project.py` |
-| `GET /projects/:id/stats` | 統計取得（evaluate 用） | `sales_queries.py eval-*` |
-| `POST /prospects/batch` | 営業先バッチ登録（重複チェック込み） | `add_prospects.py`, `filter_duplicates.py` |
-| `GET /projects/:id/prospects/reachable` | 未接触営業先一覧（outbound 用） | `sales_queries.py list-reachable` |
-| `GET /projects/:id/prospects/identifiers` | 全営業先識別子（build-list 重複排除用） | `sales_queries.py all-prospect-identifiers` |
-| `POST /outreach` | 送信ログ記録 + ステータス更新 | `send_and_log.py` |
-| `POST /responses` | 返信記録 + do-not-contact 反映 | `record_response.py` |
-| `POST /evaluations` | 評価記録 + 優先度再計算 | `record_evaluation.py` |
-| `PATCH /prospects/:id/status` | ステータス更新（unreachable等） | `update_status.py` |
-| `GET /projects/:id/outreach/recent` | 直近のアウトバウンドログ（check-results 用） | `sales_queries.py recent-outreach` |
-| `POST /jobs/build-list` | 営業先探索ジョブ投入（将来の非同期化用） | （将来） |
-| `GET /jobs/:id/status` | ジョブステータス | （将来） |
-
-- [ ] 各エンドポイントの実装
-- [ ] Supabase Auth JWT 検証ミドルウェア
-- [ ] 冪等性キー対応（`Idempotency-Key` ヘッダー）
-- [ ] 監査ログ（誰が・いつ・どのツールで・何を操作したか）
-- [ ] プロジェクト数制限ロジック（無料: 1プロジェクト、有料: 無制限）
-
-### 2-4. MCP Server の実装 (Cloudflare Workers)
-
-Web API Server を呼ぶだけの薄い adapter/policy layer。DB に直接触らない。
-
-- [ ] **MCP SDK のベストプラクティス確認**（上記「開発方針」セクション参照）
-
-**公開する MCP Tools（高レベル intent-based）:**
-
-| Tool名 | 説明 | 内部で呼ぶAPI |
-|---|---|---|
-| `setup_project` | プロジェクト初期化 | `POST /projects` |
-| `delete_project` | プロジェクト削除 | `DELETE /projects/:id` |
-| `get_prospect_identifiers` | 重複排除用識別子一覧 | `GET /projects/:id/prospects/identifiers` |
-| `add_prospects` | 営業先バッチ登録 | `POST /prospects/batch` |
-| `get_outbound_targets` | 未接触営業先一覧 | `GET /projects/:id/prospects/reachable` |
-| `record_outreach` | 送信ログ記録 | `POST /outreach` |
-| `update_prospect_status` | ステータス更新 | `PATCH /prospects/:id/status` |
-| `get_recent_outreach` | 直近の送信ログ取得 | `GET /projects/:id/outreach/recent` |
-| `record_response` | 返信記録 | `POST /responses` |
-| `get_eval_data` | 評価用統計データ取得 | `GET /projects/:id/stats` |
-| `record_evaluation` | 評価記録・優先度更新 | `POST /evaluations` |
-
-- [ ] `@modelcontextprotocol/sdk` を使った MCP Server 実装
-- [ ] Streamable HTTP トランスポート対応（Claude Code / Managed Agents 両対応）
-- [ ] 各 Tool の実装（Web API を呼ぶだけ）
-- [ ] 認証（Supabase Auth トークン or APIキー）
+- [x] **MCP SDK のベストプラクティス確認**（`WebStandardStreamableHTTPServerTransport` を使用、旧 SSE 方式は非推奨）
+- [x] `@modelcontextprotocol/sdk` v1.29.0 を使った MCP Server 実装
+- [x] Streamable HTTP トランスポート対応（`WebStandardStreamableHTTPServerTransport`）
+- [x] 全 11 Tool の実装（Web API を呼ぶだけ）
+- [x] 認証（Supabase Auth JWT 検証）
 
 ### 2-5. ローカル開発環境 (Docker Compose)
 
-- [ ] `docker-compose.yml` 作成（Supabase local stack + Workers dev）
-- [ ] `.env.local` / `.env.production` のテンプレート作成
+- [x] `docker-compose.yml` 作成（PostgreSQL + API Worker + MCP Worker）
+- [x] `.dev.vars.example` / `.dev.vars.mcp.example` テンプレート作成
 - [ ] ローカル環境での主要 API エンドポイント動作確認
 
 ### レビュー
