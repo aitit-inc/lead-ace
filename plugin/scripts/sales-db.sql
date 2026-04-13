@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS prospects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,  -- prospect name (entity name, school name, department, etc.; same as organizations.name for small companies)
     contact_name TEXT,  -- contact person's name
-    organization_id TEXT REFERENCES organizations(domain),  -- FK → organizations (NULL if org unknown)
+    organization_id TEXT NOT NULL REFERENCES organizations(domain),  -- FK → organizations
     department TEXT,  -- department or branch name (NULL if not applicable)
     overview TEXT NOT NULL,
     industry TEXT,

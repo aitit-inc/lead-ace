@@ -55,7 +55,7 @@ class Prospect(TypedDict, total=False):
     id: int
     name: str  # Prospect name (corporate name, school name, etc. Same as organizations.name for small companies)
     contact_name: str | None
-    organization_id: str | None  # FK → organizations.domain (NULL if org unknown)
+    organization_id: str  # FK → organizations.domain
     department: str | None  # Division within the organization (department, school, etc.)
     overview: str
     industry: str | None
