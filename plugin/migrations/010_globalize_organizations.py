@@ -29,6 +29,10 @@ def up(conn: sqlite3.Connection) -> None:
     # Disable FK enforcement during the table recreation
     conn.execute("PRAGMA foreign_keys = OFF")
 
+    # Clean up any leftover _new tables from a previous failed run (idempotency)
+    conn.execute("DROP TABLE IF EXISTS organizations_new")
+    conn.execute("DROP TABLE IF EXISTS prospects_new")
+
     # ------------------------------------------------------------------
     # 1. Create new organizations table with domain as PK
     # ------------------------------------------------------------------
