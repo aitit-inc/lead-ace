@@ -1,37 +1,37 @@
-# 問い合わせフォーム入力手順
+# Contact Form Submission Procedure
 
-playwright-cli を使ってフォーム入力・送信を行い、結果をログに記録する。
+Use playwright-cli to fill in and submit forms, then record the result in the log.
 
-**重要: フォーム送信は1回のみ。** 送信ボタンのクリック後、いかなる理由でもリトライしない。network コマンドで送信成否を確認する。
+**Important: Submit forms only once.** After clicking the submit button, do not retry for any reason. Use the network command to verify submission success.
 
-## 基本フロー
+## Basic Flow
 
 ```bash
-# 1. ブラウザを開いてフォームに移動
-playwright-cli open <フォームURL>
+# 1. Open browser and navigate to the form
+playwright-cli open <form URL>
 
-# 2. snapshot でフォーム構造を把握
+# 2. Use snapshot to understand form structure
 playwright-cli snapshot
 
-# 3. 各フィールドに入力（ref を使用）
-playwright-cli fill e5 "株式会社〇〇"
-playwright-cli fill e8 "山田太郎"
+# 3. Fill in each field (using refs)
+playwright-cli fill e5 "Acme Corp"
+playwright-cli fill e8 "John Smith"
 playwright-cli fill e12 "info@example.com"
-playwright-cli select e15 "サービスのご提案"
-playwright-cli fill e20 "<本文>"
+playwright-cli select e15 "Service inquiry"
+playwright-cli fill e20 "<body text>"
 
-# 4. 送信ボタンをクリック
+# 4. Click the submit button
 playwright-cli click e25
 
-# 5. 送信完了を確認（後述の「送信完了の判定」を参照）
+# 5. Verify submission completion (see "Submission Completion Check" below)
 
-# 6. ブラウザを閉じる
+# 6. Close the browser
 playwright-cli close
 ```
 
-## 営業お断りチェック（セーフティネット）
+## Sales Refusal Check (Safety Net)
 
-フォームページの snapshot を取得した際に、ページ内に「営業お断り」「営業目的のお問い合わせはご遠慮ください」「セールスお断り」等の記載がないか確認する。**発見した場合はフォーム送信を中止**し、以下を実行して次の営業先に進む:
+When taking a snapshot of the form page, check for any text stating "No sales inquiries", "Please refrain from sales outreach", "No solicitation", etc. **If found, stop the form submission** and do the following before moving on to the next prospect:
 
 ```bash
 playwright-cli close
@@ -39,82 +39,82 @@ playwright-cli close
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/send_and_log.py data.db \
   --project "$PROJECT_ID" --prospect-id $PROSPECT_ID --log-only \
   --channel form --subject "" --body "" \
-  --status failed --error-message "営業お断りの記載あり"
+  --status failed --error-message "Sales refusal notice found"
 
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/update_status.py data.db \
   --project "$PROJECT_ID" --prospect-id $PROSPECT_ID --status unreachable \
-  --do-not-contact --dnc-reason "営業お断りの記載あり（フォームページ）"
+  --do-not-contact --dnc-reason "Sales refusal notice found (form page)"
 ```
 
-## フォーム入力の方針
+## Form Filling Policy
 
-- フォームの項目に合わせてメッセージを適切に分割する
-- 「お問い合わせ種別」がある場合は「サービスのご提案」「業務提携のご相談」等を選択
-- 組織名・氏名・メールアドレス・電話番号等の基本情報は BUSINESS.md から取得
-- 自由記述欄にはメールと同様の方針でカスタマイズしたメッセージを入力（ただしフォーム用に簡潔に）
-- チェックボックス（プライバシーポリシー同意等）は `playwright-cli check <ref>` で操作
+- Split the message appropriately to match the form's fields
+- For "Inquiry type" fields, select options like "Service inquiry" or "Business partnership inquiry"
+- Retrieve basic info (organization name, full name, email, phone number) from BUSINESS.md
+- In free-text fields, enter a customized message following the same email guidelines, but adapted to be concise for forms
+- Use `playwright-cli check <ref>` for checkboxes (e.g., privacy policy agreement)
 
-## 送信完了の判定（必須）
+## Submission Completion Check (Required)
 
-送信ボタンクリック後、以下の順序で送信完了を判定する。**判定完了まで再送信は絶対にしない。**
+After clicking the submit button, verify completion in the following order. **Never re-submit until verification is complete.**
 
-### ステップ1: snapshot でページ変化を確認
+### Step 1: Check Page Change with snapshot
 
 ```bash
 playwright-cli snapshot
 ```
 
-以下のいずれかが確認できれば **送信成功**:
-- サンクスページ（「お問い合わせありがとうございます」等）が表示されている
-- URL がサンクスページに遷移している（`/thanks`, `/complete` 等）
-- フォームが消えて完了メッセージが表示されている
-- 「送信しました」等の成功メッセージが表示されている
+The submission is **successful** if any of the following are observed:
+- A thank-you page is displayed ("Thank you for your inquiry", etc.)
+- URL has transitioned to a thank-you page (`/thanks`, `/complete`, etc.)
+- The form has disappeared and a completion message is displayed
+- A success message such as "Message sent" is displayed
 
-### ステップ2: snapshot で判断できない場合、network を確認
+### Step 2: If snapshot is inconclusive, check network
 
 ```bash
 playwright-cli network
 ```
 
-network の出力で POST リクエストを探す:
-- フォームURLまたは関連エンドポイントへの POST がある → **送信成功**（サーバーに到達済み）
-- POST のステータスが 200 / 302 → **送信成功**
-- POST が見つからない → **送信失敗**（ボタンクリックがフォーム送信をトリガーしなかった可能性）
+Look for a POST request in the network output:
+- A POST to the form URL or a related endpoint → **Submission successful** (reached the server)
+- POST status is 200 or 302 → **Submission successful**
+- No POST found → **Submission failed** (button click may not have triggered form submission)
 
-### 判定結果に応じた処理
+### Processing Based on Verification Result
 
-**送信成功の場合:**
-
-```bash
-playwright-cli close
-
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/send_and_log.py data.db \
-  --project "$PROJECT_ID" --prospect-id $PROSPECT_ID --log-only \
-  --channel form --subject "<件名>" --body "<本文>"
-```
-
-**送信失敗の場合（POST が確認できない場合のみ）:**
+**If submission was successful:**
 
 ```bash
 playwright-cli close
 
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/send_and_log.py data.db \
   --project "$PROJECT_ID" --prospect-id $PROSPECT_ID --log-only \
-  --channel form --subject "<件名>" --body "<本文>" \
-  --status failed --error-message "<理由>"
+  --channel form --subject "<subject>" --body "<body>"
 ```
 
-**重要:** 失敗の場合でもそのフォームへの再送信は行わない。次の営業先に進む。
+**If submission failed (only when no POST confirmed):**
 
-## エラーハンドリング
+```bash
+playwright-cli close
 
-- **フォームが見つからない場合:** snapshot でフォーム要素がない → `status = 'failed'`, `error_message` を記録
-- **入力バリデーションエラー:** snapshot でエラーメッセージを確認し、修正して再送信を **1回だけ** 試みる。修正送信も network で確認する
-- **ページ読み込みタイムアウト:** `status = 'failed'` で記録し次へ
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/send_and_log.py data.db \
+  --project "$PROJECT_ID" --prospect-id $PROSPECT_ID --log-only \
+  --channel form --subject "<subject>" --body "<body>" \
+  --status failed --error-message "<reason>"
+```
 
-### reCAPTCHA / hCaptcha 等がある場合
+**Important:** Even on failure, do not re-submit to that form. Move on to the next prospect.
 
-フォームに reCAPTCHA、hCaptcha、Turnstile 等の CAPTCHA が設置されている場合（snapshot で検出）、フォーム送信はスキップする:
+## Error Handling
+
+- **Form not found:** No form element in snapshot → record `status = 'failed'` with `error_message`
+- **Input validation error:** Check snapshot for error messages, then attempt one corrected re-submission. Verify the re-submission via network as well
+- **Page load timeout:** Record as `status = 'failed'` and move on
+
+### When reCAPTCHA / hCaptcha or Similar is Present
+
+If the form has reCAPTCHA, hCaptcha, Turnstile, or similar CAPTCHA (detected in snapshot), skip form submission:
 
 ```bash
 playwright-cli close
@@ -122,55 +122,55 @@ playwright-cli close
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/send_and_log.py data.db \
   --project "$PROJECT_ID" --prospect-id $PROSPECT_ID --log-only \
   --channel form --subject "" --body "" \
-  --status failed --error-message "reCAPTCHAによりスキップ"
+  --status failed --error-message "Skipped due to reCAPTCHA"
 ```
 
-- `project_prospects.status` は **`new` のまま維持**する（フォーム改修で CAPTCHA が外れる可能性があるため）
-- 他チャネル（メール・SNS）が利用可能ならそちらを試す
+- Keep `project_prospects.status` as **`new`** (the CAPTCHA may be removed in a future update)
+- If another channel (email, SNS) is available, try that instead
 
-### Google Forms の場合
+### For Google Forms
 
-Google Forms はブラウザ UI 操作ではなく、`formResponse` エンドポイントへの直接 POST で送信する。成功率が高く（UI 操作不要・CAPTCHA なし）、コンテキスト消費も最小限。ブラウザを開く必要はない。
+Submit Google Forms via a direct POST to the `formResponse` endpoint rather than browser UI interaction. This has a high success rate (no UI interaction needed, no CAPTCHA), and minimal context usage. No browser needs to be opened.
 
-**検出方法:**
-- URL に `docs.google.com/forms` を含む
-- ページソースに `FB_PUBLIC_LOAD_DATA_` が存在する
+**Detection:**
+- URL contains `docs.google.com/forms`
+- Page source contains `FB_PUBLIC_LOAD_DATA_`
 
-**送信手順:**
+**Submission procedure:**
 
-1. **フォームページの生 HTML を取得し、フォーム ID と entry ID を抽出する**
+1. **Retrieve the raw HTML of the form page and extract form ID and entry IDs**
 
-   `--raw` フラグで生 HTML を取得する（Jina Reader 経由だとフォームデータが除去されるため）:
+   Use the `--raw` flag to get raw HTML (Jina Reader strips form data):
 
    ```bash
    python3 ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_url.py \
      --url "https://docs.google.com/forms/d/{FORM_ID}/viewform" \
-     --prompt "このGoogle Formsのentry IDを全て抽出してください。FB_PUBLIC_LOAD_DATA_ 内のフィールド定義から、各フィールドのラベルとentry.XXXXXXX形式のIDを対応付けて返してください。選択式になっている項目については選択肢一覧と選択するためのIDもつけてください。" \
+     --prompt "Extract all entry IDs from this Google Form. From the field definitions in FB_PUBLIC_LOAD_DATA_, list each field's label and its corresponding entry.XXXXXXX ID. For multiple-choice fields, include the list of options and their selection IDs." \
      --raw --timeout 20
    ```
 
-   - フォーム ID: URL の `/forms/d/{FORM_ID}/` 部分から取得
-   - entry ID: `--raw` により生 HTML が Haiku に渡され、`FB_PUBLIC_LOAD_DATA_` からフィールドラベルと entry ID の対応を抽出
+   - Form ID: from the `/forms/d/{FORM_ID}/` part of the URL
+   - Entry IDs: `--raw` passes raw HTML to Haiku, which extracts field labels and entry ID mappings from `FB_PUBLIC_LOAD_DATA_`
 
-3. **formResponse エンドポイントに POST する**
+3. **POST to the formResponse endpoint**
 
    ```bash
    curl -s -o /dev/null -w "%{http_code}" \
      -X POST "https://docs.google.com/forms/d/{FORM_ID}/formResponse" \
-     -d "entry.XXXXXXX=値1&entry.YYYYYYY=値2&entry.ZZZZZZZ=値3"
+     -d "entry.XXXXXXX=value1&entry.YYYYYYY=value2&entry.ZZZZZZZ=value3"
    ```
 
-   - HTTP 200 が返れば送信成功
-   - リダイレクト（302 → 確認ページ）も成功
+   - HTTP 200 means submission was successful
+   - Redirect (302 → confirmation page) also means success
 
-4. **ログ記録**
+4. **Record the log**
 
    ```bash
    python3 ${CLAUDE_PLUGIN_ROOT}/scripts/send_and_log.py data.db \
      --project "$PROJECT_ID" --prospect-id $PROSPECT_ID --log-only \
-     --channel form --subject "<件名>" --body "<本文>"
+     --channel form --subject "<subject>" --body "<body>"
    ```
 
-**注意:**
-- Google Forms はフィールドの並び順と entry ID の対応が自明でないことがある。ページソースのフィールド定義（ラベルテキスト）と照合して正しい entry ID にマッピングすること
-- `emailAddress` パラメータが必要なフォーム（メール収集が有効化されている場合）もある
+**Notes:**
+- The order of form fields and their entry IDs may not be obvious. Cross-reference with the field definitions (label text) in the page source to map the correct entry IDs
+- Some forms with email collection enabled also require an `emailAddress` parameter

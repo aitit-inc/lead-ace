@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""URLからコンテンツを取得し、Claude Haiku で情報抽出して返す。
+"""Fetch content from a URL and extract information using Claude Haiku.
 
-通常モード: Jina Reader（APIキー不要、20 RPM）でWebページをMarkdown化し、Haiku で抽出。
-rawモード: playwright で生HTML（JS実行済み）を取得し、Haiku で抽出。
-           フォームの entry ID やデータ属性など、Jina Reader が除去する情報が必要な場合に使う。
+Normal mode: Fetches the web page as Markdown via Jina Reader (no API key, 20 RPM), then extracts with Haiku.
+Raw mode: Fetches JS-rendered raw HTML via playwright, then extracts with Haiku.
+          Use this when you need information that Jina Reader strips out, such as form entry IDs or data attributes.
 
 Usage:
-    python3 fetch_url.py --url "https://example.com" --prompt "代表者名と住所を抽出"
-    python3 fetch_url.py --url "https://example.com" --prompt "entry IDを抽出" --raw
-    python3 fetch_url.py --url "https://example.com" --prompt "メールアドレスを探して" --timeout 20
+    python3 fetch_url.py --url "https://example.com" --prompt "Extract the representative name and address"
+    python3 fetch_url.py --url "https://example.com" --prompt "Extract entry IDs" --raw
+    python3 fetch_url.py --url "https://example.com" --prompt "Find email addresses" --timeout 20
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ HAIKU_TIMEOUT_SEC = 60
 
 
 def fetch_via_jina(url: str, timeout: int) -> str:
-    """Jina Reader 経由で URL の Markdown を取得する。"""
+    """Fetch the Markdown representation of a URL via Jina Reader."""
     jina_url = f"{JINA_BASE_URL}{url}"
     headers = {
         "Accept": "text/markdown",
@@ -39,13 +39,13 @@ def fetch_via_jina(url: str, timeout: int) -> str:
 
 
 def fetch_raw_html(url: str, timeout: int) -> str:
-    """playwright-cli で JS レンダリング済み生 HTML を取得する。
+    """Fetch JS-rendered raw HTML via playwright-cli.
 
-    playwright-cli open → eval document.documentElement.outerHTML → close の流れ。
-    playwright-cli が使えない場合は requests にフォールバックする。
+    Opens via playwright-cli open, evaluates document.documentElement.outerHTML, then closes.
+    Falls back to requests if playwright-cli is unavailable.
     """
     try:
-        # ブラウザを開いてページに遷移
+        # Open browser and navigate to the page
         open_result = subprocess.run(
             ["playwright-cli", "open", url],
             capture_output=True,
@@ -55,7 +55,7 @@ def fetch_raw_html(url: str, timeout: int) -> str:
         if open_result.returncode != 0:
             raise RuntimeError(open_result.stderr.strip())
 
-        # JS レンダリング済み HTML を取得
+        # Get JS-rendered HTML
         eval_result = subprocess.run(
             ["playwright-cli", "eval", "document.documentElement.outerHTML"],
             capture_output=True,
@@ -63,7 +63,7 @@ def fetch_raw_html(url: str, timeout: int) -> str:
             timeout=timeout,
         )
 
-        # ブラウザを閉じる（失敗しても無視）
+        # Close browser (ignore failures)
         subprocess.run(
             ["playwright-cli", "close"],
             capture_output=True,
@@ -71,14 +71,14 @@ def fetch_raw_html(url: str, timeout: int) -> str:
         )
 
         if eval_result.returncode == 0 and eval_result.stdout.strip():
-            # playwright-cli の出力からマークダウンヘッダー等を除去し、HTML 部分のみ抽出
+            # Strip markdown headers etc. from playwright-cli output and extract only the HTML part
             html = _extract_html_from_cli_output(eval_result.stdout)
             return html
 
         raise RuntimeError(eval_result.stderr.strip() or "eval returned empty")
 
     except (subprocess.TimeoutExpired, FileNotFoundError, RuntimeError) as e:
-        print(f"WARNING: playwright-cli 利用不可 ({e}), requests にフォールバック", file=sys.stderr)
+        print(f"WARNING: playwright-cli unavailable ({e}), falling back to requests", file=sys.stderr)
 
     resp = requests.get(
         url,
@@ -90,17 +90,17 @@ def fetch_raw_html(url: str, timeout: int) -> str:
 
 
 def _extract_html_from_cli_output(output: str) -> str:
-    """playwright-cli eval の出力から HTML 部分を抽出する。
+    """Extract the HTML portion from playwright-cli eval output.
 
-    出力には ### Result ヘッダーや JSON 文字列ラッパーが含まれる場合がある。
+    The output may contain a ### Result header and/or a JSON string wrapper.
     """
-    # "### Result" 以降を探す
+    # Look for "### Result" and take everything after it
     result_marker = "### Result"
     idx = output.find(result_marker)
     if idx != -1:
         output = output[idx + len(result_marker):].strip()
 
-    # JSON 文字列としてラップされている場合（"<html>..." 形式）、先頭・末尾の引用符を除去
+    # If wrapped as a JSON string (e.g. "<html>..." format), strip the surrounding quotes
     if output.startswith('"') and output.endswith('"'):
         try:
             parsed: object = json.loads(output)
@@ -113,13 +113,13 @@ def _extract_html_from_cli_output(output: str) -> str:
 
 
 def extract_with_haiku(content: str, prompt: str) -> str:
-    """Claude Haiku CLI で情報を抽出する。"""
+    """Extract information using the Claude Haiku CLI."""
     full_prompt = (
-        "Webページから情報を抽出してください。"
-        "見つからない項目は「記載なし」としてください。"
-        "抽出結果のみを返してください。\n\n"
-        f"## 抽出対象\n{prompt}\n\n"
-        f"## Webページコンテンツ\n{content}"
+        "Extract information from the web page. "
+        "For items not found, write 'Not listed'. "
+        "Return only the extracted results.\n\n"
+        f"## What to extract\n{prompt}\n\n"
+        f"## Web page content\n{content}"
     )
     result = subprocess.run(
         ["claude", "--model", "haiku", "-p", full_prompt],
@@ -134,19 +134,19 @@ def extract_with_haiku(content: str, prompt: str) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="URL取得 + Claude Haiku 情報抽出")
-    parser.add_argument("--url", required=True, help="取得先URL")
-    parser.add_argument("--prompt", required=True, help="Haikuへの抽出指示")
+    parser = argparse.ArgumentParser(description="Fetch URL + extract information with Claude Haiku")
+    parser.add_argument("--url", required=True, help="URL to fetch")
+    parser.add_argument("--prompt", required=True, help="Extraction instructions for Haiku")
     parser.add_argument(
         "--timeout",
         type=int,
         default=15,
-        help="タイムアウト秒数（デフォルト: 15）",
+        help="Timeout in seconds (default: 15)",
     )
     parser.add_argument(
         "--raw",
         action="store_true",
-        help="生HTMLを取得する（playwright使用）。フォームのentry ID等が必要な場合に指定",
+        help="Fetch raw HTML (uses playwright). Use when form entry IDs or similar attributes are needed.",
     )
     args = parser.parse_args()
 
@@ -157,7 +157,7 @@ def main() -> None:
             content = fetch_via_jina(args.url, args.timeout)
     except requests.Timeout:
         print(
-            f"TIMEOUT: {args.url} は {args.timeout}秒以内に応答しませんでした",
+            f"TIMEOUT: {args.url} did not respond within {args.timeout} seconds",
             file=sys.stderr,
         )
         sys.exit(1)

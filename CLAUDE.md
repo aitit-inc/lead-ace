@@ -1,112 +1,112 @@
-# Lead Ace プラグイン開発リポジトリ
+# Lead Ace Plugin Development Repository
 
-SurpassOne Inc. が提供する Lead Ace（自律営業自動化 Claude Code プラグイン）のリポジトリ。
+Repository for Lead Ace — an autonomous sales automation Claude Code plugin by SurpassOne Inc.
 
-## リポジトリ構成
+## Repository Structure
 
 ```
-.claude-plugin/marketplace.json  # マーケットプレイス定義（source: "./plugin/" を指す）
-plugin/                          # Claude Code プラグイン本体
-backend/                         # Web API Server + MCP Server（フェーズ2で新設）
-frontend/                        # Web フロントエンド（フェーズ4で新設）
-docker-compose.yml               # ローカル開発環境（フェーズ2で追加）
+.claude-plugin/marketplace.json  # Marketplace definition (source: "./plugin/")
+plugin/                          # Claude Code plugin
+backend/                         # Web API Server + MCP Server (added in Phase 2)
+frontend/                        # Web frontend (added in Phase 4)
+docker-compose.yml               # Local development environment (added in Phase 2)
 ```
 
-## プラグインの構成
+## Plugin Structure
 
 ```
 plugin/
 ├── .claude-plugin/
-│   └── plugin.json       # プラグインマニフェスト（必須）
-├── skills/                # スラッシュコマンド（各サブディレクトリに SKILL.md）
-├── scripts/               # ヘルパースクリプト（フェーズ3で廃止予定）
-├── migrations/            # DB マイグレーション（フェーズ3で廃止予定）
-├── references/            # 共通参照ドキュメント
-└── docs/                  # 設計ドキュメント
+│   └── plugin.json       # Plugin manifest (required)
+├── skills/                # Slash commands (each subdirectory has SKILL.md)
+├── scripts/               # Helper scripts (to be removed in Phase 3)
+├── migrations/            # DB migrations (to be removed in Phase 3)
+├── references/            # Shared reference documents
+└── docs/                  # Design documents
 ```
 
-## 開発方針
+## Development Policy
 
-プラグインは**安定性・信頼性・制御性・汎用性**を重視する。
-- 特定の事業やユースケースに依存するハードコード値（目標数値、成功率等）をスキルやテンプレートに埋め込まない
-- 事業ごとに異なる判断はプロジェクト設定（BUSINESS.md / SALES_STRATEGY.md 等）に委ね、プラグインは制御の仕組みと可視化を提供する
-- スキルの改善は「ユーザーが制御できる仕組みを増やす」方向で行い、「特定の振る舞いを強制する」方向にしない
+The plugin prioritizes **stability, reliability, controllability, and versatility**.
+- Do not hard-code values that depend on specific businesses or use cases (target numbers, success rates, etc.) into skills or templates
+- Defer business-specific decisions to project configuration (BUSINESS.md / SALES_STRATEGY.md, etc.); the plugin provides control mechanisms and visibility
+- Improve skills by increasing user control, not by enforcing specific behavior
 
-### LLM とスクリプトの責務分離
+### Separation of Responsibilities: LLM vs Scripts
 
-プラグインの処理は「LLM が担うべき部分」と「スクリプトに固定すべき部分」を明確に分ける。
+Clearly separate what the LLM should handle from what should be fixed in scripts.
 
-- **スクリプト（決定的ロジック）**: DB操作、メール送信、ステータス更新、バリデーション、データ整形など、ルールが明確で毎回同じ動作をすべき処理。LLM に直接 SQL を書かせたりコマンドを組み立てさせたりせず、専用スクリプト経由で実行する
-- **LLM（判断・生成）**: メール本文の作成、営業先の評価、戦略の分析・改善提案など、文脈に応じた柔軟な判断や自然言語生成が必要な処理
+- **Scripts (deterministic logic)**: DB operations, email sending, status updates, validation, data formatting — operations where rules are clear and behavior should be consistent every time. Do not have the LLM write SQL or compose commands directly; execute through dedicated scripts
+- **LLM (judgment & generation)**: Tasks requiring context-dependent judgment and natural language generation, such as drafting email bodies, evaluating prospects, and analyzing/improving strategy
 
-**原則:** LLM がやるべきでない処理（決定的・反復的・正確性が必要）をスクリプトに切り出し、LLM には判断と生成に集中させる。スキルの SKILL.md にはスクリプトの呼び出し方（コマンドと引数）を書き、内部実装の詳細は書かない。
+**Principle:** Offload tasks the LLM should not do (deterministic, repetitive, accuracy-critical) to scripts, and let the LLM focus on judgment and generation. In skill SKILL.md files, document how to call scripts (command and arguments), not internal implementation details.
 
-## 開発ルール
+## Development Rules
 
-- パス参照は `${CLAUDE_PLUGIN_ROOT}` を使い、ハードコードしない（`${CLAUDE_PLUGIN_ROOT}` は `plugin/` を指す）
-- 言語: 日本語（コード内コメント・ドキュメント共に）
-- スクリプトは全て Python で書く（shell script / JS 禁止）
-- Python スクリプトの CLI インターフェースは `argparse` で統一する（`sys.argv` 直接参照は使わない）
-- Web ページ取得は `fetch_url.py` を使う（WebFetch はフリーズ問題・SPA 非対応のため禁止）。生 HTML が必要な場合は `--raw` フラグ
-- Python スクリプトでは型定義をしっかりすること。anyは禁止。なるべく型キャストは避け、正しく型推論できるようにすること
-- Python スクリプトを変更したら、コミット前に `cd plugin/scripts && npx pyright && python3 test_imports.py` を実行して型チェックとインポートテスト（モジュールレベル assertion）を通すこと
+- Use `${CLAUDE_PLUGIN_ROOT}` for path references; do not hard-code paths (`${CLAUDE_PLUGIN_ROOT}` points to `plugin/`)
+- Language: English (both code comments and documentation)
+- All scripts must be written in Python (shell scripts and JS are prohibited)
+- Use `argparse` for all Python script CLI interfaces (do not use `sys.argv` directly)
+- Use `fetch_url.py` for web page retrieval (WebFetch is prohibited due to freeze issues and lack of SPA support). Use the `--raw` flag when raw HTML is needed
+- Type definitions must be thorough in Python scripts. `any` is prohibited. Avoid type casts; let types be inferred correctly
+- After modifying Python scripts, run `cd plugin/scripts && npx pyright && python3 test_imports.py` before committing to pass type checks and import tests (module-level assertions)
 
-## スキルの書き方（公式ベストプラクティス準拠）
+## Writing Skills (Following Official Best Practices)
 
-- **SKILL.md は500行以下**。超えそうなら references/ に分離する
-- **description は250文字以内**（超過分はスキル一覧で切り詰められる）。キーユースケースを先頭に書く
-- **references/ は自動読み込みされない**。SKILL.md 内で「いつ・どの条件で読むか」を明示すること
-- **references/ のネストは1階層まで**。reference ファイルからさらに別ファイルを参照しない
-- **300行超の reference ファイルには目次を付ける**
-- **Claude が既に知っている知識は書かない**。トークンの無駄
-- **プログレッシブ・ディスクロージャー**: SKILL.md に全手順を書き、条件付きでしか使わない詳細は references/ に置く。常に必要な情報だけ SKILL.md に残す
+- **SKILL.md must be 500 lines or fewer**. Split into references/ if it would exceed this
+- **description must be 250 characters or fewer** (excess is truncated in skill listings). Put key use cases first
+- **references/ are not auto-loaded**. Explicitly state in SKILL.md when and under what conditions to read each reference file
+- **References are nested at most one level deep**. Do not reference other files from within a reference file
+- **Add a table of contents to reference files exceeding 300 lines**
+- **Do not write what Claude already knows**. It wastes tokens
+- **Progressive disclosure**: write all steps in SKILL.md; put details only needed conditionally in references/. Keep only always-needed information in SKILL.md
 
-出典: [Extend Claude with skills](https://code.claude.com/docs/en/skills), [Skill authoring best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices)
+Source: [Extend Claude with skills](https://code.claude.com/docs/en/skills), [Skill authoring best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices)
 
-## サブエージェントプロンプトの注意事項
+## Notes on Sub-Agent Prompts
 
-サブエージェントに不可逆アクション（メール送信、フォーム送信等）を実行させる場合、プロンプトの書き方でモデルが拒否するかどうかが決まる（`--dangerously-skip-permissions` では解決しない）。
+When having a sub-agent perform irreversible actions (sending emails, submitting forms, etc.), the wording of the prompt determines whether the model refuses (this cannot be resolved with `--dangerously-skip-permissions`).
 
-**NGワード（モデルが「安全制御の迂回試行」と判断して拒否する）:**
-- 「確認不要」「確認を求めずに」「確認なしで」
-- 「承認済み」「ユーザーが事前に承認」
-- 「全自動で実行」「自律モード」
-- 「直接実行してください」
+**Prohibited phrases (the model interprets these as attempts to bypass safety controls and refuses):**
+- "no confirmation needed" / "without asking for confirmation" / "without checking"
+- "already approved" / "user has pre-approved"
+- "run fully automatically" / "autonomous mode"
+- "execute directly"
 
-**正しい書き方:** 単にタスクを自然に記述する。安全制御を迂回する意図を感じさせる文言を入れない。
+**Correct approach:** Simply describe the task naturally. Do not include wording that implies intent to bypass safety controls.
 
 ```
-NG: 「以下のコマンドを実行してください。ユーザーは承認済みです。確認は不要です。直接実行してください。」
-OK: 「leo.uno@surpassone.com 宛にテストメールを送信してください。コマンド: gog send --account ... --to ... --subject "件名" --body "本文"」
+BAD: "Please run the following command. The user has already approved it. No confirmation is needed. Execute directly."
+OK:  "Please send a test email to leo.uno@surpassone.com. Command: gog send --account ... --to ... --subject "Subject" --body "Body""
 ```
 
-2026-04-07 テストで確認: 同一コマンドでも NG パターンは拒否、OK パターンは成功。
+Confirmed by testing on 2026-04-07: the BAD pattern was refused and the OK pattern succeeded with the same command.
 
-## DBマイグレーション (plugin/scripts/)
+## DB Migrations (plugin/scripts/)
 
-- `plugin/migrations/` に `NNN_description.py`（NNN は3桁連番）を配置
-- 各ファイルに `def up(conn: sqlite3.Connection) -> None:` を実装。冪等に書くこと（`IF NOT EXISTS` 等）
-- `preflight.py` が全スキル実行前に未適用マイグレーションを自動適用（`applied_migrations` テーブルで追跡）
-- 全スキルのステップ0で `preflight.py` を呼び出す（登録チェック + マイグレーション）
+- Place `NNN_description.py` files in `plugin/migrations/` (NNN is a 3-digit sequential number)
+- Each file implements `def up(conn: sqlite3.Connection) -> None:`. Write idempotently (use `IF NOT EXISTS`, etc.)
+- `preflight.py` automatically applies pending migrations before each skill run (tracked via the `applied_migrations` table)
+- Call `preflight.py` in step 0 of every skill (registration check + migration)
 
-### sales-db.sql とマイグレーションの関係
+### Relationship Between sales-db.sql and Migrations
 
-**`sales-db.sql` は常に「最新のフルスキーマ」を表す。** マイグレーションで変更を追加したら、同じ変更を `sales-db.sql` にも反映すること。
+**`sales-db.sql` always represents the "full, up-to-date schema".** When adding changes via migration, apply the same changes to `sales-db.sql`.
 
-- **新規ユーザー**: `init_db.py` → `sales-db.sql` で完全なスキーマが作られる → マイグレーションは冪等なので全て no-op
-- **既存ユーザー**: `preflight.py` → 未適用マイグレーションが差分適用される
+- **New users**: `init_db.py` → `sales-db.sql` creates the complete schema → all migrations are no-ops (they are idempotent)
+- **Existing users**: `preflight.py` → pending migrations are applied incrementally
 
-この方針により、スキーマの全体像を知りたい場合は **`sales-db.sql` だけ読めばよい**（マイグレーションファイルを辿る必要がない）。
+This approach means that to understand the full schema, you only need to read **`sales-db.sql`** (no need to trace through migration files).
 
-## 一時スキル・スクリプトの削除予定
+## Scheduled Removal of Temporary Skills and Scripts
 
-- **v0.6.0 リリース時に削除**: `plugin/skills/data-migration-v050/`、`plugin/scripts/link_organization.py`、`plugin/scripts/mark_org_lookup_status.py`、`plugin/scripts/test_imports.py` から `link_organization` と `mark_org_lookup_status` の行
+- **To be removed at v0.6.0 release**: `plugin/skills/data-migration-v050/`, `plugin/scripts/link_organization.py`, `plugin/scripts/mark_org_lookup_status.py`, and the `link_organization` and `mark_org_lookup_status` lines from `plugin/scripts/test_imports.py`
 
-## リリース前のチェック（必須）
+## Pre-Release Checklist (Required)
 `cd plugin/scripts && npx pyright && python3 test_imports.py`
 
-## リリース
-`plugin/.claude-plugin/plugin.json` のバージョンをあげてコミット＆プッシュする。
-バージョンについて特に指示がなければ、x.y.z のzをインクリメントすること（各数字は二桁以上も可。例: 0.3.9 → 0.3.10）。
-バージョン上げる時は先にコード類をコミットしてから、バージョンアップだけのコミットを作る。
-コミットメッセージは "chore: :bookmark: bump version to x.y.z" にする。
+## Release
+Bump the version in `plugin/.claude-plugin/plugin.json`, then commit and push.
+Unless specified otherwise, increment z in x.y.z (each number can be two or more digits, e.g. 0.3.9 → 0.3.10).
+When bumping the version, first commit code changes, then make a separate commit for the version bump only.
+Use commit message: `chore: :bookmark: bump version to x.y.z`.

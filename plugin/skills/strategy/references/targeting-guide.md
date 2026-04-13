@@ -1,71 +1,71 @@
-# ターゲティング・戦略策定ガイド
+# Targeting & Strategy Development Guide
 
-SALES_STRATEGY.md 生成時の品質を高めるためのガイドライン。ユーザーへのヒアリング結果をもとに、より精度の高い戦略を構築する。
+A guideline for improving the quality of SALES_STRATEGY.md generation. Use interview results from users to build a more precise strategy.
 
-## ターゲットペルソナ設計
+## Target Persona Design
 
-ターゲットは「中小企業」のような曖昧な定義ではなく、以下の粒度で具体化する:
+Targets should be defined at the following level of specificity — not vague definitions like "small businesses":
 
-### ペルソナに含めるべき要素
-1. **企業プロフィール**: 業種、従業員規模、売上規模帯、所在地
-2. **抱えている課題**: 日常的に感じている3つ以上のペインポイント
-3. **サービスとの接点**: なぜ自社サービスが解決策になるか
-4. **意思決定者像**: 役職、年齢層、関心事、情報収集経路
-5. **予算感**: 導入に使える予算帯
-6. **商談トリガー**: 何をきっかけに興味を持つか（例: 法改正、人手不足、DX推進）
-7. **検索キーワード**: Webで見つけるための検索クエリ5個以上
+### Elements to Include in a Persona
+1. **Company profile**: Industry, headcount, revenue range, location
+2. **Challenges faced**: 3 or more pain points felt on a daily basis
+3. **Connection to your service**: Why your service is a solution for them
+4. **Decision-maker profile**: Title, age group, interests, information sources
+5. **Budget**: Budget range available for adoption
+6. **Trigger for meeting**: What would spark interest (e.g., regulatory changes, labor shortage, DX push)
+7. **Search keywords**: 5 or more search queries to find them online
 
-### プライマリー/セカンダリーの分け方
-- **プライマリー**: 最も反応率が高く、成約しやすいセグメント
-- **セカンダリー**: 反応は得られるが成約ハードルがやや高い、または母数が少ないセグメント
+### How to Split Primary / Secondary
+- **Primary**: Segment with the highest response rate and easiest to close
+- **Secondary**: Segment where responses are achievable but closing is slightly harder, or where the pool is smaller
 
-## 競合分析のポイント
+## Competitive Analysis Points
 
-/strategy のステップ3-3で競合について聞く際、以下の観点で整理する:
+When asking about competitors in strategy step 3-3, organize from the following perspectives:
 
-1. 各競合の強み・弱み
-2. 競合の価格帯
-3. 競合のターゲット顧客層
-4. 競合の営業手法（Web集客、広告、直販等）
-5. **ポジショニング**: 価格・品質・スピード・サポートのどこで勝つか
-6. **差別化フレーズ**: 営業トークで使える差別化表現3つ以上
+1. Strengths and weaknesses of each competitor
+2. Competitor price points
+3. Competitor target customer segments
+4. Competitor sales methods (web acquisition, advertising, direct sales, etc.)
+5. **Positioning**: Where do you win — price, quality, speed, or support?
+6. **Differentiation phrases**: 3 or more differentiating expressions usable in sales conversations
 
-## USP言語化
+## USP Articulation
 
-バリュープロポジション（USP）は以下の条件を満たすこと:
-- 1〜2文で表現でき、メール件名や本文にそのまま使える
-- 具体的な数字・実績を含む（「業界X社のY社がZ%改善」等）
-- 「誰に」「何が」響くかを明記する
+The value proposition (USP) must meet the following conditions:
+- Expressible in 1-2 sentences; directly usable in email subjects or body
+- Includes specific numbers or track records ("Y% improvement at Z companies in X industry")
+- Clearly states "who" it resonates with and "what" resonates
 
-## チャネル選定の判断基準
+## Channel Selection Criteria
 
-営業チャネルの優先順位を決める際、以下を考慮する:
+When deciding channel priority for outreach, consider the following:
 
-| チャネル | 向いているケース | 向かないケース |
-|---------|----------------|--------------|
-| メール | BtoB全般、IT/Web、士業 | 個人向け、メールを見ない層 |
-| フォーム | 公式サイトが充実している企業 | フォームに「営業お断り」明記 |
-| LinkedIn DM | 外資系、スタートアップ、経営層 | 製造業、地方中小 |
-| X/Twitter DM | IT/Web、クリエイター、個人事業主 | 大企業、保守的業界 |
+| Channel | Best for | Not suited for |
+|---------|----------|----------------|
+| Email | B2B in general, IT/Web, professional services | Consumer-facing, audiences who don't read email |
+| Form | Companies with comprehensive official websites | Forms with "no sales inquiries" stated |
+| LinkedIn DM | Foreign companies, startups, executives | Manufacturing, regional SMBs |
+| X/Twitter DM | IT/Web, creators, sole proprietors | Large enterprises, conservative industries |
 
-## KPI設計
+## KPI Design
 
-SALES_STRATEGY.md の KPI セクションには、以下の逆算ツリーを含める:
+The KPI section of SALES_STRATEGY.md should include the following reverse calculation tree:
 
 ```
-売上目標 → 必要成約数 → 必要商談数 → 必要返信数 → 必要送信数 → 必要リスト数
+Revenue target → Required conversions → Required meetings → Required responses → Required sends → Required list size
 ```
 
-各ステップの転換率は業界平均を初期値として設定し、/evaluate で実績に基づいて更新する:
-- メール返信率: 1〜5%（業界・ターゲットにより変動）
-- 返信→商談化率: 30〜50%
-- 商談→成約率: 20〜40%
+Set conversion rates at each step using industry averages as initial values, then update based on actual results via /evaluate:
+- Email response rate: 1–5% (varies by industry and target)
+- Response → meeting rate: 30–50%
+- Meeting → close rate: 20–40%
 
-## 検索キーワード設計
+## Search Keyword Design
 
-SALES_STRATEGY.md の検索キーワードは最低10個。以下のパターンで網羅する:
-- 業種名直接（例: 「税理士事務所」「SaaS企業」）
-- 業種 × 地域（例: 「東京 IT企業」）
-- 課題ベース（例: 「DX推進 中小企業」「人手不足 製造業」）
-- 競合顧客（例: 「{競合名} 導入企業」「{競合名} 事例」）
-- 業界団体・ディレクトリ（例: 「{業界} 協会 会員一覧」）
+SALES_STRATEGY.md should list at least 10 search keywords. Cover the following patterns:
+- Direct industry name (e.g., "tax accounting firm", "SaaS company")
+- Industry × region (e.g., "Tokyo IT company")
+- Challenge-based (e.g., "DX adoption SMB", "labor shortage manufacturing")
+- Competitor customers (e.g., "{competitor name} users", "{competitor name} case studies")
+- Industry associations/directories (e.g., "{industry} association member list")

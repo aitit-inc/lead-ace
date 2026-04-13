@@ -1,66 +1,66 @@
 ---
 name: lead-ace-doctor
-description: "緊急時のDB直接操作。専用スクリプトでは対応できないDB修正・調査が必要な場合に使用する。"
-argument-hint: "<修正内容の説明>"
+description: "Direct DB operations for emergencies. Use when DB fixes or investigations are needed that cannot be handled by dedicated scripts."
+argument-hint: "<description of what needs fixing>"
 ---
 
-## 概要
+## Overview
 
-このスキルは**緊急時・障害対応専用**の直接DB操作手段です。通常の運用では以下の専用スクリプトを使用してください:
+This skill is a **direct DB operation tool for emergencies and incident response only**. For normal operations, use the following dedicated scripts:
 
-| 操作 | 専用スクリプト |
+| Operation | Dedicated Script |
 |---|---|
-| メール送信 + ログ記録 | `send_and_log.py` |
-| 返信記録 + ステータス更新 | `record_response.py` |
-| unreachable / inactive への変更 | `update_status.py` |
-| 評価記録 + 優先度更新 | `record_evaluation.py` |
-| 営業先の一括登録 | `add_prospects.py` |
-| READ クエリ全般 | `sales_queries.py` |
-| DB初期化 + プロジェクト登録 | `init_db.py` |
+| Email sending + log recording | `send_and_log.py` |
+| Reply recording + status update | `record_response.py` |
+| Update to unreachable / inactive | `update_status.py` |
+| Evaluation recording + priority update | `record_evaluation.py` |
+| Bulk prospect registration | `add_prospects.py` |
+| All READ queries | `sales_queries.py` |
+| DB initialization + project registration | `init_db.py` |
 
-## DBスキーマ
+## DB Schema
 
-SQL を書く前に以下を読み、現在のスキーマを把握すること:
+Before writing any SQL, read the following to understand the current schema:
 
-- `${CLAUDE_PLUGIN_ROOT}/scripts/sales-db.sql` — 最新のフルスキーマ（テーブル定義・FK・インデックス・トリガー全て）
+- `${CLAUDE_PLUGIN_ROOT}/scripts/sales-db.sql` — Full current schema (table definitions, FKs, indexes, and triggers)
 
-## 手順
+## Steps
 
-### 0. プリフライト
+### 0. Preflight
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/preflight.py data.db --migrate-only
 ```
 
-### 1. 状況確認
+### 1. Assess the Situation
 
-ユーザーの指示内容を確認し、実行すべき SQL を特定する。必要に応じて SELECT で現状を確認する:
-
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/query_db.py data.db "<SELECT文>" [パラメータ...]
-```
-
-### 2. 実行計画の提示
-
-実行する SQL を**必ずユーザーに提示**し、AskUserQuestion で確認を取る。確認なしの実行は禁止。
-
-提示する内容:
-- 実行する SQL 文
-- 影響を受けるレコード数（事前に SELECT COUNT で確認）
-- 想定される影響
-
-### 3. 実行
-
-ユーザーの承認後に実行する:
+Review the user's instructions and identify the SQL to execute. Verify the current state with SELECT as needed:
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/query_db.py data.db "<SQL文>" [パラメータ...]
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/query_db.py data.db "<SELECT statement>" [params...]
 ```
 
-### 4. 結果確認
+### 2. Present Execution Plan
 
-実行後、影響を受けたレコードを SELECT で確認し、結果をユーザーに報告する。
+**Always present the SQL to the user** and confirm with AskUserQuestion before executing. Executing without confirmation is prohibited.
 
-### 5. 再発防止の提案
+Present the following:
+- SQL statement(s) to execute
+- Number of records affected (verify with SELECT COUNT beforehand)
+- Expected impact
 
-同じ操作が今後も必要になりそうな場合、専用スクリプトの作成を提案する。
+### 3. Execute
+
+Execute after user approval:
+
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/query_db.py data.db "<SQL statement>" [params...]
+```
+
+### 4. Verify Results
+
+After execution, verify the affected records with SELECT and report the results to the user.
+
+### 5. Suggest Prevention
+
+If the same operation is likely to be needed again in the future, propose creating a dedicated script.

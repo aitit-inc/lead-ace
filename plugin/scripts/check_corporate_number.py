@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""法人番号検索スクリプト（国税庁法人番号公表サイト）
+"""Corporate number lookup script (NTA Corporate Number Publication Site)
 
-playwright-cli を使ってブラウザ自動操作で検索し、候補一覧を JSON で出力する。
-snapshot コマンドの出力をパースするため、JS ファイルは不要。
+Uses playwright-cli for browser automation to search and outputs candidate results as JSON.
+Parses the snapshot command output — no JS files needed.
 
 Usage:
     python3 check_corporate_number.py "SurpassOne株式会社"
@@ -28,7 +28,7 @@ NTA_URL = "https://www.houjin-bangou.nta.go.jp/"
 
 
 # ---------------------------------------------------------------------------
-# 型定義
+# Type definitions
 # ---------------------------------------------------------------------------
 
 
@@ -45,11 +45,11 @@ class SearchOutput(TypedDict):
 
 
 # ---------------------------------------------------------------------------
-# playwright-cli 操作
+# playwright-cli operations
 # ---------------------------------------------------------------------------
 
 def _run_cli(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess[str]:
-    """playwright-cli コマンドを実行する。"""
+    """Run a playwright-cli command."""
     return subprocess.run(
         ["playwright-cli", *args],
         capture_output=True,
@@ -59,7 +59,7 @@ def _run_cli(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess[
 
 
 def _close_browser() -> None:
-    """ブラウザを閉じる（失敗しても無視）。"""
+    """Close the browser (ignore failures)."""
     try:
         _run_cli(["close"], timeout=10)
     except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -67,7 +67,7 @@ def _close_browser() -> None:
 
 
 def _is_katakana(text: str) -> bool:
-    """文字列がカタカナのみで構成されているか判定する。"""
+    """Determine whether a string consists entirely of Katakana characters."""
     return all(
         unicodedata.name(c, "").startswith("KATAKANA") or c in "ー・"
         for c in text
@@ -75,38 +75,38 @@ def _is_katakana(text: str) -> bool:
 
 
 def search(company_name: str, kana: bool = False) -> SearchOutput:
-    """国税庁法人番号公表サイトで法人番号を検索する。
+    """Search the NTA Corporate Number Publication Site for a corporate number.
 
     Args:
-        company_name: 検索する法人名
-        kana: True の場合、読み仮名（カタカナ）で検索
+        company_name: The entity name to search for
+        kana: If True, search by phonetic reading (Katakana)
 
     Returns:
-        検索結果（total + results 配列）
+        Search results (total + results array)
     """
-    # ブラウザ起動 → サイトに遷移
+    # Launch browser and navigate to the site
     open_result = _run_cli(["open", NTA_URL], timeout=30)
     if open_result.returncode != 0:
         raise RuntimeError(f"playwright-cli open failed: {open_result.stderr.strip()}")
 
     try:
-        # カタカナ検索の場合、チェックボックスをオン
+        # Enable Katakana reading checkbox if searching by kana
         if kana:
             _run_cli(["check", "getByRole('checkbox', { name: '読み仮名で検索' })"])
 
-        # 会社名を入力して検索
+        # Fill in company name and submit search
         _run_cli(["fill", "getByRole('textbox', { name: '商号又は名称' })", company_name])
         click_result = _run_cli(["click", "getByRole('button', { name: '検索' })"])
         if click_result.returncode != 0:
-            raise RuntimeError(f"検索ボタンのクリックに失敗: {click_result.stderr.strip()}")
+            raise RuntimeError(f"Failed to click search button: {click_result.stderr.strip()}")
 
-        # 結果ページの読み込みを待機
+        # Wait for the results page to load
         _wait_for_results()
 
-        # snapshot でページ構造を取得
+        # Get page structure via snapshot
         snap_result = _run_cli(["snapshot"], timeout=15)
         if snap_result.returncode != 0:
-            raise RuntimeError(f"snapshot 取得失敗: {snap_result.stderr.strip()}")
+            raise RuntimeError(f"Failed to get snapshot: {snap_result.stderr.strip()}")
 
         return _parse_snapshot(snap_result.stdout)
 
@@ -115,10 +115,10 @@ def search(company_name: str, kana: bool = False) -> SearchOutput:
 
 
 def _wait_for_results() -> None:
-    """検索結果ページが読み込まれるまで待機する。
+    """Wait for the search results page to load.
 
-    playwright-cli の snapshot で URL に kensaku-kekka が含まれるか確認。
-    最大5回リトライ（各1秒間隔）。
+    Checks via playwright-cli snapshot whether the URL contains kensaku-kekka.
+    Retries up to 5 times (1-second interval each).
     """
     import time
     for _ in range(5):
@@ -126,20 +126,20 @@ def _wait_for_results() -> None:
         snap = _run_cli(["snapshot"], timeout=10)
         if "kensaku-kekka" in snap.stdout:
             return
-    # タイムアウトしてもパース試行はする（結果が空なだけ）
+    # Even on timeout, attempt to parse (result will just be empty)
 
 
 def _parse_snapshot(snapshot: str) -> SearchOutput:
-    """playwright-cli snapshot の出力から検索結果をパースする。
+    """Parse search results from playwright-cli snapshot output.
 
-    snapshot の row 行は以下の形式:
+    Snapshot row lines look like:
       - row "1011003011668 サーパスワン ＳｕｒｐａｓｓＯｎｅ株式会社 東京都新宿区... 履歴等" [ref=...]:
-    各 row 内の rowheader と cell からデータを抽出する。
+    Data is extracted from the rowheader and cells within each row.
     """
     results: list[SearchResult] = []
     total = 0
 
-    # 件数を取得: strong [ref=...]: "3" の後に 件 見つかりました
+    # Get result count: strong [ref=...]: "3" followed by 件 見つかりました
     total_match = re.search(
         r'strong \[ref=\w+\]: "(\d+)"\s*\n\s*- text: 件 見つかりました',
         snapshot,
@@ -147,14 +147,14 @@ def _parse_snapshot(snapshot: str) -> SearchOutput:
     if total_match:
         total = int(total_match.group(1))
 
-    # テーブル行をパース
-    # rowheader に法人番号、cell に名前(読み+法人名)、cell に所在地
+    # Parse table rows
+    # rowheader contains corporate number, cells contain name (reading+entity name) and address
     lines = snapshot.split("\n")
     i = 0
     while i < len(lines):
         line = lines[i].strip()
 
-        # rowheader "1011003011668" を見つける（ヘッダ行の "法人番号" は除外）
+        # Find rowheader "1011003011668" (exclude header row "法人番号")
         rh_match = re.match(r'- rowheader "(\d{13})"', line)
         if rh_match:
             number = rh_match.group(1)
@@ -162,19 +162,19 @@ def _parse_snapshot(snapshot: str) -> SearchOutput:
             name = ""
             address = ""
 
-            # 後続行から cell を探す
+            # Search subsequent lines for cells
             j = i + 1
             cell_count = 0
             while j < len(lines) and cell_count < 2:
                 cline = lines[j].strip()
 
-                # 1つ目の cell: 名称（読み + 法人名）
+                # First cell: name (reading + entity name)
                 if cell_count == 0:
                     cell_match = re.match(r'- cell "(.+?)"', cline)
                     if cell_match:
                         cell_count += 1
                         cell_full_text = cell_match.group(1)
-                        # cell 内の generic が読み、text が法人名
+                        # Inside the cell: generic = reading, text = entity name
                         k = j + 1
                         while k < len(lines):
                             inner = lines[k].strip()
@@ -190,19 +190,19 @@ def _parse_snapshot(snapshot: str) -> SearchOutput:
                             elif inner.startswith("- cell"):
                                 break
                             k += 1
-                        # フォールバック: 内部パースで name が取れなかった場合、
-                        # cell の引用テキストから reading を除いた部分を name にする
+                        # Fallback: if internal parse didn't yield name,
+                        # derive name from cell text by stripping the reading prefix
                         if not name and cell_full_text:
                             if reading and cell_full_text.startswith(reading):
                                 name = cell_full_text[len(reading):].strip()
                             if not name:
                                 name = cell_full_text
-                # 2つ目の cell: 所在地
+                # Second cell: address
                 elif cell_count == 1:
                     cell_match = re.match(r'- cell "(.+?)"', cline)
                     if cell_match:
                         address = cell_match.group(1)
-                        # "履歴等" セルは除外
+                        # Exclude the "履歴等" (history) cell
                         if address != "履歴等":
                             cell_count += 1
                         else:
@@ -229,13 +229,13 @@ def _parse_snapshot(snapshot: str) -> SearchOutput:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="国税庁法人番号公表サイトで法人番号を検索する。",
+        description="Search the NTA Corporate Number Publication Site for a corporate number.",
     )
-    _ = parser.add_argument("company_name", help="検索する法人名")
+    _ = parser.add_argument("company_name", help="Entity name to search for")
     _ = parser.add_argument(
         "--kana",
         action="store_true",
-        help="読み仮名（カタカナ）で検索する。省略時、全文字がカタカナなら自動でカナ検索になる",
+        help="Search by phonetic reading (Katakana). If omitted and all characters are Katakana, Kana search is used automatically.",
     )
     return parser
 
@@ -245,12 +245,12 @@ def main() -> None:
     company_name: str = args.company_name
     kana: bool = args.kana
 
-    # カタカナ自動判定
+    # Auto-detect Katakana
     if not kana and _is_katakana(company_name):
         kana = True
 
-    mode = "読み仮名" if kana else "法人名"
-    print(f"「{company_name}」を{mode}で検索中...", file=sys.stderr)
+    mode = "phonetic reading" if kana else "entity name"
+    print(f"Searching for '{company_name}' by {mode}...", file=sys.stderr)
 
     try:
         result = search(company_name, kana=kana)
@@ -258,22 +258,22 @@ def main() -> None:
         print(f"ERROR: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # 結果表示（stderr にサマリー、stdout に JSON）
+    # Display results (summary to stderr, JSON to stdout)
     total = result["total"]
     results = result["results"]
     shown = len(results)
 
     if total > shown:
-        print(f"{total}件 見つかりました（先頭 {shown}件を表示）", file=sys.stderr)
+        print(f"{total} results found (showing first {shown})", file=sys.stderr)
     else:
-        print(f"{total}件 見つかりました", file=sys.stderr)
+        print(f"{total} results found", file=sys.stderr)
 
     if results:
         for i, r in enumerate(results, 1):
             print(f"  [{i}] {r['name']}", file=sys.stderr)
-            print(f"      法人番号: {r['number']}", file=sys.stderr)
-            print(f"      読み: {r['reading']}", file=sys.stderr)
-            print(f"      所在地: {r['address']}", file=sys.stderr)
+            print(f"      Corporate number: {r['number']}", file=sys.stderr)
+            print(f"      Reading: {r['reading']}", file=sys.stderr)
+            print(f"      Address: {r['address']}", file=sys.stderr)
             print(file=sys.stderr)
 
     print_json(result)

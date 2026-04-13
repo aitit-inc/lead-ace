@@ -1,14 +1,14 @@
-# ワークスペース共通規約
+# Workspace Conventions
 
-全スキル・サブエージェント共通のルール。
+Common rules for all skills and sub-agents.
 
-## data.db の配置
+## data.db Location
 
-`data.db` は **ワークスペースルート（cdの初期位置）に1つだけ存在する共有DB** である。プロジェクトサブディレクトリ内には存在しない。
+`data.db` is the **single shared DB located at the workspace root (the initial cwd)**. It does not exist inside project subdirectories.
 
 ```
-workspace-root/          ← ここが cwd の初期位置
-├── data.db              ← 共有DB（ここにしかない）
+workspace-root/          ← this is the initial cwd
+├── data.db              ← shared DB (only here)
 ├── project-a/
 │   ├── BUSINESS.md
 │   └── SALES_STRATEGY.md
@@ -16,23 +16,23 @@ workspace-root/          ← ここが cwd の初期位置
     └── ...
 ```
 
-## 日時のタイムゾーン
+## Datetime Timezone
 
-SQLite で日時を扱う際は、常に **`datetime('now', 'localtime')`** を使用すること。`datetime('now')` は UTC になるため使用禁止。
+When handling datetimes in SQLite, always use **`datetime('now', 'localtime')`**. Do not use `datetime('now')` as it returns UTC.
 
 ```sql
--- ○ 正しい
+-- Correct
 DEFAULT (datetime('now', 'localtime'))
 updated_at = datetime('now', 'localtime')
 datetime('now', 'localtime', '-6 days')
 
--- × 使用禁止
+-- Prohibited
 DEFAULT (datetime('now'))
 updated_at = datetime('now')
 ```
 
-## コマンド実行時のルール
+## Command Execution Rules
 
-- **cdしない。** 全ての bash コマンドはワークスペースルートで実行すること
-- `data.db` は常に相対パスでそのまま参照できる（cwdがワークスペースルートなので）
-- プロジェクトディレクトリ内のファイルは `$0/BUSINESS.md` のように `$0` プレフィックスで参照する
+- **Do not use cd.** Run all bash commands from the workspace root.
+- `data.db` is always accessible via its relative path (since cwd is the workspace root).
+- Reference files inside project directories using the `$0` prefix, e.g., `$0/BUSINESS.md`.

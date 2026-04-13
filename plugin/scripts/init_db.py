@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Lead Ace DB 初期化スクリプト
+"""Lead Ace DB initialization script
 
 Usage:
   init_db.py [db_path] [--register-project <project_id>]
 
-DBスキーマを初期化し、オプションでプロジェクトを登録する。
+Initializes the DB schema and optionally registers a project.
 
-Output (--register-project 指定時): JSON
+Output (when --register-project is specified): JSON
   {"project_registered": true|false, "project_id": "..."}
 """
 
@@ -19,10 +19,10 @@ from sales_db import error_exit, get_db_path, get_connection, get_schema_path, p
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Lead Ace DB 初期化。オプションでプロジェクト登録も行う。",
+        description="Initialize the Lead Ace DB. Optionally register a project.",
     )
-    _ = parser.add_argument("db_path", nargs="?", default=None, help="SQLite データベースのパス（デフォルト: ./data.db）")
-    _ = parser.add_argument("--register-project", help="初期化後にプロジェクトを登録する")
+    _ = parser.add_argument("db_path", nargs="?", default=None, help="Path to the SQLite database (default: ./data.db)")
+    _ = parser.add_argument("--register-project", help="Register a project after initialization")
     return parser
 
 

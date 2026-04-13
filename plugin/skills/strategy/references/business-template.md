@@ -1,27 +1,27 @@
-# BUSINESS.md テンプレート
+# BUSINESS.md Template
 
-以下の構成で `<project-dir>/BUSINESS.md` を生成する:
+Generate `<project-dir>/BUSINESS.md` with the following structure:
 
 ```markdown
-# 事業・サービス情報
+# Business & Service Information
 
-## 組織概要
-（組織名、事業内容、設立年、電話番号等）
+## Organization Overview
+(Organization name, business activities, founding year, phone number, etc.)
 
-## サービス・製品概要
-（何を提供しているか）
+## Service / Product Overview
+(What is being offered)
 
-## 特徴・強み
-（セールスポイント、差別化ポイント）
+## Features & Strengths
+(Selling points, differentiation factors)
 
-## 価格・料金体系
-（わかる範囲で）
+## Pricing
+(As much detail as available)
 
-## 競合
-（主要競合とその特徴）
+## Competition
+(Key competitors and their characteristics)
 
-## 市場環境
-（市場規模、トレンド等）
+## Market Environment
+(Market size, trends, etc.)
 ```
 
-各セクションは、ユーザーから得た情報とWeb調査の結果を組み合わせて記述する。情報が不明なセクションは「情報なし」と明記し、空にしない。
+Each section should be written by combining information obtained from the user with web research results. For sections where information is unknown, write "Not available" — do not leave sections empty.

@@ -1,12 +1,12 @@
-"""prospects テーブルに org_lookup_status カラムを追加
+"""Add org_lookup_status column to the prospects table
 
-法人番号の検索状態を記録する。lookup_corporate_numbers.py が未検索の prospects だけを
-対象にするためのフィルタに使用。
+Records the corporate number lookup state. Used as a filter in lookup_corporate_numbers.py
+to target only prospects that have not been searched yet.
 
-値:
-  NULL: 未検索（デフォルト）
-  'not_applicable': 法人番号が存在しない（個人事業主、法人格なし等）
-  'unresolvable': 検索したが特定できなかった
+Values:
+  NULL: not yet searched (default)
+  'not_applicable': no corporate number exists (sole proprietor, unincorporated, etc.)
+  'unresolvable': searched but could not be identified
 """
 
 import sqlite3

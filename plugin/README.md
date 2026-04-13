@@ -3,105 +3,105 @@
 Autonomous lead generation plugin for Claude Code.
 Builds prospect lists, runs outbound outreach, and iterates on strategy — all hands-free.
 
-## 利用者向け
+## For Users
 
-### 前提条件
+### Prerequisites
 
 - Claude Code
 - SQLite3
-- Gmail MCP（メール送信・確認用）
-- claude-in-chrome MCP（フォーム入力・SNS操作用）
+- Gmail MCP (for sending and checking emails)
+- claude-in-chrome MCP (for form submission and SNS operations)
 
-### インストール
+### Installation
 
-Claude Code 内で以下を実行:
+Run the following inside Claude Code:
 
 ```
 /plugin marketplace add aitit-inc/claude-plugins
 /plugin install lead-ace@surpassone-plugins
 ```
 
-更新する場合:
+To update:
 
 ```
 /plugin marketplace update
 /plugin update lead-ace@surpassone-plugins
 ```
 
-### 使い方
+### Usage
 
-以下のスラッシュコマンドをパイプライン的に順番に実行する。
+Run the following slash commands in sequence as a pipeline.
 
-| コマンド | 概要 |
+| Command | Description |
 |---|---|
-| `/setup <dir>` | プロジェクト初期化（DB・ディレクトリ作成） |
-| `/strategy <dir>` | 営業・マーケ戦略を策定 |
-| `/build-list <dir>` | Web探索で営業先リストを作成 |
-| `/outbound <dir>` | メール・フォーム・SNS DMでアプローチ |
-| `/check-results <dir>` | 反応を確認・記録 |
-| `/evaluate <dir>` | データ分析に基づいてPDCA改善 |
-| `/daily-cycle <dir> [件数]` | 日次サイクル自動実行（check-results → outbound + build-list） |
-| `/delete-project <dir>` | プロジェクトの登録解除・データ削除 |
+| `/setup <dir>` | Initialize project (create DB and directories) |
+| `/strategy <dir>` | Define sales and marketing strategy |
+| `/build-list <dir>` | Build a prospect list via web search |
+| `/outbound <dir>` | Reach out via email, form, or SNS DM |
+| `/check-results <dir>` | Check and record responses |
+| `/evaluate <dir>` | Run PDCA improvement based on data analysis |
+| `/daily-cycle <dir> [count]` | Run daily cycle automatically (check-results → outbound + build-list) |
+| `/delete-project <dir>` | Unregister project and delete its data |
 
-`<dir>` は製品/サービスごとのサブディレクトリ名（例: `product-a-sales`）。
-データベース（`data.db`）はプロジェクトルートで共有、ナレッジファイル類はサブディレクトリに分離される。
+`<dir>` is the subdirectory name for each product/service (e.g., `product-a-sales`).
+The database (`data.db`) is shared at the project root; knowledge files are separated into subdirectories.
 
-### 基本的な流れ
+### Basic Flow
 
 ```
 /setup my-product
-/strategy my-product        # 対話で事業情報を入力 → BUSINESS.md, SALES_STRATEGY.md 生成
-/build-list my-product      # Web探索で営業先を収集
-/outbound my-product        # 自動でアウトバウンド営業
-/check-results my-product   # 反応を確認
-/evaluate my-product        # 結果を分析して戦略を自動改善
+/strategy my-product        # Interactively enter business info → generate BUSINESS.md, SALES_STRATEGY.md
+/build-list my-product      # Collect prospects via web search
+/outbound my-product        # Run automated outbound sales
+/check-results my-product   # Check responses
+/evaluate my-product        # Analyze results and auto-improve strategy
 ```
 
-初回セットアップ後は `/daily-cycle` で日々の営業活動を自動実行できる:
+After the initial setup, use `/daily-cycle` to automate daily sales activities:
 
 ```
-/daily-cycle my-product      # 毎日実行: 返信確認 → 30件アプローチ → リスト補充
-/daily-cycle my-product 50   # 件数を指定
-/evaluate my-product         # 週1程度で戦略改善
+/daily-cycle my-product      # Run daily: check replies → 30 outreach → replenish list
+/daily-cycle my-product 50   # Specify count
+/evaluate my-product         # Improve strategy about once a week
 ```
 
 ---
 
-## ライセンス
+## License
 
-このプラグインは SurpassOne Inc. の独自ライセンスの下で提供されています。詳細は [LICENSE](../../LICENSE) を参照してください。
+This plugin is provided under a proprietary license from SurpassOne Inc. See [LICENSE](../../LICENSE) for details.
 
-- **無料版:** 1プロジェクトまで利用可能
-- **有料版:** 複数プロジェクト無制限。ライセンスキーは https://leadace.surpassone.com で購入できます
+- **Free tier:** Up to 1 project
+- **Paid tier:** Unlimited projects. License keys can be purchased at https://leadace.surpassone.com
 
-`/setup` 実行時にライセンスキーの入力を求められます。無料版の場合はそのままスキップしてください。
+You will be prompted for a license key when running `/setup`. Skip if using the free tier.
 
 ---
 
-## 開発者向け
+## For Developers
 
-### プラグイン構成
+### Plugin Structure
 
 ```
-.claude-plugin/plugin.json   # マニフェスト
-skills/                      # スラッシュコマンド（各ディレクトリに SKILL.md）
-scripts/                     # 共有スクリプト（DB初期化・クエリ実行等）
+.claude-plugin/plugin.json   # Manifest
+skills/                      # Slash commands (each directory contains SKILL.md)
+scripts/                     # Shared scripts (DB initialization, query execution, etc.)
 ```
 
-- 各スキルの仕様は `skills/<name>/SKILL.md` を参照
-- 詳細なテンプレートやガイドラインは `skills/<name>/references/` に分離
-- スクリプト内では `${CLAUDE_PLUGIN_ROOT}` でプラグインルートを参照
+- See `skills/<name>/SKILL.md` for each skill's specification
+- Detailed templates and guidelines are in `skills/<name>/references/`
+- Use `${CLAUDE_PLUGIN_ROOT}` to reference the plugin root from scripts
 
-### DBスキーマ
+### DB Schema
 
-`scripts/sales-db.sql` に定義。主要テーブル: `projects`, `prospects`, `outreach_logs`, `responses`, `evaluations`。
+Defined in `scripts/sales-db.sql`. Main tables: `projects`, `prospects`, `outreach_logs`, `responses`, `evaluations`.
 
-### ローカルでの開発・テスト
+### Local Development and Testing
 
 ```bash
-# このリポジトリのディレクトリで Claude Code を起動すればスキルが自動ロードされる
+# Launch Claude Code from this repository's directory and skills are auto-loaded
 claude
 
-# または別プロジェクトからプラグインとして指定
+# Or specify as a plugin from another project
 claude --plugin-dir /path/to/this/repo
 ```

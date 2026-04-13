@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
-"""営業先の一括登録スクリプト
+"""Bulk prospect registration script
 
 Usage:
   echo '<json_array>' | add_prospects.py <db_path> <project_id>
 
-stdin から営業先情報のJSON配列を受け取り、重複チェック→DB登録を一括で行う。
-prospects（営業先マスタ）と project_prospects（プロジェクト紐付け）を
-1トランザクションで登録する。
+Reads a JSON array of prospect information from stdin and performs
+duplicate checking then bulk DB registration.
+Registers prospects (prospect master) and project_prospects (project linkage)
+in a single transaction.
 
-JSON配列の各オブジェクト:
-  prospects用:
-    name (必須), overview (必須), website_url (必須),
+Each object in the JSON array:
+  For prospects:
+    name (required), overview (required), website_url (required),
     contact_name, corporate_number, industry, email, contact_form_url, form_type, sns_accounts
-  project_prospects用:
-    match_reason (必須), priority (省略時: 3)
-  特殊:
-    existing_prospect_id: 既存prospect_idを指定（prospect新規登録をスキップし紐付けのみ行う）
+  For project_prospects:
+    match_reason (required), priority (default: 3)
+  Special:
+    existing_prospect_id: specify an existing prospect_id to skip new registration and only link
 
 Output: JSON
   {
@@ -40,16 +41,16 @@ from sales_db import DuplicateMatch, error_exit, get_connection, print_json, ups
 
 
 # ---------------------------------------------------------------------------
-# 型定義
+# Type definitions
 # ---------------------------------------------------------------------------
 
 class ProspectEntry(TypedDict, total=False):
-    """入力JSON配列の各エントリ"""
-    # organizations 用
-    organization_name: str  # 正式法人名（check_corporate_number.py で確認した名称）
+    """Each entry in the input JSON array"""
+    # For organizations
+    organization_name: str  # Official legal name (as confirmed by check_corporate_number.py)
     corporate_number: str
-    # prospects 用
-    name: str  # 営業先名（学校名・会社名等）
+    # For prospects
+    name: str  # Prospect name (school name, company name, etc.)
     contact_name: str
     department: str
     overview: str
@@ -74,7 +75,7 @@ class PossibleMatch(TypedDict):
 
 
 class EntryDetail(TypedDict, total=False):
-    """各エントリの処理結果"""
+    """Processing result for each entry"""
     index: int
     name: str
     status: str  # "added" | "duplicate" | "linked_existing" | "error"
@@ -86,7 +87,7 @@ class EntryDetail(TypedDict, total=False):
 
 
 class ResultSummary(TypedDict):
-    """一括登録の結果サマリー"""
+    """Result summary for bulk registration"""
     added: int
     duplicates: int
     linked_existing: int
@@ -103,31 +104,31 @@ PROJECT_PROSPECT_REQUIRED = ("match_reason",)
 
 
 # ---------------------------------------------------------------------------
-# 処理関数
+# Processing functions
 # ---------------------------------------------------------------------------
 
 def validate_entry(entry: ProspectEntry, index: int) -> list[str]:
-    """エントリのバリデーション。エラーメッセージのリストを返す。"""
+    """Validate an entry. Returns a list of error messages."""
     errors: list[str] = []
-    # existing_prospect_id 指定時は prospect 側の必須チェックをスキップ
+    # Skip prospect-side required checks when existing_prospect_id is specified
     if not entry.get("existing_prospect_id"):
         for field in PROSPECT_REQUIRED:
             if not entry.get(field):
-                errors.append(f"[{index}] 必須フィールド '{field}' がありません")
+                errors.append(f"[{index}] Required field '{field}' is missing")
     for field in PROJECT_PROSPECT_REQUIRED:
         if not entry.get(field):
-            errors.append(f"[{index}] 必須フィールド '{field}' がありません")
+            errors.append(f"[{index}] Required field '{field}' is missing")
     return errors
 
 
 def find_duplicates(conn: sqlite3.Connection, entry: ProspectEntry) -> list[DuplicateMatch]:
-    """エントリの重複チェック。法人番号で分岐し、同一法人内のみチェック。
+    """Check for duplicate entries. Branches by corporate number; only checks within the same legal entity.
 
-    1. 法人番号で organizations を確認
-       - 新規法人 → 重複なし（return []）
-       - 既存法人 → 同一法人内の prospects で重複チェック
-    2. 同一法人内の prospects に対して email / contact_form_url / SNS で重複判定
-       - email / contact_form_url はグローバル UNIQUE 制約もあるため、INSERT 時にもDB側で保護される
+    1. Check organizations by corporate number
+       - New legal entity → no duplicates (return [])
+       - Existing legal entity → check for duplicates among prospects within the same entity
+    2. For prospects within the same entity, check duplicates via email / contact_form_url / SNS
+       - email / contact_form_url also have global UNIQUE constraints and are protected at the DB level on INSERT
     """
     corporate_number = entry.get("corporate_number")
     if not corporate_number:
@@ -139,9 +140,9 @@ def find_duplicates(conn: sqlite3.Connection, entry: ProspectEntry) -> list[Dupl
         (corporate_number,),
     ).fetchone()
     if org is None:
-        return []  # 新規法人 → 重複なし
+        return []  # New legal entity → no duplicates
 
-    # 2. 既存法人 → 同一法人内の prospects で重複チェック
+    # 2. Existing legal entity → check for duplicates among prospects within the same entity
     matches: list[DuplicateMatch] = []
 
     email = entry.get("email")
@@ -154,7 +155,7 @@ def find_duplicates(conn: sqlite3.Connection, entry: ProspectEntry) -> list[Dupl
                 match_type="EXACT_MATCH",
                 prospect_id=row["id"],
                 name=row["name"],
-                reason=f"同一法人内でemail一致: {email}",
+                reason=f"Email match within same entity: {email}",
             ))
 
     contact_form_url = entry.get("contact_form_url")
@@ -168,7 +169,7 @@ def find_duplicates(conn: sqlite3.Connection, entry: ProspectEntry) -> list[Dupl
                 match_type="EXACT_MATCH",
                 prospect_id=row["id"],
                 name=row["name"],
-                reason=f"同一法人内でフォームURL一致: {contact_form_url}",
+                reason=f"Form URL match within same entity: {contact_form_url}",
             ))
 
     sns_raw = entry.get("sns_accounts")
@@ -196,10 +197,10 @@ def find_duplicates(conn: sqlite3.Connection, entry: ProspectEntry) -> list[Dupl
                         match_type="EXACT_MATCH",
                         prospect_id=row["id"],
                         name=row["name"],
-                        reason=f"同一法人内でSNS一致: {key}={value}",
+                        reason=f"SNS match within same entity: {key}={value}",
                     ))
 
-    # 重複排除（同じ prospect_id が複数段階でヒットする場合）
+    # Deduplicate (same prospect_id may match at multiple stages)
     seen: set[int] = set()
     unique: list[DuplicateMatch] = []
     for m in matches:
@@ -211,9 +212,9 @@ def find_duplicates(conn: sqlite3.Connection, entry: ProspectEntry) -> list[Dupl
 
 
 def insert_prospect(conn: sqlite3.Connection, entry: ProspectEntry) -> int:
-    """prospects テーブルに1件挿入し、新しいIDを返す。
+    """Insert one record into the prospects table and return the new ID.
 
-    corporate_number がある場合は organizations テーブルにも upsert する。
+    Also upserts to the organizations table if corporate_number is present.
     """
     sns_val = entry.get("sns_accounts")
     sns_str: str | None = None
@@ -225,15 +226,15 @@ def insert_prospect(conn: sqlite3.Connection, entry: ProspectEntry) -> int:
     do_not_contact = 1 if entry.get("do_not_contact") else 0
     notes = entry.get("notes")
 
-    # organizations に upsert（正式法人名で登録）
+    # Upsert to organizations (register with official legal name)
     corp_num = entry.get("corporate_number")
     org_name = entry.get("organization_name")
     prospect_name = entry.get("name")
     website_url = entry.get("website_url")
     if not corp_num or not org_name or not prospect_name or not website_url:
         raise ValueError(
-            f"corporate_number, organization_name, name, website_url は必須です"
-            f"（organization_name={org_name}, name={prospect_name}）"
+            f"corporate_number, organization_name, name, website_url are required"
+            f" (organization_name={org_name}, name={prospect_name})"
         )
     upsert_organization(
         conn,
@@ -271,7 +272,7 @@ def insert_prospect(conn: sqlite3.Connection, entry: ProspectEntry) -> int:
     )
     row_id = cursor.lastrowid
     if row_id is None:
-        raise RuntimeError("INSERT後にlastrowidが取得できませんでした")
+        raise RuntimeError("Could not get lastrowid after INSERT")
     return row_id
 
 
@@ -281,7 +282,7 @@ def link_project_prospect(
     prospect_id: int,
     entry: ProspectEntry,
 ) -> bool:
-    """project_prospects に紐付けを登録。既存の場合はFalseを返す。"""
+    """Register a linkage in project_prospects. Returns False if already exists."""
     sql = (
         "INSERT OR IGNORE INTO project_prospects"
         + " (project_id, prospect_id, match_reason, priority) VALUES (?, ?, ?, ?)"
@@ -296,12 +297,12 @@ def link_project_prospect(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "営業先の一括登録。stdin からJSON配列を読み取り、"
-            + "重複チェック→prospects登録→project_prospects紐付けを一括で行う。"
+            "Bulk prospect registration. Reads a JSON array from stdin and performs "
+            + "duplicate checking → prospect registration → project_prospects linkage in bulk."
         ),
     )
-    _ = parser.add_argument("db_path", help="SQLite データベースのパス")
-    _ = parser.add_argument("project_id", help="プロジェクトID")
+    _ = parser.add_argument("db_path", help="Path to the SQLite database")
+    _ = parser.add_argument("project_id", help="Project ID")
     return parser
 
 
@@ -316,7 +317,7 @@ def main() -> None:
         error_exit(f"JSON parse error: {e}")
 
     if not isinstance(raw_data, list):
-        error_exit("入力はJSON配列である必要があります")
+        error_exit("Input must be a JSON array")
 
     data = cast(list[ProspectEntry], raw_data)
 
@@ -345,7 +346,7 @@ def main() -> None:
                 name=entry.get("name", ""),
             )
 
-            # バリデーション
+            # Validation
             errors = validate_entry(entry, i)
             if errors:
                 detail["status"] = "error"
@@ -354,7 +355,7 @@ def main() -> None:
                 results["details"].append(detail)
                 continue
 
-            # --- existing_prospect_id が指定されている場合 ---
+            # --- When existing_prospect_id is specified ---
             existing_pid = entry.get("existing_prospect_id")
             if existing_pid is not None:
                 linked = link_project_prospect(conn, project_id, existing_pid, entry)
@@ -365,7 +366,7 @@ def main() -> None:
                 results["details"].append(detail)
                 continue
 
-            # --- 重複チェック ---
+            # --- Duplicate check ---
             matches = find_duplicates(conn, entry)
             exact = [m for m in matches if m["match_type"] == "EXACT_MATCH"]
 
@@ -380,15 +381,15 @@ def main() -> None:
                 results["details"].append(detail)
                 continue
 
-            # POSSIBLE_MATCH は新規登録する（弱いシグナルのため）
-            # 呼び出し元が事前に判断済みの前提
+            # POSSIBLE_MATCH: register as new (weak signal)
+            # Assumes the caller has already made a judgment
             if matches:
                 detail["possible_matches"] = [
                     PossibleMatch(prospect_id=m["prospect_id"], reason=m["reason"])
                     for m in matches
                 ]
 
-            # --- 新規登録 ---
+            # --- New registration ---
             try:
                 new_id = insert_prospect(conn, entry)
                 _ = link_project_prospect(conn, project_id, new_id, entry)

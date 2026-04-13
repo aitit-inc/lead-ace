@@ -1,115 +1,115 @@
-# SALES_STRATEGY.md テンプレート
+# SALES_STRATEGY.md Template
 
-以下の構成で `<project-dir>/SALES_STRATEGY.md` を生成する:
+Generate `<project-dir>/SALES_STRATEGY.md` with the following structure:
 
 ```markdown
-# 営業・マーケティング戦略
+# Sales & Marketing Strategy
 
-## エレベーターピッチ
-（30秒で伝える一言）
+## Elevator Pitch
+(A one-liner that can be delivered in 30 seconds)
 
-## 解決する課題
-（ターゲットが抱える課題とその解決方法）
+## Problems Solved
+(The challenges your target faces and how you solve them)
 
-## ターゲット
-### プライマリーターゲット
-（業種・分野、規模、役職、特徴）
-### セカンダリーターゲット
+## Target
+### Primary Target
+(Industry/domain, size, role, characteristics)
+### Secondary Target
 
-## バリュープロポジション
-（なぜ自社を選ぶべきか）
+## Value Proposition
+(Why customers should choose you)
 
-## 実績・社会的証明
-（メールで引用できる具体的な実績・数字・事例。最低1つは用意する）
+## Track Record / Social Proof
+(Specific track records, numbers, and case studies that can be referenced in emails. Prepare at least one.)
 
-例:
-- 導入実績: 「XX社に導入」「β版をX社で検証中」
-- 成果数値: 「月XX件のリード獲得」「営業工数を週XX時間削減」「コストXX%削減」
-- 顧客の声: 「〇〇が改善された」（許可を得た引用）
-- 自社実績: 「自社の営業に導入し、XX件の商談を創出」
-- 受賞・メディア掲載: 「〇〇アワード受賞」「〇〇に掲載」
+Examples:
+- Adoption: "Deployed at XX companies", "Currently piloting at X companies in beta"
+- Outcome numbers: "Generate XX leads per month", "Reduced sales workload by XX hours/week", "Reduced cost by XX%"
+- Customer testimonials: "○○ was improved" (with permission)
+- Own track record: "Used in our own sales process, resulting in XX meetings booked"
+- Awards/media: "Winner of ○○ Award", "Featured in ○○"
 
-※ 事例がまだない初期段階でも、自社での活用実績や機能から推定できる効果見込みを記載する
+※ Even at an early stage with no case studies yet, include estimated effects based on self-usage track records or feature capabilities
 
-## アウトリーチモード
+## Outreach Mode
 
-以下のいずれかを設定する。プロジェクトの目的と対象に応じて選択する。
+Set one of the following. Choose based on the project's goals and target.
 
-- **precision** — 少数精鋭型。各営業先のニュース・採用状況・資金調達・具体的な取り組みに言及した深いパーソナライズ。1件あたりの時間を惜しまず、返信率を最大化する。ハイバリューターゲット向け
-- **volume** — 効率型。社名・業種・事業概要に応じたセミパーソナライズ。SALES_STRATEGY.md のメールテンプレートをベースに、冒頭と課題提起を営業先ごとに調整する。広い市場のテスト・認知拡大向け
+- **precision** — High-value, targeted approach. Deep personalization referencing specific news, job postings, funding rounds, and initiatives for each prospect. No expense spared per contact; maximize response rate. Best for high-value targets
+- **volume** — Efficiency-focused. Semi-personalized based on company name, industry, and business overview. Use the email template in SALES_STRATEGY.md as a base, adjusting the opening and problem framing per prospect. Best for broad market testing and awareness building
 
-デフォルト: `precision`
+Default: `precision`
 
-## 営業チャネル
-（使用するチャネルと優先順位。使わないチャネルがあれば明記する）
+## Sales Channels
+(Channels to use and their priority. Explicitly state any channels not in use.)
 
-デフォルト優先順位: メール → フォーム → SNS DM
-例:
-- メールのみ
-- メール → フォーム（SNSは使わない）
-- メール → フォーム → SNS DM（デフォルト）
-- SNS DM → メール → フォーム（SNS重視の場合）
+Default priority: Email → Form → SNS DM
+Examples:
+- Email only
+- Email → Form (no SNS)
+- Email → Form → SNS DM (default)
+- SNS DM → Email → Form (SNS-first approach)
 
-## 送信者情報
-- 送信者名:（メールの差出人として表示される名前）
-- 送信元メールアドレス:（gog send の --account に使用）
-- 署名:（メール末尾に付与する署名ブロック。組織名・氏名・役職・電話番号・URL等）
-- 日程調整リンク:（Timerex等のURL。あればCTAに使用）
+## Sender Information
+- Sender name: (Name displayed as email sender)
+- Sender email address: (Used for gog send --account)
+- Signature: (Signature block appended to emails. Organization name, full name, title, phone number, URL, etc.)
+- Scheduling link: (Timerex or similar URL. Used in CTAs if available.)
 
-## メッセージング
-### 初回アプローチ（メール/フォーム）
-（テンプレート的な構成要素: 件名のパターン、冒頭の掴み、課題提起、解決策提示、CTA）
-### メールテンプレート
-以下は初回アプローチメールの参考テンプレート。各営業先に合わせてカスタマイズする。
+## Messaging
+### First Outreach (Email/Form)
+(Template-like structure: subject line patterns, opening hook, problem framing, solution presentation, CTA)
+### Email Template
+The following is a reference template for first outreach emails. Customize for each prospect.
 
 ```
-件名: {相手の課題に触れる具体的な件名}
+Subject: {specific subject line that addresses the recipient's challenge}
 
-{相手の組織名} 御中
+{Recipient's organization name}
 
-{冒頭: なぜ連絡したか1-2行}
+{Opening: 1-2 lines on why you're reaching out}
 
-{課題提起: 相手が抱える課題を具体的に2-3行}
+{Problem framing: 2-3 lines on the specific challenge the recipient likely faces}
 
-{解決策: 自社サービスがどう解決するか2-3行}
+{Solution: 2-3 lines on how your service solves it}
 
-{実績/証拠: 数字や事例があれば1-2行}
+{Track record / proof: 1-2 lines with numbers or case studies if available}
 
-{CTA: 日程調整リンクがあればここに配置}
+{CTA: Include scheduling link here if available}
 
-{署名}
+{Signature}
 ```
-### SNSメッセージ
-（短く簡潔な構成。自己紹介→価値提案→アクション）
-- 利用SNS:（X / LinkedIn / 両方）
-- **前提:** SNS DMを使う場合、事前に Chrome で各 SNS アカウントにログインしておくこと
+### SNS Messages
+(Short and concise. Self-introduction → value proposition → action)
+- SNS used: (X / LinkedIn / Both)
+- **Prerequisite:** If using SNS DMs, log into each SNS account in Chrome beforehand
 
-## 反応の定義
-- 反応とみなすもの:（直接返信、日程調整完了通知、問い合わせフォーム経由の返信 等）
-- 使用中の日程調整サービス:（サービス名と通知元メールアドレス。例: Timerex — notifications@timerex.net）
-- その他の反応シグナル:（特定のサービスからの通知 等。あれば記載）
+## Response Definition
+- What counts as a response: (Direct email reply, scheduling completion notification, reply via contact form, etc.)
+- Scheduling service in use: (Service name and notification sender email. Example: Timerex — notifications@timerex.net)
+- Other response signals: (Notifications from specific services, etc. List if applicable.)
 
-## 通知設定
-- daily-cycle完了通知先:（完了レポートを送信するメールアドレス。不要なら「なし」）
+## Notification Settings
+- daily-cycle completion notification recipient: (Email address to receive completion reports. "None" if not needed.)
 
 ## KPI
-（追うべき指標: 送信数、開封率、返信率、商談化率等）
+(Metrics to track: number of sends, open rate, response rate, meeting conversion rate, etc.)
 
-## 検索キーワード
-（営業先を探す際に使うキーワードリスト。業種名、サービスカテゴリ、関連用語等）
+## Search Keywords
+(Keyword list for finding prospects. Industry names, service categories, related terms, etc.)
 
-## 環境・ツール状況
+## Environment & Tool Status
 - python3: ✅ or ❌
-- git (リモート): ✅ or ❌（❌の場合、データ消失リスクあり）
-- gog CLI: ✅ or ❌（❌の場合、メール自動送信不可）
-- Gmail MCP: ✅ or ❌（❌の場合、返信確認・ドラフト作成不可）
-- playwright-cli: ✅ or ❌（❌の場合、フォーム送信不可）
-- Claude in Chrome: ✅ or ❌（❌の場合、SNS DM不可）
-- 利用可能チャネル:（上記ツール状況から自動判定。例: 「メール（ドラフトのみ）、フォーム」）
+- git (remote): ✅ or ❌ (❌ means risk of data loss)
+- gog CLI: ✅ or ❌ (❌ means email auto-sending not available)
+- Gmail MCP: ✅ or ❌ (❌ means reply checking and draft creation not available)
+- playwright-cli: ✅ or ❌ (❌ means form submission not available)
+- Claude in Chrome: ✅ or ❌ (❌ means SNS DMs not available)
+- Available channels: (Auto-determined from tool status above. Example: "Email (draft only), Form")
 ```
 
-**作成方針:**
-- エレベーターピッチは具体的かつ簡潔に。業界用語を避けてわかりやすく
-- ターゲットはできる限り具体的に（「中小企業」ではなく「従業員50-200名のSaaS企業」、「学校」ではなく「関東圏の私立中高一貫校」等）
-- メッセージングは相手のメリットを先に伝える構成にする
-- 検索キーワードは最低10個以上リストアップする
+**Generation guidelines:**
+- Keep the elevator pitch specific and concise. Avoid jargon; make it easy to understand
+- Make targets as specific as possible (not "small businesses" but "SaaS companies with 50-200 employees"; not "schools" but "private middle-high schools in the Greater Tokyo area")
+- Structure messaging to lead with recipient benefits
+- List at least 10 search keywords

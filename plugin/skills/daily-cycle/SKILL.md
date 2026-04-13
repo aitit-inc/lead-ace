@@ -1,369 +1,368 @@
 ---
 name: daily-cycle
-description: "This skill should be used when the user asks to \"日次サイクルを回して\", \"今日の営業を実行して\", \"デイリーの営業タスクをやって\", \"daily-cycleを実行して\", or wants to run the daily sales automation cycle. check-results → evaluate → outbound + build-list（必要時）を順次・並行で自動実行する。"
-argument-hint: "<project-directory-name> [outbound件数=30]"
+description: "This skill should be used when the user asks to \"run the daily cycle\", \"run today's sales\", \"do the daily sales tasks\", \"run daily-cycle\", or wants to run the daily sales automation cycle. Automatically runs check-results → evaluate → outbound + build-list (when needed) in sequence."
+argument-hint: "<project-directory-name> [outbound-count=30]"
 allowed-tools:
   - Bash
   - Read
   - Agent
 ---
 
-# Daily Cycle - 日次営業サイクル実行
+# Daily Cycle - Daily Sales Cycle Execution
 
-1日分の営業活動を自動で実行するスキル。全フェーズをサブエージェントで実行し、メインのコンテキストを軽量に保つ。
+A skill that automatically runs a full day of sales activities. All phases are executed by sub-agents to keep the main context lightweight.
 
-**前提:** `${CLAUDE_PLUGIN_ROOT}/references/workspace-conventions.md` の規約に従うこと（data.dbの配置・cdしないルール）。サブエージェントへのプロンプトにもこの規約の参照を含めること。
+**Prerequisite:** Follow the conventions in `${CLAUDE_PLUGIN_ROOT}/references/workspace-conventions.md` (data.db location and no-cd rule). Include references to these conventions in prompts to sub-agents as well.
 
-**重要: このスキルは `context: fork` を使わないこと。** サブエージェントのネストは1階層までという制約があるため、daily-cycle自体はメインcontextで動き、各フェーズをAgent toolで起動する必要がある。
+**Important: Do not use `context: fork` in this skill.** Due to the one-level nesting limit for sub-agents, daily-cycle itself must run in the main context and launch each phase via the Agent tool.
 
-**コンテキスト軽量化ルール:**
-- サブエージェントは**詳細結果を `$0/.tmp/` 内のファイルに書き出し**、メインには**判断に必要な最小限のサマリー（3行以内）だけ**を返すこと
-- 最終レポート・通知・commitは wrap-up サブエージェントが `.tmp/` ファイルを読んで実行する
+**Context Lightweight Rules:**
+- Sub-agents should **write detailed results to files in `$0/.tmp/`** and return **only a minimal summary (3 lines or fewer) needed for decisions** to the main context
+- The wrap-up sub-agent reads the `.tmp/` files to generate the final report, send notifications, and commit
 
-## 引数
+## Arguments
 
-- プロジェクトディレクトリ名: `$0`（必須）
-- outbound 件数: `$1`（省略時: 30）
+- Project directory name: `$0` (required)
+- Outbound count: `$1` (default: 30)
 
-## 実行手順
+## Steps
 
-### 0. Preflight チェック
+### 0. Preflight Check
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/preflight.py data.db "$0"
 ```
 
-`status` が `error` の場合はエラーメッセージを表示して**即座に中断**する。`migrations_applied` にマイグレーションがあればユーザーに報告する。
+If `status` is `error`, display the error message and **abort immediately**. Report any migrations in `migrations_applied` to the user.
 
-### 1. 準備
+### 1. Setup
 
-まず現在の正確な日時・曜日を取得する。以降のステップではこの結果を正とする（システムの日付情報より優先）。
+First, get the exact current date, time, and day of week. Treat this result as authoritative for subsequent steps (takes priority over system date information).
 
 ```bash
 date '+%Y-%m-%d %H:%M (%A)'
 ```
 
-`$0` ディレクトリの存在と、DBにプロジェクトが登録済みであることを確認する。
+Verify that the `$0` directory exists and the project is registered in the DB.
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db project-exists "$0"
 ```
 
-一時ディレクトリを作成する（サブエージェントの詳細結果保存用）:
+Create a temporary directory (for storing sub-agent detailed results):
 
 ```bash
 mkdir -p "$0/.tmp"
 ```
 
-### 2. 前回サイクルレビュー
+### 2. Review Previous Cycle
 
-`$0/DAILY_CYCLE_REPORT.md` が存在する場合、読み込んで以下を把握する:
+If `$0/DAILY_CYCLE_REPORT.md` exists, read it to understand:
 
-- 前回の実行日時
-- outbound成功率とチャネル内訳（成功率が低かった場合、今回のバッチ戦略に反映）
-- build-listの結果（候補不足だった場合、今回は早めにbuild-listを実行する判断材料にする）
-- 「次回への申し送り」セクション（システムエラー、中断、要注意事項など）
+- Date and time of previous run
+- Outbound success rate and channel breakdown (if rate was low, use it to inform this run's batch strategy)
+- Build-list results (if candidates were insufficient, decide to run build-list earlier this time)
+- "Handover to next run" section (system errors, interruptions, items requiring attention)
 
-把握した内容は、以降のステップでサブエージェントに渡すプロンプトに**関連する申し送りがある場合のみ**追記する。例:
-- outbound成功率が低かった → ステップ7のサブエージェントに「前回成功率が低かった（XX%）。チャネルYで失敗多発」と伝える
-- build-listで候補が少なかった → ステップ8aのサブエージェントに「前回は候補収集でN件しか見つからなかった。SEARCH_NOTES.mdの方向性を変えること」と伝える
-- システムエラーがあった → 該当ステップのサブエージェントに警告として伝える
+Include notes from what was understood only **when there are relevant handover items** in the prompts passed to sub-agents in subsequent steps. Examples:
+- Outbound success rate was low → Tell step 7 sub-agent "previous success rate was low (XX%). Many failures on channel Y"
+- Build-list had few candidates → Tell step 8a sub-agent "previous run only found N candidates. Change direction per SEARCH_NOTES.md"
+- There were system errors → Warn the relevant step's sub-agent
 
-ファイルが存在しない場合（初回実行）はスキップする。
+Skip if the file doesn't exist (first run).
 
-### 3. 開始通知メール
+### 3. Start Notification Email
 
-`$0/SALES_STRATEGY.md` の「通知設定」セクションから通知先メールアドレスを、「送信者情報」セクションから送信元メールアドレスを取得する。通知先が「なし」または未設定の場合はスキップ。
+Get the notification recipient email from the "Notification Settings" section of `$0/SALES_STRATEGY.md`, and the sender email from the "Sender Information" section. Skip if notification is "none" or not set.
 
-本文は追加のDB参照をせず、既に手元にある情報だけで簡潔に組み立てる:
-- 実行日時（ステップ1の結果）
-- プロジェクト名（`$0`）
-- outbound目標件数（`$1`）
-- 前回サイクルの結果（ステップ2でDAILY_CYCLE_REPORT.mdから読んだ内容を1〜2行で抜粋。初回は省略）
+Compose the email body concisely using only information already on hand — no additional DB queries:
+- Execution date and time (result from step 1)
+- Project name (`$0`)
+- Outbound target count (`$1`)
+- Results from previous cycle (1-2 lines extracted from DAILY_CYCLE_REPORT.md in step 2; omit for first run)
 
 ```bash
-gog send --account "<送信元>" --to "<通知先>" --subject "daily-cycle開始: $0" --body "<本文>"
+gog send --account "<sender>" --to "<recipient>" --subject "daily-cycle started: $0" --body "<body>"
 ```
 
-送信失敗してもサイクルは続行する（エラーはwrap-upのレポートで報告）。
+If sending fails, continue the cycle (errors will be reported in the wrap-up report).
 
-### 4. check-results（サブエージェント）
+### 4. check-results (sub-agent)
 
-Agent toolでサブエージェントを起動し、返信確認を実行する。
+Launch a sub-agent using the Agent tool to check for replies.
 
-プロンプトに以下を含める:
-- プロジェクトディレクトリ: `$0`
-- `${CLAUDE_PLUGIN_ROOT}/skills/check-results/SKILL.md` を読み込んで、その手順に従うこと
-- 詳細結果（反応の内訳、各返信の要約、ドラフト作成結果等）を `$0/.tmp/check-results-summary.md` に書き出すこと
-- メインへの返答は **3行以内のサマリーのみ**。例: 「反応3件(positive 2, neutral 1)。ドラフト2件作成。送付NG 0件。」
+Include the following in the prompt:
+- Project directory: `$0`
+- Read `${CLAUDE_PLUGIN_ROOT}/skills/check-results/SKILL.md` and follow its procedure
+- Write detailed results (response breakdown, summary of each reply, draft creation results, etc.) to `$0/.tmp/check-results-summary.md`
+- Return to main with **only a 3-line summary**. Example: "3 responses (positive 2, neutral 1). 2 drafts created. 0 do-not-contacts."
 
-サブエージェントからサマリーが返ったら、ユーザーに報告する。
+After receiving the summary from the sub-agent, report it to the user.
 
-### 5. evaluate（サブエージェント、条件付き）
+### 5. evaluate (sub-agent, conditional)
 
-毎サイクル実行する。
+Run every cycle.
 
-プロンプトに以下を含める:
-- プロジェクトディレクトリ: `$0`
-- `${CLAUDE_PLUGIN_ROOT}/skills/evaluate/SKILL.md` を読み込んで、その手順に従うこと
-- 詳細結果（KPI数値、分析結果、適用した改善内容）を `$0/.tmp/evaluate-summary.md` に書き出すこと
-- メインへの返答は **3行以内のサマリーのみ**。例: 「反応率4.2%。メッセージング改善を適用。検索キーワード2件追加。」
+Include the following in the prompt:
+- Project directory: `$0`
+- Read `${CLAUDE_PLUGIN_ROOT}/skills/evaluate/SKILL.md` and follow its procedure
+- Write detailed results (KPI numbers, analysis results, improvements applied) to `$0/.tmp/evaluate-summary.md`
+- Return to main with **only a 3-line summary**. Example: "Response rate 4.2%. Messaging improvement applied. 2 search keywords added."
 
-サブエージェントからサマリーが返ったら、ユーザーに報告する。
+After receiving the summary from the sub-agent, report it to the user.
 
-### 6. リスト残数を確認し、実行順序を決定
+### 6. Check List Remaining and Determine Execution Order
 
-未アプローチ（status = 'new'）の営業先数を確認する:
+Check the number of uncontacted (status = 'new') prospects:
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db count-reachable "$0"
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db count-reachable-by-channel "$0"
 ```
 
-チャネル別内訳（email / form_only / sns_only）はステップ7のバッチ戦略判断に使う。
+The channel breakdown (email / form_only / sns_only) is used for the batch strategy decision in step 7.
 
-**email枯渇チェック:** チャネル別内訳で **email = 0 かつ form_only < 5** の場合、outboundの実効成功率が極めて低い。この場合はoutboundをスキップし、**ステップ8（build-list）を先に実行**してemail保有先を充填する。充填後にステップ6を再実行し、email > 0 になっていればoutboundに進む。build-list後もemail = 0 のままの場合、form_only の件数分だけoutboundを実行する（email枯渇状態であることをユーザーに報告する）。
+**Email depletion check:** If channel breakdown shows **email = 0 and form_only < 5**, outbound effectiveness will be very low. In this case, skip outbound and **run step 8 (build-list) first** to replenish email holders. After replenishment, re-run step 6; if email > 0, proceed to outbound. If email = 0 even after build-list, run outbound for the number of form_only prospects (report the email depletion state to the user).
 
-**実行順序の判定:** リスト残数が outbound 指定件数の **1/3 未満** の場合、outbound より先にステップ8（build-list）を実行してリストを充填する。充填後にステップ7の outbound に戻る。
+**Execution order determination:** If remaining prospects are less than **1/3 of the specified outbound count**, run step 8 (build-list) first to replenish the list, then return to step 7 outbound.
 
-- email = 0 かつ form_only < 5 → ステップ8（build-list）→ ステップ6を再実行 → ステップ7（outbound）
-- リスト残数 ≥ 指定件数の 1/3 → ステップ7（outbound）→ ステップ8（build-list、必要時）
-- リスト残数 < 指定件数の 1/3 → ステップ8（build-list）→ ステップ6を再実行 → ステップ7（outbound）
-- リスト残数 = 0 かつ build-list 未実行 → ステップ8（build-list）→ ステップ6を再実行 → ステップ7（outbound）
+- email = 0 and form_only < 5 → step 8 (build-list) → re-run step 6 → step 7 (outbound)
+- Remaining ≥ 1/3 of specified count → step 7 (outbound) → step 8 (build-list, if needed)
+- Remaining < 1/3 of specified count → step 8 (build-list) → re-run step 6 → step 7 (outbound)
+- Remaining = 0 and build-list not yet run → step 8 (build-list) → re-run step 6 → step 7 (outbound)
 
-### 7. outbound（サブエージェント × バッチ分割）
+### 7. outbound (sub-agents × batch split)
 
-**実際のoutbound件数の決定:** `min(指定件数, ステップ6のリスト残数)` を実際のoutbound件数とする。リスト残数が0の場合（ステップ8実行後も0の場合）はoutboundをスキップし、ステップ9に進む。
+**Determine actual outbound count:** Use `min(specified count, remaining count from step 6)` as the actual outbound count. If remaining is 0 (including after step 8), skip outbound and proceed to step 9.
 
-**フォーム送信の上限:** 1サイクルあたりフォーム送信は**最大5件**とする。フォーム送信はブラウザ操作で1件あたり10〜20ツールコールを消費し、コンテキスト枯渇の主因となるため。ステップ6のチャネル別カウント（`form_only`）が5件を超える場合、超過分は次サイクルに繰り越す。email 有りの営業先には上限を設けない。
+**Form submission limit:** Cap form submissions at **5 per cycle**. Form submissions consume 10-20 tool calls each via browser operations and are the primary cause of context exhaustion. If `form_only` from the step 6 channel breakdown exceeds 5, carry the excess over to the next cycle. No limit for prospects with email.
 
-outbound件数を **10件ずつのバッチ** に分割し、それぞれ別のサブエージェントとして**直列**で起動する。
+Split the outbound count into **batches of 10** and launch each as a **separate sub-agent in series**.
 
-例: 30件 → 3回のサブエージェント起動（各10件）
+Example: 30 prospects → 3 sub-agent launches (10 each)
 
-各サブエージェントのプロンプトに以下を含める:
+Include the following in each sub-agent's prompt:
 
 ```
-あなたは outbound 営業を実行するエージェントです。
-営業先リストの各社にメール送信・フォーム入力・SNS DMでアプローチしてください。
+You are an outbound sales agent. Please reach out to each company on the prospect list via email, form, or SNS DM.
 
-## 実行準備（この順番で必ず読み込むこと）
+## Preparation (read in this order)
 
-1. まず `$0/SALES_STRATEGY.md` と `$0/BUSINESS.md` を読み込み、以下を把握する:
-   - アウトリーチモード（precision / volume）。未設定なら precision
-   - 営業チャネルの優先順位・使わないチャネル
-   - 件名パターンのバリエーション（A/Bテスト指示がある場合は必ず従う）
-   - 本文の構成方針・テンプレート（volume モードではテンプレートを重視）
-   - 送信者情報（送信元メールアドレス・署名）
-   - SNSメッセージ方針
+1. First read `$0/SALES_STRATEGY.md` and `$0/BUSINESS.md` to understand:
+   - Outreach mode (precision / volume). Default to precision if not set
+   - Channel priorities and which channels not to use
+   - Subject line pattern variations (if A/B test instructions exist, follow them)
+   - Email body structure and template (especially important in volume mode)
+   - Sender information (sender email address, signature)
+   - SNS messaging policy
 
-2. 次に `${CLAUDE_PLUGIN_ROOT}/skills/outbound/SKILL.md` を読み込み、実行手順に従う
+2. Next, read `${CLAUDE_PLUGIN_ROOT}/skills/outbound/SKILL.md` and follow its procedure
 
-3. チャネルに応じて以下も読み込む:
-   - メール送信時: `${CLAUDE_PLUGIN_ROOT}/skills/outbound/references/email-guidelines.md`
-   - フォーム入力時: `${CLAUDE_PLUGIN_ROOT}/skills/outbound/references/form-filling.md` と `${CLAUDE_PLUGIN_ROOT}/skills/outbound/references/playwright-guide.md`
+3. Also read these based on the channel:
+   - For email: `${CLAUDE_PLUGIN_ROOT}/skills/outbound/references/email-guidelines.md`
+   - For forms: `${CLAUDE_PLUGIN_ROOT}/skills/outbound/references/form-filling.md` and `${CLAUDE_PLUGIN_ROOT}/skills/outbound/references/playwright-guide.md`
 
-## 営業方針の必須ルール
+## Required Rules for Sales Policy
 
-- **件名:** SALES_STRATEGY.md に複数の件名パターンがある場合、バッチ内で均等に使い分けること。毎回同じ件名にしない
-- **本文冒頭:** 相手企業の具体的な特徴・業種・取り組みに言及すること。「貴社のウェブサイトを拝見し」等の汎用挨拶だけは不可
-- **本文全体:** overview と match_reason から相手固有の情報を複数箇所に散りばめ、テンプレートの差し替えではなく相手に合わせた文脈で書く
-[前バッチの件名パターン使用状況があればここに追記]
+- **Subject lines:** If SALES_STRATEGY.md has multiple subject patterns, distribute them evenly within the batch. Do not use the same subject every time
+- **Email opening:** Reference specific characteristics, industry, or initiatives of the target company. Generic greetings like "I visited your website" alone are not acceptable
+- **Full body:** Weave prospect-specific information from overview and match_reason throughout multiple parts of the email — write in context tailored to the recipient, not template replacement
+[Append previous batch subject pattern usage here if available]
 
-## タスク
+## Task
 
-- プロジェクトディレクトリ: $0
-- バッチ番号: N
-- 処理件数: 10（最終バッチは端数）
-- 詳細結果を `$0/.tmp/outbound-batch-N.md` に書き出すこと
-- メインへの返答は **成功数・失敗数・unreachable数・失敗の主な理由（あれば）・使用した件名パターン一覧のみ**
-  例: 「成功8, 失敗1(フォーム送信エラー), unreachable 1。件名パターン: A×4, B×3, C×3」
+- Project directory: $0
+- Batch number: N
+- Count: 10 (final batch may be fewer)
+- Write detailed results to `$0/.tmp/outbound-batch-N.md`
+- Return to main with **only: success count, failure count, unreachable count, main failure reasons (if any), list of subject patterns used**
+  Example: "Success 8, Failure 1 (form submission error), Unreachable 1. Subject patterns: A×4, B×3, C×3"
 ```
 
-**前バッチの結果引き継ぎ:** 2バッチ目以降は、前バッチが返した件名パターン使用状況をプロンプトの「前バッチの件名パターン使用状況」部分に追記し、同じパターンへの偏りを防ぐ。例: 「前バッチではパターンAを4回、Bを3回使用。今回はB, Cを多めに使うこと」
+**Carry over previous batch results:** From the 2nd batch onward, append the subject pattern usage from the previous batch to the "Previous batch subject pattern usage" part of the prompt to prevent overuse of the same pattern. Example: "Previous batch used pattern A 4 times, B 3 times. Use more of B and C this time"
 
-**直列にする理由:** 各バッチが同じDBの同じステータスを参照するため、並列実行すると同じ営業先に重複アプローチするリスクがある。
+**Reason for series execution:** Each batch references the same status in the same DB, so parallel execution risks duplicate outreach to the same prospect.
 
-**サブエージェント拒否時のフォールバック:** サブエージェントがブラウザ操作（フォーム送信等）を拒否して処理が進まない場合、そのバッチをメインコンテキストで再実行する。メインでの再実行時はフォーム対象のみ処理し、メール送信済みの営業先は重複しないようDBステータスで判定する。
+**Sub-agent refusal fallback:** If a sub-agent refuses browser operations (form submissions, etc.) and can't proceed, re-run that batch in the main context. When re-running in main, process only form targets and check DB status to avoid duplicating email-sent prospects.
 
-各バッチのサマリーが返るたびに進捗を報告する（例: 「outbound: 10/30件完了」）。
+Report progress after each batch summary (e.g., "outbound: 10/30 completed").
 
-**バッチ間の成功率チェック:** 各バッチ完了後、成功率（成功数 / 処理数）を確認する。成功率が30%未満の場合、残りバッチの実行を中断し、以下を自律的に判断・実行する:
-- 失敗理由が連絡先不足（unreachable多発）→ ステップ8のbuild-listを優先実行し、連絡先付きの営業先を補充する
-- 失敗理由がシステム的問題（gog send認証エラー等）→ outbound全体を中断し、完了レポートで問題を報告する
-- 失敗理由がフォーム不適合等 → 残りバッチはメールありの営業先のみに絞って継続する
+**Success rate check between batches:** After each batch completes, check the success rate (successes / processed). If rate is below 30%, stop remaining batches and autonomously decide and execute the following:
+- Failure reason is insufficient contacts (many unreachable) → prioritize step 8 build-list and replenish prospects with contact info
+- Failure reason is a system issue (gog send auth error, etc.) → abort all outbound and report the issue in the completion report
+- Failure reason is form incompatibility, etc. → continue remaining batches with only email-available prospects
 
-**目標未達時のリトライ:** 全outboundバッチ完了後、各バッチの結果を集計する。成功数合計 < 指定件数 の場合:
+**Retry when target not met:** After all outbound batches complete, tally each batch's results. If total successes < specified count:
 
-1. reachable 残数を再確認する:
+1. Re-check reachable remaining:
    ```bash
    python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db count-reachable "$0"
    ```
-2. 残数 > 0 の場合、不足分（指定件数 - 成功数合計）を追加バッチとして実行する（プロンプトは上記と同様）
-3. リトライは**1ラウンドのみ**
-4. reachable が 0 の場合はリトライせずステップ8に進む
+2. If remaining > 0, run the shortfall (specified count - total successes) as an additional batch (same prompt format)
+3. Retry **one round only**
+4. If reachable is 0, skip retry and proceed to step 8
 
-### 8. build-list（必要時のみ、3ステップ構成）
+### 8. build-list (only when needed, 3-step structure)
 
-以下のいずれかの場合に実行する:
-- ステップ6の判定で outbound より先に build-list を実行すると決定された
-- リスト残数（ステップ6の結果 − ステップ7で消費した件数）が outbound件数の3倍未満
-- ステップ7でバッチ間成功率チェックにより連絡先補充が必要と判断された
+Run in any of the following cases:
+- Step 6 determined to run build-list before outbound
+- Remaining list (step 6 result − consumed in step 7) is less than 3× the outbound count
+- Batch success rate check in step 7 determined that contact replenishment is needed
 
-目標件数はoutbound件数と同じ（`$1`、デフォルト30）とする。ただし、登録件数ではなく **reachable 件数** で目標に近づけることを意識する（連絡先なし分を見越して多めに候補収集する）。
+Set the target count the same as the outbound count (`$1`, default 30). Aim to meet the target in terms of **reachable count**, not registration count (collect more candidates to account for those without contact info).
 
-build-list スキルはサブエージェント内でさらにサブエージェントを起動する構成のため、daily-cycle からは直接呼び出せない（ネスト制約）。代わりに、build-list の各フェーズを個別のサブエージェントとして実行する:
+Since the build-list skill internally launches sub-agents, it cannot be called directly from daily-cycle (nesting constraint). Instead, run each phase of build-list as individual sub-agents:
 
-**8a. 候補収集（サブエージェント）**
+**8a. Candidate collection (sub-agent)**
 
-ステップ7の最後のoutboundバッチと**並行起動**しても良い（候補収集は新規追加のみなので重複リスクなし）。
+May be **launched in parallel** with the last outbound batch in step 7 (candidate collection only adds new entries so there's no duplicate risk).
 
-プロンプトに以下を含める:
-- プロジェクトディレクトリ: `$0`
-- 目標件数
-- `${CLAUDE_PLUGIN_ROOT}/skills/build-list/SKILL.md` の Phase 1（ステップ1〜5）を読み込んで、その手順に従うこと
-- **連絡先（メール・フォーム等）の取得は不要**。候補の名前・法人番号・正式法人名・公式URL・概要・業種・マッチ理由・優先度を収集すること
-- 完了後、候補リストをJSON配列で返すこと（各オブジェクト: name, organization_name, corporate_number, website_url, overview, industry, match_reason, priority（1-5の数値。build-list SKILL.mdの定義に従う））
-- 探索メモ（`$0/SEARCH_NOTES.md`）の更新も行うこと
+Include the following in the prompt:
+- Project directory: `$0`
+- Target count
+- Read Phase 1 (steps 1-5) of `${CLAUDE_PLUGIN_ROOT}/skills/build-list/SKILL.md` and follow its procedure
+- **Contact retrieval (email, form, etc.) is not needed**. Collect candidate name, corporate number, official legal name, official URL, overview, industry, match reason, and priority
+- After completion, return the candidate list as a JSON array (each object: name, organization_name, corporate_number, website_url, overview, industry, match_reason, priority (numeric 1-5 per build-list SKILL.md definition))
+- Also update the search notes (`$0/SEARCH_NOTES.md`)
 
-**8b. 重複フィルタ（メインコンテキスト）**
+**8b. Duplicate filter (main context)**
 
-8a で返された候補リストから、既にDBに登録済みの営業先を除外する。8a の出力をJSONファイルに保存し、`filter_duplicates.py` に渡す:
+From the candidates returned by 8a, exclude already-registered prospects in the DB. Save 8a's output to a JSON file and pass it to `filter_duplicates.py`:
 
 ```bash
 cat <<'EOF' | python3 ${CLAUDE_PLUGIN_ROOT}/scripts/filter_duplicates.py data.db "$0"
-<8aの出力JSON配列>
+<8a output JSON array>
 EOF
 ```
 
-スクリプトが name の完全一致と website_url のドメイン一致で重複を自動除外し、新規候補のみをJSON配列で出力する（除外結果のサマリーは stderr に出力される）。出力されたJSON配列を 8c に渡す。
+The script automatically excludes duplicates by exact name match and website_url domain match, outputting only new candidates as a JSON array (exclusion summary is output to stderr). Pass the output JSON array to 8c.
 
-新規候補が0件の場合は 8c・8d をスキップし、完了レポートで報告する。
+If there are 0 new candidates, skip 8c and 8d and report in the completion report.
 
-**8c. 連絡先取得（サブエージェント × バッチ）**
+**8c. Contact retrieval (sub-agents × batches)**
 
-8b で絞り込まれた新規候補を **10件ずつのバッチ** に分割し、それぞれサブエージェントを起動する。
+Split the filtered new candidates from 8b into **batches of 10** and launch a sub-agent for each.
 
-各サブエージェントのプロンプトに以下を含める:
-- 担当する候補のリスト（8aの出力から該当分を渡す）
-- `${CLAUDE_PLUGIN_ROOT}/skills/build-list/references/enrich-contacts.md` を読み込んで、その手順に従うこと
-- 各候補の公式サイトを探索し、メールアドレス・フォームURL・SNSアカウントを取得すること
-- 完了後、取得結果をJSON配列で返すこと
+Include the following in each sub-agent's prompt:
+- List of assigned candidates (pass the relevant portion from 8a output)
+- Read `${CLAUDE_PLUGIN_ROOT}/skills/build-list/references/enrich-contacts.md` and follow its procedure
+- Explore each candidate's official site to retrieve email addresses, contact form URLs, and SNS accounts
+- After completion, return results as a JSON array
 
-**8c2. 連絡先なし候補の再探索（サブエージェント、該当がある場合のみ）**
+**8c2. Re-search for candidates without contacts (sub-agent, only when applicable)**
 
-8c の結果で email / contact_form_url の両方が null の候補がある場合、サブエージェントを起動して公式サイト以外の情報源から補完を試みる。
+If 8c results show candidates with both email / contact_form_url as null, launch a sub-agent to try supplementing from non-official sources.
 
-プロンプトに以下を含める:
-- 対象候補のリスト（name, website_url）。最大10件まで
-- 各候補について WebSearch で `"{会社名}" メールアドレス` `"{会社名}" 問い合わせ` 等を検索し、業界ディレクトリやプレスリリース配信サイト等から連絡先を探すこと
-- 見つかった連絡先（email, contact_form_url, sns_accounts）をJSON配列で返すこと
-- 見つからなかった候補は結果に含めなくてよい
+Include the following in the prompt:
+- List of target candidates (name, website_url). Up to 10
+- For each candidate, search WebSearch for `"{company name}" email address`, `"{company name}" contact`, etc., to find contacts from industry directories or press release sites
+- Return found contacts (email, contact_form_url, sns_accounts) as a JSON array
+- Candidates not found do not need to be included in results
 
-サブエージェントの結果を 8c の結果JSONに反映する。
+Merge sub-agent results into the 8c result JSON.
 
-**8d. DB登録（メインコンテキスト）**
+**8d. DB registration (main context)**
 
-8b のフィルタ済み候補（Phase 1情報）と 8c の連絡先取得結果をマージし、`add_prospects.py` で登録する。
+Merge filtered candidates from 8b (Phase 1 info) and contact retrieval results from 8c, then register with `add_prospects.py`.
 
-まず、8b の出力（候補JSON）と 8c の出力（連絡先JSON）をそれぞれファイルに保存する:
-- 8b の出力 → `/tmp/candidates.json`
-- 8c の各サブエージェントの出力を1つのJSON配列に結合 → `/tmp/contacts.json`
+First save 8b output (candidate JSON) and 8c output (contact JSON) to files:
+- 8b output → `/tmp/candidates.json`
+- Combine all 8c sub-agent outputs into a single JSON array → `/tmp/contacts.json`
 
-`merge_prospects.py` で name + ドメインで突き合わせマージし、そのまま `add_prospects.py` に渡す:
+Merge by name + domain using `merge_prospects.py` and pipe directly to `add_prospects.py`:
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/merge_prospects.py /tmp/candidates.json /tmp/contacts.json \
   | python3 ${CLAUDE_PLUGIN_ROOT}/scripts/add_prospects.py data.db "$0"
 ```
 
-マージ結果のサマリー（未マッチ件数等）は stderr に出力される。
+Merge summary (unmatched count, etc.) is output to stderr.
 
-**8e. reachable 再チェック & サマリー書き出し**
+**8e. Reachable recheck and summary output**
 
-build-list 完了後、reachable 件数を再確認する:
+After build-list completes, re-check reachable count:
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db count-reachable "$0"
 ```
 
-build-list のサマリー（追加件数、reachable件数、未マッチ件数等）を `$0/.tmp/build-list-summary.md` に書き出す。
+Write build-list summary (added count, reachable count, unmatched count, etc.) to `$0/.tmp/build-list-summary.md`.
 
-ステップ6の判定で build-list を先に実行した場合は、ここからステップ7（outbound）に進む。
+If step 6 determined to run build-list first, proceed to step 7 (outbound) from here.
 
-### 9. wrap-up（サブエージェント）
+### 9. wrap-up (sub-agent)
 
-**全フェーズ完了後、レポート生成・通知・commitを1つのサブエージェントで実行する。** これにより、メインコンテキストの蓄積に影響されず確実に最終処理を行う。
+**After all phases complete, execute report generation, notification, and commit in a single sub-agent.** This ensures final processing runs reliably without being affected by main context accumulation.
 
-プロンプトに以下を含める:
-- プロジェクトディレクトリ: `$0`
-- 実行日時: ステップ1で取得した日時
-- evaluate をスキップした場合はその旨
-- outbound をスキップした場合はその旨
-- build-list をスキップした場合はその旨
-- `$0/.tmp/` 内の全ファイルを読み込んで、以下の3つを順に実行すること
+Include the following in the prompt:
+- Project directory: `$0`
+- Execution date and time: the datetime obtained in step 1
+- Whether evaluate was skipped (if applicable)
+- Whether outbound was skipped (if applicable)
+- Whether build-list was skipped (if applicable)
+- Read all files in `$0/.tmp/` and execute the following 3 tasks in order
 
-**9a. DAILY_CYCLE_REPORT.md の生成**
+**9a. Generate DAILY_CYCLE_REPORT.md**
 
-`$0/.tmp/` 内のサマリーファイルを全て読み込み、以下のフォーマットで `$0/DAILY_CYCLE_REPORT.md` を上書き保存する:
+Read all summary files in `$0/.tmp/` and overwrite `$0/DAILY_CYCLE_REPORT.md` in the following format:
 
 ```markdown
 # Daily Cycle Report
 
-- 実行日時: YYYY-MM-DD HH:MM
-- プロジェクト: $0
+- Execution date and time: YYYY-MM-DD HH:MM
+- Project: $0
 
 ## check-results
-（反応数、内訳、ドラフト作成数）
+(Response count, breakdown, draft creation count)
 
 ## evaluate
-（KPI、改善内容、またはスキップ理由）
+(KPI, improvements applied, or reason skipped)
 
 ## outbound
-- アプローチ数: X件（成功: Y / 失敗: Z）
-- 成功率: XX%
-- チャネル別成功率: メール X/Y件(XX%) / フォーム X/Y件(XX%) / SNS X/Y件(XX%)
-- unreachable: X件
+- Approaches: X (success: Y / failure: Z)
+- Success rate: XX%
+- Channel success rate: Email X/Y(XX%) / Form X/Y(XX%) / SNS X/Y(XX%)
+- Unreachable: X
 
 ## build-list
-（追加数、またはスキップ理由）
+(Added count, or reason skipped)
 
-## リスト残数
-X件（reachable）
+## Remaining List
+X (reachable)
 
-## 次回への申し送り
-（問題、注意点、戦略調整の提案など。なければ「特になし」）
+## Handover to Next Run
+(Issues, notes, strategy adjustment suggestions. "None" if nothing to note)
 ```
 
-**9a2. SALES_STRATEGY.md の KPI 実績更新**
+**9a2. Update KPI Actual Results in SALES_STRATEGY.md**
 
-`$0/SALES_STRATEGY.md` に「KPI実績」セクションがある場合、以下の基本数値を最新値に更新する:
-- 累計送信数（contacted）
-- 累計反応数・反応率
-- 実行日時
+If `$0/SALES_STRATEGY.md` has a "KPI Actuals" section, update the following basic numbers with the latest values:
+- Total sent (contacted)
+- Total responses and response rate
+- Execution date and time
 
-evaluate がスキップされたサイクルでも KPI 実績が陳腐化しないようにする。メッセージング改善・ターゲティング変更等の戦略的な分析は evaluate スキルに任せ、ここでは**数値の更新のみ**行う。
+This prevents KPI actuals from becoming stale even in cycles where evaluate is skipped. Leave messaging improvements, targeting changes, and other strategic analysis to the evaluate skill — **only update numbers here**.
 
-**9b. 完了通知メール**
+**9b. Completion Notification Email**
 
-`$0/SALES_STRATEGY.md` の「通知設定」セクションから通知先メールアドレスを、「送信者情報」セクションから送信元メールアドレスを取得する。通知先が「なし」または未設定の場合はスキップする。
+Get the notification recipient email from the "Notification Settings" section of `$0/SALES_STRATEGY.md`, and the sender email from the "Sender Information" section. Skip if notification is "none" or not set.
 
 ```bash
-gog send --account "<送信元メールアドレス>" --to "<通知先メールアドレス>" --subject "daily-cycle完了: $0" --body-file "$0/DAILY_CYCLE_REPORT.md"
+gog send --account "<sender email>" --to "<recipient email>" --subject "daily-cycle completed: $0" --body-file "$0/DAILY_CYCLE_REPORT.md"
 ```
 
-**9c. 一時ファイルの削除**
+**9c. Delete Temporary Files**
 
 ```bash
 rm -rf "$0/.tmp"
 ```
 
-**9d. 作業結果のコミット・プッシュ**
+**9d. Commit and Push Work Results**
 
-作業中に変更されたファイルをコミットしてプッシュする。このステップは他の処理の成否に関わらず**必ず実行する**。
+Commit and push files changed during the work. **Always execute this regardless of other steps' success or failure.**
 
 ```bash
 git add data.db "$0/" && git commit -m "work: :e-mail: $0" && git push
 ```
 
-サブエージェントのメインへの返答: レポート保存の成否、通知メール送信の成否、commit の成否を簡潔に報告。
+Sub-agent's return to main: Briefly report the save status of the report, notification email send status, and commit status.

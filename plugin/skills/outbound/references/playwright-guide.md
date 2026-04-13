@@ -1,21 +1,21 @@
-# playwright-cli ブラウザ操作ガイド
+# playwright-cli Browser Automation Guide
 
-フォーム送信・SNS DM等のブラウザ操作に使用する。全て Bash コマンドとして実行する。
+Used for browser operations such as form submission and SNS DMs. All executed as Bash commands.
 
 ## Quick start
 
 ```bash
-# ブラウザを開く
+# Open browser
 playwright-cli open
-# ページに移動
+# Navigate to page
 playwright-cli goto https://example.com
-# snapshot でページ構造を取得（要素の ref を確認）
+# Use snapshot to get page structure (check element refs)
 playwright-cli snapshot
-# ref を使って操作
+# Use refs to interact
 playwright-cli click e15
-playwright-cli fill e5 "入力テキスト"
+playwright-cli fill e5 "input text"
 playwright-cli press Enter
-# ブラウザを閉じる
+# Close browser
 playwright-cli close
 ```
 
@@ -30,7 +30,7 @@ playwright-cli goto https://example.com
 playwright-cli type "search query"
 playwright-cli click e3
 playwright-cli dblclick e7
-# --submit は入力後に Enter を押す
+# --submit presses Enter after input
 playwright-cli fill e5 "user@example.com" --submit
 playwright-cli drag e2 e8
 playwright-cli hover e4
@@ -135,7 +135,7 @@ playwright-cli network
 
 ## Raw output
 
-`--raw` オプションでページステータス・snapshot を除いた結果のみ取得する。
+Use the `--raw` option to get results without page status and snapshot headers.
 
 ```bash
 playwright-cli --raw eval "JSON.stringify(performance.timing)" | jq '.loadEventEnd - .navigationStart'
@@ -149,15 +149,15 @@ diff before.yml after.yml
 ## Open parameters
 
 ```bash
-# ブラウザ指定
+# Specify browser
 playwright-cli open --browser=chrome
 playwright-cli open --browser=firefox
 
-# 永続プロファイル（ログイン状態を保持）
+# Persistent profile (preserves login state)
 playwright-cli open --persistent
 playwright-cli open --profile=/path/to/profile
 
-# 既存ブラウザに接続
+# Connect to existing browser
 playwright-cli attach --extension
 
 playwright-cli close
@@ -166,7 +166,7 @@ playwright-cli delete-data
 
 ## Snapshots
 
-各コマンド実行後に自動で snapshot が返る。snapshot には要素の ref（e1, e5 等）が含まれ、これを使って操作する。
+After each command, a snapshot is automatically returned. Snapshots include element refs (e1, e5, etc.) that are used for interactions.
 
 ```bash
 > playwright-cli goto https://example.com
@@ -177,27 +177,27 @@ playwright-cli delete-data
 [Snapshot](.playwright-cli/page-2026-02-14T19-22-42-679Z.yml)
 ```
 
-手動で snapshot を取得:
+Take a snapshot manually:
 
 ```bash
 playwright-cli snapshot
-# 特定要素のみ
+# Specific element only
 playwright-cli snapshot "#main"
-# 深さ制限（大きいページで効率化）
+# Limit depth (efficient for large pages)
 playwright-cli snapshot --depth=4
 playwright-cli snapshot e34
 ```
 
 ## Targeting elements
 
-snapshot の ref を使うのが基本:
+Using snapshot refs is the standard approach:
 
 ```bash
 playwright-cli snapshot
 playwright-cli click e15
 ```
 
-CSS セレクタや Playwright locator も使用可:
+CSS selectors and Playwright locators also work:
 
 ```bash
 playwright-cli click "#main > button.submit"
@@ -208,14 +208,14 @@ playwright-cli click "getByTestId('submit-button')"
 ## Browser Sessions
 
 ```bash
-# 名前付きセッション（永続プロファイル）
+# Named sessions (persistent profiles)
 playwright-cli -s=mysession open example.com --persistent
 playwright-cli -s=mysession click e6
 playwright-cli -s=mysession close
 
-# セッション一覧
+# List sessions
 playwright-cli list
-# 全ブラウザを閉じる
+# Close all browsers
 playwright-cli close-all
 playwright-cli kill-all
 ```

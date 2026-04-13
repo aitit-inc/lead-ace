@@ -1,6 +1,6 @@
 ---
 name: delete-project
-description: "This skill should be used when the user asks to \"プロジェクトを削除して\", \"プロジェクトを消して\", \"登録を解除して\", or wants to delete a registered project. ~/.leadace/projects から削除し、ローカルの data.db からも該当プロジェクトのレコードを削除する。"
+description: "This skill should be used when the user asks to \"delete a project\", \"remove a project\", \"unregister a project\", or wants to delete a registered project. Removes from ~/.leadace/projects and also deletes the corresponding records from local data.db."
 argument-hint: "<project-directory-name>"
 allowed-tools:
   - Bash
@@ -8,43 +8,43 @@ allowed-tools:
   - AskUserQuestion
 ---
 
-# Delete Project - プロジェクト削除
+# Delete Project - Project Deletion
 
-登録済みプロジェクトを `~/.leadace/projects` から登録解除し、必要に応じてローカルの data.db からもデータを削除するスキル。
+A skill that unregisters a registered project from `~/.leadace/projects` and optionally deletes its data from the local data.db.
 
-## 実行手順
+## Steps
 
-### 1. 引数の確認
+### 1. Verify Arguments
 
-- プロジェクトディレクトリ名: `$0`（必須）
+- Project directory name: `$0` (required)
 
-`$0` が空の場合はエラーを返す。
+Return an error if `$0` is empty.
 
-### 2. グローバル登録解除
+### 2. Global Unregistration
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/license.py unregister "$(pwd)/$0"
 ```
 
-- 結果が `UNREGISTERED` → 「プロジェクト '$0' を登録解除しました。」
-- 結果が `NOT_FOUND` → 「プロジェクト '$0' は登録されていません。」と表示して終了
+- Result is `UNREGISTERED` → "Project '$0' has been unregistered."
+- Result is `NOT_FOUND` → Display "Project '$0' is not registered." and exit
 
-### 3. ローカルデータの削除確認
+### 3. Confirm Local Data Deletion
 
-AskUserQuestion で「ローカルの data.db からもこのプロジェクトのデータを削除しますか？（ディレクトリは残ります）」と確認する。
+Use AskUserQuestion to ask: "Do you also want to delete this project's data from local data.db? (The directory will remain.)"
 
-### 4. ローカルデータの削除（ユーザーが承諾した場合のみ）
+### 4. Delete Local Data (only if user confirms)
 
-data.db の該当プロジェクトのレコードを1トランザクションで削除する:
+Delete the project's records from data.db in a single transaction:
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/delete_project.py data.db "$0"
 ```
 
-※ prospects テーブルのレコードは他プロジェクトで再利用される可能性があるため削除しない。
+Note: Records in the prospects table are not deleted as they may be reused by other projects.
 
-### 5. 完了報告
+### 5. Completion Report
 
-- 登録解除の結果
-- データ削除の有無
-- ディレクトリは残っている旨を案内
+- Result of unregistration
+- Whether data was deleted
+- Note that the directory still remains

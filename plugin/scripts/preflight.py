@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Preflight チェック — 全スキル実行前に呼び出す共通前処理
+"""Preflight check — common pre-processing called before all skill execution
 
-1. プロジェクト登録チェック (license.py の check-registered 相当)
-2. DBマイグレーション適用 (migrations/ 内の未適用スクリプトを順に実行)
+1. Project registration check (equivalent to license.py check-registered)
+2. DB migration application (run pending scripts in migrations/ in order)
 
 CLI:
     python3 preflight.py <db_path> <project_id>
 
-出力 (JSON):
-    成功: {"status": "ok", "migrations_applied": ["001_xxx", ...]}
-    失敗: {"status": "error", "error": "...", "message": "..."}
+Output (JSON):
+    Success: {"status": "ok", "migrations_applied": ["001_xxx", ...]}
+    Failure: {"status": "error", "error": "...", "message": "..."}
 """
 
 from __future__ import annotations
@@ -29,11 +29,11 @@ MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "migrations"
 
 
 # ---------------------------------------------------------------------------
-# マイグレーション
+# Migrations
 # ---------------------------------------------------------------------------
 
 def _ensure_migrations_table(conn: sqlite3.Connection) -> None:
-    """applied_migrations テーブルがなければ作成する。"""
+    """Create the applied_migrations table if it does not exist."""
     conn.execute(
         "CREATE TABLE IF NOT EXISTS applied_migrations ("
         "  id TEXT PRIMARY KEY,"
@@ -44,13 +44,13 @@ def _ensure_migrations_table(conn: sqlite3.Connection) -> None:
 
 
 def _get_applied_ids(conn: sqlite3.Connection) -> set[str]:
-    """適用済みマイグレーション ID のセットを返す。"""
+    """Return the set of already-applied migration IDs."""
     rows = conn.execute("SELECT id FROM applied_migrations").fetchall()
     return {str(row[0]) for row in rows}
 
 
 def _discover_migrations() -> list[tuple[str, Path]]:
-    """migrations/ から NNN_*.py を番号順で返す。"""
+    """Return NNN_*.py files from migrations/ sorted by number."""
     if not MIGRATIONS_DIR.is_dir():
         return []
     return [
@@ -61,21 +61,21 @@ def _discover_migrations() -> list[tuple[str, Path]]:
 
 
 def _run_one(conn: sqlite3.Connection, migration_id: str, file_path: Path) -> None:
-    """マイグレーション 1 件を実行し applied_migrations に記録する。
+    """Run one migration and record it in applied_migrations.
 
-    各マイグレーションは冪等に書くこと（IF NOT EXISTS 等を使用）。
-    失敗時は例外を投げ、applied_migrations には記録されない。
+    Each migration must be written idempotently (use IF NOT EXISTS, etc.).
+    On failure, raise an exception; the migration will not be recorded in applied_migrations.
     """
     spec = importlib.util.spec_from_file_location(migration_id, file_path)
     if spec is None or spec.loader is None:
-        raise ImportError(f"マイグレーション {file_path} の読み込みに失敗")
+        raise ImportError(f"Failed to load migration {file_path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
     up_fn = getattr(module, "up", None)
     if not callable(up_fn):
         raise AttributeError(
-            f"マイグレーション {migration_id} に callable な up() がありません"
+            f"Migration {migration_id} does not have a callable up()"
         )
     up_fn(conn)
 
@@ -84,7 +84,7 @@ def _run_one(conn: sqlite3.Connection, migration_id: str, file_path: Path) -> No
 
 
 def apply_pending(conn: sqlite3.Connection) -> list[str]:
-    """未適用マイグレーションを順に実行し、適用した ID リストを返す。"""
+    """Run all pending migrations in order and return the list of applied IDs."""
     _ensure_migrations_table(conn)
     applied = _get_applied_ids(conn)
     applied_now: list[str] = []
@@ -96,14 +96,14 @@ def apply_pending(conn: sqlite3.Connection) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# メイン
+# Main
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Preflight チェック")
-    parser.add_argument("db_path", help="SQLite データベースのパス")
-    parser.add_argument("project_id", nargs="?", default=None, help="プロジェクト ID（--migrate-only 時は不要）")
-    parser.add_argument("--migrate-only", action="store_true", help="マイグレーションのみ実行（プロジェクト登録チェックをスキップ）")
+    parser = argparse.ArgumentParser(description="Preflight check")
+    parser.add_argument("db_path", help="Path to the SQLite database")
+    parser.add_argument("project_id", nargs="?", default=None, help="Project ID (not required when using --migrate-only)")
+    parser.add_argument("--migrate-only", action="store_true", help="Run migrations only (skip project registration check)")
     args = parser.parse_args()
 
     db_path: str = args.db_path
@@ -114,31 +114,31 @@ def main() -> None:
             print_json({
                 "status": "error",
                 "error": "MISSING_PROJECT_ID",
-                "message": "project_id を指定してください（または --migrate-only を使用）。",
+                "message": "Please specify project_id (or use --migrate-only).",
             })
             sys.exit(1)
 
-        # 1. プロジェクト登録チェック
+        # 1. Project registration check
         project_path = os.path.join(os.getcwd(), project_id)
         if not check_project_registered(project_path):
             print_json({
                 "status": "error",
                 "error": "NOT_REGISTERED",
-                "message": f"このプロジェクトはセットアップされていません。"
-                           f"先に /setup {project_id} を実行してください。",
+                "message": f"This project has not been set up. "
+                           f"Please run /setup {project_id} first.",
             })
             sys.exit(1)
 
-    # 2. DB 存在チェック
+    # 2. DB existence check
     if not os.path.exists(db_path):
         print_json({
             "status": "error",
             "error": "DB_NOT_FOUND",
-            "message": f"データベース {db_path} が見つかりません。",
+            "message": f"Database {db_path} not found.",
         })
         sys.exit(1)
 
-    # 3. マイグレーション適用
+    # 3. Apply migrations
     conn = get_connection(db_path)
     applied: list[str] = []
     try:

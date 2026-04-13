@@ -1,8 +1,7 @@
-"""prospects.corporate_number を prospects.organization_id にリネーム
+"""Rename prospects.corporate_number to prospects.organization_id
 
-prospects.corporate_number は organizations テーブルへの FK だが、
-カラム名がそれを表現していなかったためリネーム。
-organizations.corporate_number (PK) への参照であることを明確にする。
+prospects.corporate_number was a FK to the organizations table, but the column name
+did not reflect this. Renaming makes it clear it references organizations.corporate_number (PK).
 """
 
 import sqlite3
@@ -16,7 +15,7 @@ def up(conn: sqlite3.Connection) -> None:
         conn.execute(
             "ALTER TABLE prospects RENAME COLUMN corporate_number TO organization_id"
         )
-    # インデックスも更新（旧インデックスを削除して新しいものを作成）
+    # Update index as well (drop old index and create a new one)
     conn.execute("DROP INDEX IF EXISTS idx_prospect_org")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_prospect_org ON prospects(organization_id)"

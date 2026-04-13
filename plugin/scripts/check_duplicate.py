@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""営業先の重複チェックスクリプト
+"""Prospect duplicate check script
 
-確実な判定から順にチェックし、マッチした候補を JSON で出力する。
-チェック順:
-  1. organizations の corporate_number（O(1) PK）
-  2. prospects の email（O(1) UNIQUE INDEX）
-  3. prospects の contact_form_url（O(1) UNIQUE INDEX）
-  4. SNS アカウント
-  5. 名称一致（フォールバック）
-  6. ドメイン一致（フォールバック）
+Checks in order from most reliable to least, and outputs matching candidates as JSON.
+Check order:
+  1. organizations corporate_number (O(1) PK)
+  2. prospects email (O(1) UNIQUE INDEX)
+  3. prospects contact_form_url (O(1) UNIQUE INDEX)
+  4. SNS accounts
+  5. Name match (fallback)
+  6. Domain match (fallback)
 
 Usage:
   check_duplicate.py <db_path> [options]
@@ -36,14 +36,14 @@ from sales_db import DuplicateMatch, extract_domain, get_connection, normalize_n
 
 
 def check_corporate_number(conn: sqlite3.Connection, number: str) -> list[DuplicateMatch]:
-    """法人番号で organizations → prospects を検索（O(1) PK ルックアップ）"""
-    # organizations に存在するか
+    """Search organizations → prospects by corporate number (O(1) PK lookup)."""
+    # Check if it exists in organizations
     org = conn.execute(
         "SELECT corporate_number, name FROM organizations WHERE corporate_number = ?",
         (number,),
     ).fetchone()
     if org is None:
-        # organizations に無くても旧データの prospects にあるかもしれない
+        # Even if not in organizations, it may exist in legacy prospects data
         cursor = conn.execute(
             "SELECT id, name FROM prospects WHERE organization_id = ?",
             (number,),
@@ -53,12 +53,12 @@ def check_corporate_number(conn: sqlite3.Connection, number: str) -> list[Duplic
                 match_type="EXACT_MATCH",
                 prospect_id=row["id"],
                 name=row["name"],
-                reason=f"法人番号一致: {number}",
+                reason=f"Corporate number match: {number}",
             )
             for row in cursor
         ]
 
-    # organizations にある → 紐づく prospects を返す
+    # Found in organizations → return linked prospects
     cursor = conn.execute(
         "SELECT id, name FROM prospects WHERE organization_id = ?",
         (number,),
@@ -68,25 +68,25 @@ def check_corporate_number(conn: sqlite3.Connection, number: str) -> list[Duplic
             match_type="EXACT_MATCH",
             prospect_id=row["id"],
             name=row["name"],
-            reason=f"法人番号一致（法人: {org['name']}）: {number}",
+            reason=f"Corporate number match (entity: {org['name']}): {number}",
         )
         for row in cursor
     ]
-    # prospects が無い場合でも org は存在する → org_name を返して重複を示す
+    # Even if no prospects exist, org is present → return org_name to indicate duplicate
     if not results:
         results.append(
             DuplicateMatch(
                 match_type="EXACT_MATCH",
-                prospect_id=-1,  # org のみ存在、prospect は未登録
+                prospect_id=-1,  # org exists but no prospect registered yet
                 name=str(org["name"]),
-                reason=f"法人番号一致（organizations のみ）: {number}",
+                reason=f"Corporate number match (organizations only): {number}",
             )
         )
     return results
 
 
 def check_email(conn: sqlite3.Connection, email: str) -> list[DuplicateMatch]:
-    """email 完全一致チェック（UNIQUE INDEX で O(1)）"""
+    """Exact email match check (O(1) via UNIQUE INDEX)."""
     cursor = conn.execute(
         "SELECT id, name FROM prospects WHERE email = ?",
         (email,),
@@ -96,14 +96,14 @@ def check_email(conn: sqlite3.Connection, email: str) -> list[DuplicateMatch]:
             match_type="EXACT_MATCH",
             prospect_id=row["id"],
             name=row["name"],
-            reason=f"email一致: {email}",
+            reason=f"Email match: {email}",
         )
         for row in cursor
     ]
 
 
 def check_contact_form(conn: sqlite3.Connection, url: str) -> list[DuplicateMatch]:
-    """contact_form_url 完全一致チェック（UNIQUE INDEX で O(1)）"""
+    """Exact contact_form_url match check (O(1) via UNIQUE INDEX)."""
     cursor = conn.execute(
         "SELECT id, name FROM prospects WHERE contact_form_url = ?",
         (url,),
@@ -113,7 +113,7 @@ def check_contact_form(conn: sqlite3.Connection, url: str) -> list[DuplicateMatc
             match_type="EXACT_MATCH",
             prospect_id=row["id"],
             name=row["name"],
-            reason=f"フォームURL一致: {url}",
+            reason=f"Contact form URL match: {url}",
         )
         for row in cursor
     ]
@@ -123,7 +123,7 @@ ALLOWED_SNS_KEYS = {"twitter", "x", "linkedin", "facebook", "instagram"}
 
 
 def check_sns(conn: sqlite3.Connection, sns_key: str, sns_value: str) -> list[DuplicateMatch]:
-    """SNS アカウント完全一致チェック（json_extract 使用）"""
+    """Exact SNS account match check (uses json_extract)."""
     if sns_key not in ALLOWED_SNS_KEYS:
         return []
     cursor = conn.execute(
@@ -137,17 +137,17 @@ def check_sns(conn: sqlite3.Connection, sns_key: str, sns_value: str) -> list[Du
             match_type="EXACT_MATCH",
             prospect_id=row["id"],
             name=row["name"],
-            reason=f"SNS一致: {sns_key}={sns_value}",
+            reason=f"SNS match: {sns_key}={sns_value}",
         )
         for row in cursor
     ]
 
 
 def check_name(conn: sqlite3.Connection, name: str) -> list[DuplicateMatch]:
-    """名称一致チェック（organizations.normalized_name INDEX 優先、フォールバックで全走査）"""
+    """Name match check (prioritizes organizations.normalized_name INDEX; falls back to full scan)."""
     normalized = normalize_name(name)
 
-    # まず organizations の INDEX を使って高速チェック
+    # First, fast check using the organizations INDEX
     org_cursor = conn.execute(
         "SELECT o.corporate_number, o.name, p.id, p.name"
         " FROM organizations o"
@@ -163,20 +163,20 @@ def check_name(conn: sqlite3.Connection, name: str) -> list[DuplicateMatch]:
                     match_type="EXACT_MATCH",
                     prospect_id=row["id"],
                     name=row["name"],
-                    reason="名称一致（organizations経由）",
+                    reason="Name match (via organizations)",
                 )
             )
     if results:
         return results
 
-    # フォールバック: organizations に無い旧データを全走査
+    # Fallback: full scan for legacy data not in organizations
     cursor = conn.execute("SELECT id, name FROM prospects")
     return [
         DuplicateMatch(
             match_type="EXACT_MATCH",
             prospect_id=row["id"],
             name=row["name"],
-            reason="名称一致",
+            reason="Name match",
         )
         for row in cursor
         if normalize_name(row["name"]) == normalized
@@ -184,12 +184,12 @@ def check_name(conn: sqlite3.Connection, name: str) -> list[DuplicateMatch]:
 
 
 def check_website_domain(conn: sqlite3.Connection, url: str) -> list[DuplicateMatch]:
-    """ウェブサイトのドメイン一致チェック（organizations.domain INDEX 優先）"""
+    """Website domain match check (prioritizes organizations.domain INDEX)."""
     domain = extract_domain(url)
     if not domain:
         return []
 
-    # organizations の INDEX を使って高速チェック
+    # Fast check using the organizations INDEX
     org_cursor = conn.execute(
         "SELECT o.corporate_number, o.name, p.id, p.name"
         " FROM organizations o"
@@ -205,13 +205,13 @@ def check_website_domain(conn: sqlite3.Connection, url: str) -> list[DuplicateMa
                     match_type="POSSIBLE_MATCH",
                     prospect_id=row["id"],
                     name=row["name"],
-                    reason=f"ドメイン一致（organizations経由）: {domain}",
+                    reason=f"Domain match (via organizations): {domain}",
                 )
             )
     if results:
         return results
 
-    # フォールバック: organizations に無い旧データを全走査
+    # Fallback: full scan for legacy data not in organizations
     cursor = conn.execute(
         "SELECT id, name, website_url FROM prospects"
         " WHERE website_url IS NOT NULL",
@@ -221,7 +221,7 @@ def check_website_domain(conn: sqlite3.Connection, url: str) -> list[DuplicateMa
             match_type="POSSIBLE_MATCH",
             prospect_id=row["id"],
             name=row["name"],
-            reason=f"ドメイン一致: {domain}",
+            reason=f"Domain match: {domain}",
         )
         for row in cursor
         if extract_domain(row["website_url"]) == domain
@@ -230,15 +230,15 @@ def check_website_domain(conn: sqlite3.Connection, url: str) -> list[DuplicateMa
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="営業先の重複チェック。確実な判定から順にチェックし、マッチした候補を JSON で出力する。",
+        description="Prospect duplicate check. Checks in order from most reliable, outputs matches as JSON.",
     )
-    _ = parser.add_argument("db_path", help="SQLite データベースのパス")
-    _ = parser.add_argument("--email", help="メールアドレスで完全一致チェック")
-    _ = parser.add_argument("--sns", nargs=2, metavar=("KEY", "VALUE"), help="SNS アカウントで完全一致チェック（例: --sns x @account）")
-    _ = parser.add_argument("--corporate-number", help="法人番号で完全一致チェック")
-    _ = parser.add_argument("--name", help="名称で完全一致チェック")
-    _ = parser.add_argument("--website-url", help="ウェブサイトのドメインで一致チェック")
-    _ = parser.add_argument("--contact-form-url", help="フォームURLで完全一致チェック")
+    _ = parser.add_argument("db_path", help="Path to the SQLite database")
+    _ = parser.add_argument("--email", help="Exact match check by email address")
+    _ = parser.add_argument("--sns", nargs=2, metavar=("KEY", "VALUE"), help="Exact match check by SNS account (e.g. --sns x @account)")
+    _ = parser.add_argument("--corporate-number", help="Exact match check by corporate number")
+    _ = parser.add_argument("--name", help="Exact match check by name")
+    _ = parser.add_argument("--website-url", help="Match check by website domain")
+    _ = parser.add_argument("--contact-form-url", help="Exact match check by contact form URL")
     return parser
 
 
@@ -269,7 +269,7 @@ def main() -> None:
     finally:
         conn.close()
 
-    # 重複排除（同じ prospect_id が複数段階でヒットする場合）
+    # Deduplicate (same prospect_id may match at multiple stages)
     seen: set[int] = set()
     unique_matches: list[DuplicateMatch] = []
     for m in matches:

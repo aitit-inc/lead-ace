@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""返信記録のアトミック実行スクリプト
+"""Atomic response recording script
 
 Usage:
   python3 record_response.py <db_path> --project <id> --prospect-id <id> \
@@ -9,16 +9,16 @@ Usage:
     [--new-status <responded|rejected|inactive>] \
     [--do-not-contact --dnc-reason <reason>]
 
-1トランザクションで以下を実行:
-1. responses テーブルに返信を記録
-2. (指定時) project_prospects のステータスを更新
-3. (指定時) prospects の do_not_contact フラグと notes を更新
+Executes the following in a single transaction:
+1. Record the response in the responses table
+2. (If specified) Update the project_prospects status
+3. (If specified) Update the do_not_contact flag and notes in prospects
 
 Output: JSON
   {"status": "recorded"|"skipped", "response_id": N,
    "status_updated": true|false, "do_not_contact_set": true|false}
 
-Exit code: 0 = 成功, 1 = バリデーションエラー, 2 = スクリプトエラー
+Exit code: 0 = success, 1 = validation error, 2 = script error
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ from sales_db import error_exit, get_connection, print_json
 
 
 # ---------------------------------------------------------------------------
-# 型定義
+# Type definitions
 # ---------------------------------------------------------------------------
 
 RecordStatus = Literal["recorded", "skipped"]
@@ -52,32 +52,32 @@ class RecordResult(TypedDict):
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="返信記録のアトミック実行。responses INSERT + ステータス更新 + do_not_contact 設定。",
+        description="Atomic response recording. responses INSERT + status update + do_not_contact setting.",
     )
-    _ = parser.add_argument("db_path", help="SQLite データベースのパス")
-    _ = parser.add_argument("--project", required=True, help="プロジェクトID")
-    _ = parser.add_argument("--prospect-id", type=int, required=True, help="営業先ID")
-    _ = parser.add_argument("--outreach-log-id", type=int, required=True, help="紐付ける outreach_logs.id")
-    _ = parser.add_argument("--channel", required=True, help="返信チャネル (email/form/sns_twitter/sns_linkedin)")
-    _ = parser.add_argument("--content", required=True, help="返信内容")
+    _ = parser.add_argument("db_path", help="Path to the SQLite database")
+    _ = parser.add_argument("--project", required=True, help="Project ID")
+    _ = parser.add_argument("--prospect-id", type=int, required=True, help="Prospect ID")
+    _ = parser.add_argument("--outreach-log-id", type=int, required=True, help="outreach_logs.id to link to")
+    _ = parser.add_argument("--channel", required=True, help="Reply channel (email/form/sns_twitter/sns_linkedin)")
+    _ = parser.add_argument("--content", required=True, help="Reply content")
     _ = parser.add_argument(
         "--sentiment", required=True,
         choices=["positive", "neutral", "negative"],
-        help="感情分析結果",
+        help="Sentiment analysis result",
     )
-    _ = parser.add_argument("--response-type", required=True, help="返信タイプ (reply/auto_reply/bounce/meeting_request/scheduling_confirmation/rejection)")
+    _ = parser.add_argument("--response-type", required=True, help="Response type (reply/auto_reply/bounce/meeting_request/scheduling_confirmation/rejection)")
     _ = parser.add_argument(
         "--new-status",
         choices=list(ALLOWED_NEW_STATUSES),
-        help="project_prospects の新ステータス (responded/rejected/inactive)",
+        help="New status for project_prospects (responded/rejected/inactive)",
     )
-    _ = parser.add_argument("--do-not-contact", action="store_true", help="do_not_contact フラグを設定")
-    _ = parser.add_argument("--dnc-reason", help="do_not_contact の理由（--do-not-contact 時必須）")
+    _ = parser.add_argument("--do-not-contact", action="store_true", help="Set the do_not_contact flag")
+    _ = parser.add_argument("--dnc-reason", help="Reason for do_not_contact (required with --do-not-contact)")
     return parser
 
 
 # ---------------------------------------------------------------------------
-# バリデーション
+# Validation
 # ---------------------------------------------------------------------------
 
 def validate_outreach_log(
@@ -86,15 +86,15 @@ def validate_outreach_log(
     project_id: str,
     prospect_id: int,
 ) -> None:
-    """outreach_log_id の存在と project/prospect の一致を検証する。"""
+    """Verify that the outreach_log_id exists and matches the given project/prospect."""
     row = conn.execute(
         "SELECT id FROM outreach_logs WHERE id = ? AND project_id = ? AND prospect_id = ?",
         (outreach_log_id, project_id, prospect_id),
     ).fetchone()
     if row is None:
         error_exit(
-            f"outreach_log_id {outreach_log_id} が見つからないか、"
-            f" project_id={project_id} / prospect_id={prospect_id} と一致しません"
+            f"outreach_log_id {outreach_log_id} not found or does not match"
+            f" project_id={project_id} / prospect_id={prospect_id}"
         )
 
 
@@ -103,7 +103,7 @@ def check_duplicate_response(
     outreach_log_id: int,
     response_type: str,
 ) -> int | None:
-    """同一 outreach_log_id + response_type の既存レコードを返す。"""
+    """Return the existing record ID for the same outreach_log_id + response_type, if any."""
     row = conn.execute(
         "SELECT id FROM responses WHERE outreach_log_id = ? AND response_type = ?",
         (outreach_log_id, response_type),
@@ -114,7 +114,7 @@ def check_duplicate_response(
 
 
 # ---------------------------------------------------------------------------
-# DB操作
+# DB operations
 # ---------------------------------------------------------------------------
 
 def record(
@@ -130,7 +130,7 @@ def record(
     do_not_contact: bool,
     dnc_reason: str | None,
 ) -> RecordResult:
-    """返信を記録し、必要に応じてステータスと do_not_contact を更新する。"""
+    """Record the response and update status and do_not_contact as needed."""
 
     # 1. INSERT responses
     cursor = conn.execute(
@@ -140,9 +140,9 @@ def record(
     )
     response_id = cursor.lastrowid
     if response_id is None:
-        raise RuntimeError("INSERT後にlastrowidが取得できませんでした")
+        raise RuntimeError("Could not get lastrowid after INSERT")
 
-    # 2. UPDATE project_prospects.status（指定時のみ）
+    # 2. UPDATE project_prospects.status (only if specified)
     status_updated = False
     if new_status is not None:
         cursor_upd = conn.execute(
@@ -152,7 +152,7 @@ def record(
         )
         status_updated = cursor_upd.rowcount > 0
 
-    # 3. UPDATE prospects.do_not_contact（指定時のみ）
+    # 3. UPDATE prospects.do_not_contact (only if specified)
     dnc_set = False
     if do_not_contact and dnc_reason is not None:
         conn.execute(
@@ -176,7 +176,7 @@ def record(
 
 
 # ---------------------------------------------------------------------------
-# メイン
+# Main
 # ---------------------------------------------------------------------------
 
 def main() -> None:
@@ -193,17 +193,17 @@ def main() -> None:
     do_not_contact: bool = args.do_not_contact
     dnc_reason: str | None = args.dnc_reason
 
-    # バリデーション
+    # Validation
     if do_not_contact and not dnc_reason:
-        error_exit("--do-not-contact には --dnc-reason が必須です")
+        error_exit("--dnc-reason is required with --do-not-contact")
 
     conn = get_connection(args.db_path)
 
     try:
-        # outreach_log_id の存在確認
+        # Verify outreach_log_id exists
         validate_outreach_log(conn, outreach_log_id, project_id, prospect_id)
 
-        # 重複チェック
+        # Duplicate check
         existing_id = check_duplicate_response(conn, outreach_log_id, response_type)
         if existing_id is not None:
             skipped: RecordResult = {
@@ -225,7 +225,7 @@ def main() -> None:
 
     except Exception as e:
         conn.rollback()
-        error_exit(f"記録中にエラーが発生: {e}", code=2)
+        error_exit(f"Error during recording: {e}", code=2)
     finally:
         conn.close()
 

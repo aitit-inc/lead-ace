@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""営業先ステータス更新スクリプト（unreachable / inactive 専用）
+"""Prospect status update script (unreachable / inactive only)
 
 Usage:
   python3 update_status.py <db_path> --project <id> --prospect-id <id> \
     --status <unreachable|inactive> \
     [--do-not-contact --dnc-reason <reason>]
 
-contacted への更新は send_and_log.py、responded/rejected への更新は
-record_response.py を使用すること。このスクリプトは unreachable/inactive のみ対応。
+Use send_and_log.py to update to contacted, and record_response.py for responded/rejected.
+This script only handles unreachable/inactive.
 
 Output: JSON
   {"status": "updated"|"skipped", "previous_status": "...",
    "new_status": "...", "do_not_contact_set": true|false}
 
-Exit code: 0 = 成功, 1 = バリデーションエラー, 2 = スクリプトエラー
+Exit code: 0 = success, 1 = validation error, 2 = script error
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from sales_db import error_exit, get_connection, print_json
 
 
 # ---------------------------------------------------------------------------
-# 型定義
+# Type definitions
 # ---------------------------------------------------------------------------
 
 ResultStatus = Literal["updated", "skipped"]
@@ -47,24 +47,24 @@ class UpdateResult(TypedDict):
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="営業先ステータスを unreachable / inactive に更新する。"
-        " contacted は send_and_log.py、responded/rejected は record_response.py を使用。",
+        description="Update prospect status to unreachable / inactive. "
+        "Use send_and_log.py for contacted, record_response.py for responded/rejected.",
     )
-    _ = parser.add_argument("db_path", help="SQLite データベースのパス")
-    _ = parser.add_argument("--project", required=True, help="プロジェクトID")
-    _ = parser.add_argument("--prospect-id", type=int, required=True, help="営業先ID")
+    _ = parser.add_argument("db_path", help="Path to the SQLite database")
+    _ = parser.add_argument("--project", required=True, help="Project ID")
+    _ = parser.add_argument("--prospect-id", type=int, required=True, help="Prospect ID")
     _ = parser.add_argument(
         "--status", required=True,
         choices=list(ALLOWED_STATUSES),
-        help="更新先ステータス (unreachable/inactive のみ)",
+        help="Target status (unreachable/inactive only)",
     )
-    _ = parser.add_argument("--do-not-contact", action="store_true", help="do_not_contact フラグを設定")
-    _ = parser.add_argument("--dnc-reason", help="do_not_contact の理由（--do-not-contact 時必須）")
+    _ = parser.add_argument("--do-not-contact", action="store_true", help="Set the do_not_contact flag")
+    _ = parser.add_argument("--dnc-reason", help="Reason for do_not_contact (required with --do-not-contact)")
     return parser
 
 
 # ---------------------------------------------------------------------------
-# DB操作
+# DB operations
 # ---------------------------------------------------------------------------
 
 def update(
@@ -75,20 +75,20 @@ def update(
     do_not_contact: bool,
     dnc_reason: str | None,
 ) -> UpdateResult:
-    """ステータスを更新し、必要に応じて do_not_contact を設定する。"""
+    """Update status and set do_not_contact as needed."""
 
-    # 現在のステータスを取得
+    # Get current status
     row = conn.execute(
         "SELECT status FROM project_prospects WHERE project_id = ? AND prospect_id = ?",
         (project_id, prospect_id),
     ).fetchone()
     if row is None:
         error_exit(
-            f"project_prospects に該当行なし (project_id={project_id}, prospect_id={prospect_id})"
+            f"No matching row in project_prospects (project_id={project_id}, prospect_id={prospect_id})"
         )
     previous_status: str = row[0]
 
-    # 冪等チェック: 既に同じステータスならスキップ
+    # Idempotency check: skip if already the same status
     if previous_status == new_status:
         return UpdateResult(
             status="skipped",
@@ -104,7 +104,7 @@ def update(
         (new_status, project_id, prospect_id),
     )
 
-    # 2. UPDATE prospects.do_not_contact（指定時のみ）
+    # 2. UPDATE prospects.do_not_contact (only if specified)
     dnc_set = False
     if do_not_contact and dnc_reason is not None:
         conn.execute(
@@ -128,7 +128,7 @@ def update(
 
 
 # ---------------------------------------------------------------------------
-# メイン
+# Main
 # ---------------------------------------------------------------------------
 
 def main() -> None:
@@ -140,9 +140,9 @@ def main() -> None:
     do_not_contact: bool = args.do_not_contact
     dnc_reason: str | None = args.dnc_reason
 
-    # バリデーション
+    # Validation
     if do_not_contact and not dnc_reason:
-        error_exit("--do-not-contact には --dnc-reason が必須です")
+        error_exit("--dnc-reason is required with --do-not-contact")
 
     conn = get_connection(args.db_path)
 
@@ -153,7 +153,7 @@ def main() -> None:
         raise
     except Exception as e:
         conn.rollback()
-        error_exit(f"更新中にエラーが発生: {e}", code=2)
+        error_exit(f"Error during update: {e}", code=2)
     finally:
         conn.close()
 

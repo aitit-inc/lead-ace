@@ -1,82 +1,82 @@
-# 業界別メールテンプレート集
+# Industry-Specific Email Template Collection
 
-SALES_STRATEGY.md の「メッセージング」セクション生成時に参照する。ユーザーのターゲット業界に応じて最適なパターンを選択し、ビジネス情報に合わせてカスタマイズする。
+Referenced when generating the "Messaging" section of SALES_STRATEGY.md. Select the optimal pattern based on the user's target industry and customize it to their business information. Do not use templates as-is — always add substance based on user-specific information (USP, track record, pricing).
 
-## 業界別初回アプローチメール
+## First Outreach Emails by Industry
 
-### IT/Web業界向け
-- 件名: 15文字以内、社名または具体的な数字を含める
-- 本文: 200文字以内
-- トーン: 直接的・簡潔、技術者に響く言い回し
-- 構成: ①社名言及（なぜ連絡したか）→ ②自社サービスが解く課題 → ③具体的な数値/実績 → ④CTA（15分の情報交換を提案）
-- 「営業感」を出さず「情報交換」として自然に
+### IT/Web Industry
+- Subject: Under 15 characters; include company name or a specific number
+- Body: Under 200 characters
+- Tone: Direct and concise; language that resonates with technical people
+- Structure: ① Company name mention (why you're reaching out) → ② Problem your service solves → ③ Specific numbers/track record → ④ CTA (propose 15-minute information exchange)
+- Keep it natural and feel less like a "sales pitch" — frame it as "information exchange"
 
-### 製造業向け
-- 件名: 業界特有の課題を含める
-- 本文: 250文字以内
-- トーン: 丁寧・信頼重視、専門用語を避ける
-- 構成: ①丁寧な挨拶 → ②業界課題への共感 → ③解決事例の提示 → ④低ハードルCTA（資料送付の提案）
+### Manufacturing Industry
+- Subject: Include an industry-specific challenge
+- Body: Under 250 characters
+- Tone: Polite and trust-focused; avoid jargon
+- Structure: ① Polite greeting → ② Empathy with industry challenges → ③ Present a solution case → ④ Low-friction CTA (offer to send materials)
 
-### 士業/コンサル向け
-- 件名: 具体的なROI/コスト削減の数字を含める
-- 本文: 200文字以内
-- トーン: 論理的・数字ベース・プロフェッショナル
-- 構成: ①相手の専門性への敬意 → ②業界共通課題（時間不足、差別化） → ③ROI提示 → ④CTA（短時間相談）
+### Professional Services / Consulting
+- Subject: Include specific ROI/cost reduction numbers
+- Body: Under 200 characters
+- Tone: Logical, numbers-based, professional
+- Structure: ① Respect for recipient's expertise → ② Common industry challenges (time pressure, differentiation) → ③ ROI presentation → ④ CTA (short consultation)
 
-### EC/小売向け
-- 件名: 売上/CVR/集客の数字
-- 本文: 200文字以内
-- トーン: カジュアルだが成果志向、エネルギッシュ
-- 構成: ①相手のショップ/商品に具体的に言及 → ②「もっと売れる」示唆 → ③自社サービスの改善数値 → ④CTA（デモ/事例紹介）
+### E-commerce / Retail
+- Subject: Sales/CVR/traffic numbers
+- Body: Under 200 characters
+- Tone: Casual but results-oriented and energetic
+- Structure: ① Specifically mention their shop/products → ② Suggest "you could sell more" → ③ Service improvement numbers → ④ CTA (demo/case study introduction)
 
-### 汎用（業界不問）
-- 件名: 12文字以内、好奇心フック
-- 本文: 150〜200文字
-- トーン: 自然、押しつけがましくない
-- 構成: ①相手の取り組みに具体的に言及 → ②自社サービスとの接点1行 → ③CTA（15分話しませんか？）
-- NG: 長文、自社アピール、抽象的フレーズ（「課題を解決」等）
+### General (Any Industry)
+- Subject: Under 12 characters; curiosity hook
+- Body: 150–200 characters
+- Tone: Natural, not pushy
+- Structure: ① Specifically mention the recipient's initiatives → ② One line connecting your service → ③ CTA ("Could we chat for 15 minutes?")
+- Avoid: Long text, self-promotion, abstract phrases ("solve your challenges", etc.)
 
-## フォローアップメール
+## Follow-up Emails
 
-### 未返信1回目（初回送信から3〜5営業日後）
-- 件名: 「Re: {元の件名}」（スレッド形式）
-- 本文: 100文字以内（極めて短く）
-- トーン: 軽い、プレッシャーなし
-- 構成: ①元メールへの軽いリマインド → ②新しい切り口1つ（事例、数字、業界ニュース） → ③気遣いある締め
-- 催促感を出さないこと
+### First Follow-up for No Response (3–5 business days after initial send)
+- Subject: "Re: {original subject}" (thread format)
+- Body: Under 100 characters (extremely short)
+- Tone: Light, no pressure
+- Structure: ① Light reminder of the original email → ② One new angle (case study, number, industry news) → ③ Considerate closing
+- Avoid any sense of urgency or nagging
 
-### 未返信2回目（最終連絡）
-- 件名: 「Re: {件名}」
-- 本文: 80文字以内（最小限）
-- トーン: 軽やか、未練なし
-- 構成: ①「最後のご連絡」シグナル → ②今後の連絡先 → ③簡潔なお別れ
-- 心理効果: 「最後」と明示すると逆に返信率が上がる傾向
+### Second Follow-up for No Response (Final contact)
+- Subject: "Re: {subject}"
+- Body: Under 80 characters (minimal)
+- Tone: Light, no lingering
+- Structure: ① Signal of "last contact" → ② Future contact info → ③ Brief farewell
+- Psychological effect: Explicitly stating "this is the last email" tends to increase response rates
 
-### ポジティブな返信への御礼 & 商談提案
-- スピード: 即時送信（鮮度が重要）
-- 本文: 150文字以内
-- トーン: 感謝 + 効率的
-- 構成: ①お礼（相手のコメントに具体的に触れる） → ②「詳しくお話ししたい」 → ③日程候補3つ → ④日程調整リンク
-- 日程調整ツール（Timerex, Calendly等）があればリンクを含める
+### Response to Positive Reply + Meeting Proposal
+- Speed: Send immediately (freshness matters)
+- Body: Under 150 characters
+- Tone: Grateful + efficient
+- Structure: ① Thank-you (specifically reference the recipient's comment) → ② "Would love to discuss in more detail" → ③ Three available time slots → ④ Scheduling link
+- Include scheduling tool link (Timerex, Calendly, etc.) if available
 
-## 追加パターン
+## Additional Patterns
 
-### 紹介依頼メール
-- 本文: 200文字以内。カジュアル、関係性に合わせたトーン
-- 構成: ①近況/挨拶 → ②ターゲット企業像の説明 → ③紹介が相手にもメリットある理由 → ④軽い依頼
-- プレッシャーなし。「もしお知り合いがいれば」のスタンス
+### Referral Request Email
+- Body: Under 200 characters. Casual, tone adjusted to the relationship
+- Structure: ① Recent update/greeting → ② Describe the target company profile → ③ Reason the referral benefits the recipient too → ④ Light ask
+- No pressure. Stance is "if you happen to know anyone"
 
-### 休眠顧客の掘り起こし
-- 件名: カジュアルな問いかけ（「お久しぶりです」等）
-- 本文: 200文字以内
-- 構成: ①過去のやり取りに言及 → ②新しい展開/アップデート → ③新たなソフト提案 → ④CTA
-- NG: ネガティブなフレーミング（「前回お断りでしたが」等）
+### Re-engaging Dormant Leads
+- Subject: Casual question ("Long time no talk", etc.)
+- Body: Under 200 characters
+- Structure: ① Reference past interactions → ② New development/update → ③ Soft re-proposal → ④ CTA
+- Avoid: Negative framing ("You declined last time, but...")
 
-## 選択ガイドライン
+## Selection Guidelines
 
-/strategy でメッセージング生成時、以下の基準でテンプレートを選択する:
+When generating messaging during /strategy, select templates based on the following criteria:
 
-1. **ターゲット業界が明確** → 該当する業界別テンプレートをベースに
-2. **複数業界にまたがる** → 汎用テンプレートをベースに、業界ごとの調整ポイントを注記
-3. **フォローアップ** → 全業界共通のフォローアップパターンを SALES_STRATEGY.md に含める
-4. **テンプレートはそのまま使わない** → ユーザーのビジネス情報（USP、実績、価格帯）を反映してカスタマイズすること
+1. **Clear target industry** → Base on the relevant industry-specific template
+2. **Spans multiple industries** → Base on the general template; add industry-specific adjustment notes
+3. **Follow-ups** → Include the common follow-up patterns in SALES_STRATEGY.md for all industries
+4. **Never use templates as-is** → Always customize with the user's business information (USP, track record, price range)

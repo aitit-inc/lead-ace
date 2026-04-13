@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
-"""候補JSON（Phase 1）と連絡先JSON（Phase 2）をマージするスクリプト
+"""Script that merges candidate JSON (Phase 1) with contact JSON (Phase 2)
 
 Usage:
   merge_prospects.py <candidates_file> <contacts_file>
 
-Phase 1（候補収集）の出力と Phase 2（連絡先取得）の出力を
-name + website_url のドメインで突き合わせてマージし、
-add_prospects.py に渡せる形式でstdoutに出力する。
+Merges the Phase 1 (candidate collection) output with the Phase 2 (contact enrichment) output
+by matching on name + website_url domain, and outputs the result in a format suitable for add_prospects.py.
 
-ドメインでマッチしない場合は name のみでフォールバックマッチする
-（連絡先側に website_url が欠損しているケースへの対策）。
-マッチしなかった候補は連絡先なし（email=null等）のまま出力する。
+Falls back to name-only matching when the domain does not match
+(handles cases where the contact side is missing website_url).
+Candidates with no match are output as-is with no contact info (email=null, etc.).
 
-Output (stdout): マージ済みJSON配列
-Output (stderr): マージ結果のサマリー
+Output (stdout): Merged JSON array
+Output (stderr): Merge result summary
 """
 
 from __future__ import annotations
@@ -25,7 +24,7 @@ from sales_db import PROSPECT_CONTACT_FIELDS, error_exit, extract_domain, normal
 
 
 def make_key(entry: dict[str, object]) -> str:
-    """name（正規化済み）+ domain でマッチキーを生成する。"""
+    """Generate a match key from normalized name + domain."""
     name = normalize_name(str(entry.get("name", "")))
     raw_url = entry.get("website_url")
     url = str(raw_url) if isinstance(raw_url, str) else ""
@@ -34,11 +33,11 @@ def make_key(entry: dict[str, object]) -> str:
 
 
 def name_only_key(entry: dict[str, object]) -> str:
-    """name（正規化済み）のみのフォールバックキーを生成する。"""
+    """Generate a fallback key using only the normalized name."""
     return normalize_name(str(entry.get("name", "")))
 
 
-# 連絡先フィールド（sales_db.py の Prospect TypedDict から導出）
+# Contact fields (derived from the Prospect TypedDict in sales_db.py)
 CONTACT_FIELDS = PROSPECT_CONTACT_FIELDS
 
 
@@ -53,18 +52,18 @@ def main() -> None:
         with open(candidates_path, encoding="utf-8") as f:
             candidates: object = json.load(f)
     except (json.JSONDecodeError, OSError) as e:
-        error_exit(f"候補ファイル読み込みエラー: {e}")
+        error_exit(f"Error reading candidates file: {e}")
 
     try:
         with open(contacts_path, encoding="utf-8") as f:
             contacts: object = json.load(f)
     except (json.JSONDecodeError, OSError) as e:
-        error_exit(f"連絡先ファイル読み込みエラー: {e}")
+        error_exit(f"Error reading contacts file: {e}")
 
     if not isinstance(candidates, list) or not isinstance(contacts, list):
-        error_exit("両方のファイルがJSON配列である必要があります")
+        error_exit("Both files must be JSON arrays")
 
-    # 連絡先をキーでインデックス化（主キー: name+domain、フォールバック: name のみ）
+    # Index contacts by key (primary: name+domain, fallback: name only)
     contacts_index: dict[str, dict[str, object]] = {}
     contacts_name_index: dict[str, dict[str, object]] = {}
     for contact in contacts:
@@ -90,7 +89,7 @@ def main() -> None:
         contact: dict[str, object] | None = contacts_index.get(key)
         fallback = False
         if contact is None:
-            # フォールバック: name のみでマッチ（website_url 欠損対策）
+            # Fallback: match by name only (handles missing website_url on the contact side)
             nk = name_only_key(candidate)
             contact = contacts_name_index.get(nk) if nk else None
             if contact is not None:
@@ -113,16 +112,16 @@ def main() -> None:
     print_json(merged)
 
     summary = (
-        f"マージ結果: 候補 {len(candidates)}件, 連絡先 {len(contacts)}件"
-        f" → マッチ {matched_count}件"
+        f"Merge result: {len(candidates)} candidates, {len(contacts)} contacts"
+        f" → {matched_count} matched"
     )
     if fallback_matched_count:
-        summary += f"（うち社名フォールバック {fallback_matched_count}件）"
-    summary += f", 未マッチ {len(unmatched_names)}件"
+        summary += f" (of which {fallback_matched_count} via name-only fallback)"
+    summary += f", {len(unmatched_names)} unmatched"
     print(summary, file=sys.stderr)
     if unmatched_names:
         for name in unmatched_names:
-            print(f"  連絡先未マッチ: {name}", file=sys.stderr)
+            print(f"  No contact match: {name}", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -1,12 +1,12 @@
 ---
 name: outbound
-description: "This skill should be used when the user asks to \"メールを送って\", \"営業をかけて\", \"アプローチして\", \"営業先に連絡して\", \"アウトバウンドを実行して\", or wants to execute outbound sales. 営業リストの営業先に対してメール送付・フォーム入力・SNS DMを自動で行う。件数指定も可能。"
-argument-hint: "<project-directory-name> [件数]"
+description: "This skill should be used when the user asks to \"send emails\", \"do outreach\", \"contact prospects\", \"run outbound sales\", or wants to execute outbound sales. Automatically sends emails, fills in contact forms, and sends SNS DMs to prospects on the list. Count can be specified."
+argument-hint: "<project-directory-name> [count]"
 allowed-tools:
   - Bash
   - Read
   - Write
-  # SNS DM 用（ログインセッションが必要なため claude-in-chrome を使用）
+  # For SNS DMs (claude-in-chrome is used because login session is required)
   - mcp__claude_in_chrome__tabs_context_mcp
   - mcp__claude_in_chrome__tabs_create_mcp
   - mcp__claude_in_chrome__navigate
@@ -16,146 +16,146 @@ allowed-tools:
   - mcp__claude_in_chrome__computer
 ---
 
-# Outbound - アウトバウンド営業実行
+# Outbound - Outbound Sales Execution
 
-営業リストの営業先に対して、メール・問い合わせフォーム・SNS DMで順次アプローチするスキル。
+A skill that sequentially reaches out to prospects on the sales list via email, contact forms, and SNS DMs.
 
-各営業先について、利用可能なチャネルでメッセージを送信し、送信結果をDBに記録する。全件処理後に結果をまとめてレポートする。
+For each prospect, sends a message via an available channel and records the result in the DB. After all processing, generates a summary report.
 
-**前提:** `${CLAUDE_PLUGIN_ROOT}/references/workspace-conventions.md` の規約に従うこと（data.dbの配置・cdしないルール）。
+**Prerequisite:** Follow the conventions in `${CLAUDE_PLUGIN_ROOT}/references/workspace-conventions.md` (data.db location and no-cd rule).
 
-## 実行手順
+## Steps
 
-### 0. Preflight チェック
+### 0. Preflight Check
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/preflight.py data.db "$0"
 ```
 
-`status` が `error` の場合はエラーメッセージを表示して**即座に中断**する。`migrations_applied` にマイグレーションがあればユーザーに報告する。
+If `status` is `error`, display the error message and **abort immediately**. Report any migrations in `migrations_applied` to the user.
 
-### 1. 準備
+### 1. Setup
 
-- プロジェクトディレクトリ名: `$0`（必須）
-- アプローチ件数: `$1`（省略時: 30）
+- Project directory name: `$0` (required)
+- Approach count: `$1` (default: 30)
 
-`$0/BUSINESS.md` と `$0/SALES_STRATEGY.md` を読み込み、以下のセクションを特に注意して把握する:
-- **アウトリーチモード**: `precision`（深いパーソナライズ）か `volume`（テンプレベースのセミパーソナライズ）か。未設定なら `precision`
-- **営業チャネル**: チャネルの優先順位、使わないチャネル
-- **メッセージング**: 件名パターン、本文の構成方針、A/Bテストの指示があればそれに従う
-- **送信者情報**: 送信元メールアドレス、署名
-- **メールテンプレート**: テンプレートが定義されている場合はベースとして使用する（volume モードでは特に重要）
-- **SNSメッセージ**: SNS DM用のメッセージ方針
+Load `$0/BUSINESS.md` and `$0/SALES_STRATEGY.md` and pay particular attention to these sections:
+- **Outreach mode**: `precision` (deep personalization) or `volume` (template-based semi-personalization). Default to `precision` if not set
+- **Sales channels**: Channel priority and which channels not to use
+- **Messaging**: Subject line patterns, body structure, and A/B test instructions if any — follow them
+- **Sender information**: Sender email address, signature
+- **Email template**: If a template is defined, use it as a base (especially important in volume mode)
+- **SNS messages**: SNS DM messaging policy
 
-**重要:** SALES_STRATEGY.md に件名パターンのバリエーション・A/Bテスト等の具体的な指示がある場合、それに必ず従うこと。指示を無視してデフォルト動作に戻ってはならない。
-**注意:** 送信タイミング（曜日・時間帯）はこのスキルでは制御しない。
+**Important:** If SALES_STRATEGY.md has specific instructions on subject line variations, A/B tests, etc., always follow them. Never ignore instructions and revert to default behavior.
+**Note:** Sending timing (day of week, time of day) is not controlled by this skill.
 
-未アプローチの営業先リストをDBから取得する:
+Retrieve the uncontacted prospect list from the DB:
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db list-reachable "$0" "$1"
 ```
 
-件数の指定がない場合はデフォルトの30件を対象とする。
+Default to 30 prospects if no count is specified.
 
-### 2. 各営業先へのアプローチ
+### 2. Approach Each Prospect
 
-SALES_STRATEGY.mdの「営業チャネル」セクションに記載されたチャネルと優先順位に従う。使わないチャネルが指定されている場合はスキップする。
+Follow the channels and priorities listed in the "Sales Channels" section of SALES_STRATEGY.md. Skip any channel explicitly listed as not in use.
 
-「営業チャネル」セクションに特に制限がない場合のデフォルト優先順位:
+Default priority when "Sales Channels" section has no particular restrictions:
 
-1. **メール** — メールアドレスがある場合
-2. **問い合わせフォーム** — フォームURLがある場合
-3. **SNS DM** — SNSアカウントがある場合（X/Twitter のみ対応。相手のDM設定により送信不可の場合あり）
+1. **Email** — if email address is available
+2. **Contact form** — if form URL is available
+3. **SNS DM** — if SNS account is available (X/Twitter only; sending may not be possible depending on recipient's DM settings)
 
-1つの営業先につき、利用可能なチャネル全てでアプローチする必要はない。最も効果的な1チャネルで十分。
+No need to approach a single prospect via all available channels. One channel is sufficient.
 
-**1社あたりの試行上限:** 1社に対する送信試行は**最大2回**（メインチャネル + フォールバック1回）とする。2回失敗したら理由を問わず即スキップし、次の営業先に進む。1社に長時間かけてコンテキストとツールコールを浪費してはならない。
+**Attempt limit per prospect:** Limit sending attempts to **a maximum of 2** per prospect (main channel + 1 fallback). If both fail for any reason, immediately skip and move to the next prospect. Do not waste context and tool calls lingering on a single prospect.
 
-**SNS DMの注意:** SNS DM は到達率が低い（相手のDM開放設定に依存）。SALES_STRATEGY.mdの「営業チャネル」セクションで優先順位が指定されている場合はそれに従う。SNSが無効化されている場合はスキップする。
+**SNS DM caution:** SNS DMs have a lower reach rate (depends on recipient's DM settings). Follow the priority order in the "Sales Channels" section of SALES_STRATEGY.md if specified. Skip if SNS is disabled.
 
-**ブラウザツールが利用できない場合:** playwright-cli が未インストールの場合はフォーム入力不可、claude-in-chrome が未接続の場合は SNS DM 不可。メールアドレスがある営業先のみを対象とし、該当チャネル不可の営業先はスキップする。スキップした件数は結果レポートで「ブラウザ未接続によりスキップ: N件」として報告する。
+**If browser tools are unavailable:** If playwright-cli is not installed, form submission is not possible; if claude-in-chrome is not connected, SNS DM is not possible. Target only prospects with email addresses and skip those where the channel is unavailable. Report skipped count in results report as "Skipped due to browser not connected: N".
 
-### 3. メール送信
+### 3. Email Sending
 
-`references/email-guidelines.md` のガイドラインに従ってメールを作成する。SALES_STRATEGY.mdの「送信者情報」セクションから送信元メールアドレスと署名を取得する。
+Write emails following the guidelines in `references/email-guidelines.md`. Get the sender email address and signature from the "Sender Information" section of SALES_STRATEGY.md.
 
-**件名のバリエーション:** SALES_STRATEGY.md に件名パターンが複数定義されている場合、営業先ごとに異なるパターンを使い分けること。全件同じ件名にしてはならない。A/Bテスト指示がある場合はパターンを均等に配分する。
+**Subject line variation:** If SALES_STRATEGY.md defines multiple subject line patterns, use different patterns for each prospect. Never use the same subject for all outreach. Distribute evenly if A/B test instructions exist.
 
-**本文の個別化（アウトリーチモードに応じて深さを変える）:**
+**Body personalization (vary depth by outreach mode):**
 
-- **precision モード**: 各営業先の `overview` と `match_reason` を参照し、冒頭だけでなく本文全体を相手に合わせて書く。相手企業の具体的な数値・実績・取り組みに言及し、テンプレートの単純な差し替えにしない。「貴社のウェブサイトを拝見し」等の汎用的な書き出しだけでは不十分
-- **volume モード**: SALES_STRATEGY.md のメールテンプレートをベースに、冒頭（なぜ連絡したか）と課題提起の2箇所を `overview` / `match_reason` に基づいて営業先ごとに調整する。解決策〜CTA はテンプレートの構成をそのまま使ってよい
+- **Precision mode**: Refer to each prospect's `overview` and `match_reason`, and write the entire body tailored to the recipient — not just the opening. Reference specific numbers, achievements, and initiatives of the target company. Generic openers like "I visited your website" alone are insufficient
+- **Volume mode**: Use the SALES_STRATEGY.md email template as a base, adjusting the opening (why you're reaching out) and the problem statement in 2 places based on `overview` / `match_reason`. The solution through CTA can follow the template structure as-is
 
-`send_and_log.py` でメール送信+ログ記録+ステータス更新を一括で行う:
+Use `send_and_log.py` to send email + record log + update status all at once:
 
 ```bash
-echo "<本文（署名含む）>" > /tmp/email_body.txt
+echo "<body (including signature)>" > /tmp/email_body.txt
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/send_and_log.py data.db \
   --project "$0" \
   --prospect-id <prospect_id> \
-  --account "<送信元メールアドレス>" \
-  --to "<宛先>" \
-  --subject "<件名>" \
+  --account "<sender email address>" \
+  --to "<recipient>" \
+  --subject "<subject>" \
   --body-file /tmp/email_body.txt
 ```
 
-本文が短い場合は `--body-file` の代わりに `--body "<本文>"` も可。
+Can also use `--body "<body>"` instead of `--body-file` for short bodies.
 
-**スクリプトの動作:**
-- メールを送信し、結果をDBに記録する（送信+ログ+ステータス更新がアトミック）
-- 成功時: outreach_logs (status='sent') に記録し、project_prospects を 'contacted' に更新
-- 失敗時: outreach_logs (status='failed', error_message) に記録。ステータスは 'new' のまま維持
-- 出力: `{"status": "sent"|"failed", "outreach_log_id": N, "error_message": null|"..."}`
+**Script behavior:**
+- Sends the email and records the result in the DB (sending + log + status update are atomic)
+- On success: records in outreach_logs (status='sent') and updates project_prospects to 'contacted'
+- On failure: records in outreach_logs (status='failed', error_message). Status remains 'new'
+- Output: `{"status": "sent"|"failed", "outreach_log_id": N, "error_message": null|"..."}`
 
-**注意:**
-- **メール送信は必ず `send_and_log.py` 経由で行うこと。** gog コマンドを直接叩かない（DBにログが残らなくなるため）
-- `--body` / `--body-file` に渡す本文は署名を含めた完全な内容にする
-- Gmail MCP（`gmail_create_draft`）はドラフト作成のみで送信不可
-- 送信元エイリアスを指定する場合は `--from "<エイリアス>"` を追加
+**Note:**
+- **Email sending must be done via `send_and_log.py`.** Do not call the gog command directly (logs won't be recorded in the DB)
+- The body passed to `--body` / `--body-file` must be the complete content including the signature
+- Gmail MCP (`gmail_create_draft`) can only create drafts — it cannot send
+- If specifying a sender alias, add `--from "<alias>"`
 
-### 4. 問い合わせフォーム入力
+### 4. Contact Form Submission
 
-`references/playwright-guide.md` と `references/form-filling.md` を読み込んで、その手順に従う。
+Load `references/playwright-guide.md` and `references/form-filling.md` and follow their procedures.
 
-`form_type` フィールドに応じて処理方法を分岐する:
+Branch processing based on the `form_type` field:
 
-| form_type | 処理 |
+| form_type | Processing |
 |---|---|
-| `google_forms` | `references/form-filling.md` の「Google Forms の場合」に従い、`formResponse` POST で送信（ブラウザ不要） |
-| `native_html` / `wordpress_cf7` / null | playwright-cli でブラウザ操作。`references/form-filling.md` の基本フローに従う |
-| `iframe_embed` | スキップ。`status = 'failed'`, `error_message = 'iframe埋め込みフォームのためスキップ'` でログ記録 |
-| `with_captcha` | スキップ。`references/form-filling.md` の「reCAPTCHA / hCaptcha 等がある場合」に従う |
+| `google_forms` | Follow "Google Forms" section in `references/form-filling.md`, submit via `formResponse` POST (no browser needed) |
+| `native_html` / `wordpress_cf7` / null | Use playwright-cli for browser operations. Follow basic flow in `references/form-filling.md` |
+| `iframe_embed` | Skip. Record log with `status = 'failed'`, `error_message = 'iframe-embedded form — skipped'` |
+| `with_captcha` | Skip. Follow "reCAPTCHA / hCaptcha etc." section in `references/form-filling.md` |
 
-`form_type` が null（未判定）の場合は playwright-cli でフォーム構造を確認してから判断する。**ただし、null の場合は1回の試行で失敗したら即スキップする**（iframe_embed や with_captcha だった場合のツールコール浪費を防ぐため）。
+If `form_type` is null (not yet determined), check form structure with playwright-cli before deciding. **However, if null, skip immediately on first attempt failure** (to prevent wasted tool calls in case it's iframe_embed or with_captcha).
 
-**送信本文の検証:** outreach_logs に記録する前に、フォームに入力した本文（body）が空でないことを確認する。空の場合は送信失敗として `status = 'failed'`, `error_message = 'body empty'` で記録し、ステータスは `new` のまま維持する。
+**Body validation before sending:** Before recording in outreach_logs, verify that the body entered in the form is not empty. If empty, record as sending failure with `status = 'failed'`, `error_message = 'body empty'` and keep status as `new`.
 
-**送信完了の判定とログ記録:** `references/form-filling.md` の「送信完了の判定」に従い、snapshot と network で確認してからログ記録する。
+**Submission completion check and log recording:** Follow the "Submission Completion Determination" section of `references/form-filling.md` to verify via snapshot and network before recording the log.
 
 ### 5. SNS DM
 
-claude-in-chrome を使用してSNSでDMを送る（ログインセッションが必要なため）。対応プラットフォーム: **X（Twitter）** および **LinkedIn**。
+Use claude-in-chrome to send DMs on SNS (login session required). Supported platforms: **X (Twitter)** and **LinkedIn**.
 
-**メッセージ:** SNS用に短く簡潔にする。SALES_STRATEGY.mdの「SNSメッセージ」セクションを参考に。
+**Message:** Keep it short and concise for SNS. Refer to the "SNS Messages" section of SALES_STRATEGY.md.
 
-**共通手順:**
-1. prospects.sns_accounts（JSON）からアカウント情報を取得
-2. ブラウザでSNSプロフィールページに移動
-3. DMまたはメッセージ機能を使ってメッセージを送る
+**Common steps:**
+1. Get account information from prospects.sns_accounts (JSON)
+2. Navigate to the SNS profile page in the browser
+3. Send a message using the DM or messaging feature
 
-**X（Twitter）の場合:**
-- プロフィールページからDMアイコン（メッセージ）をクリック
-- 相手のDM受信設定が閉じている場合は送信不可 → `unreachable` にする
+**For X (Twitter):**
+- Click the DM (message) icon from the profile page
+- If recipient's DM settings are closed, sending is not possible → set to `unreachable`
 - channel: `sns_twitter`
 
-**LinkedIn の場合:**
-- プロフィールページから「メッセージ」ボタンをクリック
-- コネクション済みの相手のみDM送信可能。未コネクションの場合は送信不可 → `unreachable` にする
-- InMail（有料機能）は使用しない
+**For LinkedIn:**
+- Click the "Message" button from the profile page
+- DMs can only be sent to connected users. If not connected, sending is not possible → set to `unreachable`
+- Do not use InMail (paid feature)
 - channel: `sns_linkedin`
 
-送信後、`send_and_log.py --log-only` でログ記録+ステータス更新をアトミックに実行する:
+After sending, use `send_and_log.py --log-only` to atomically record the log + update status:
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/send_and_log.py data.db \
@@ -163,52 +163,52 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/send_and_log.py data.db \
   --channel <sns_twitter|sns_linkedin> --subject "" --body "<body>"
 ```
 
-### 6. アプローチ不可の営業先の処理
+### 6. Handle Unreachable Prospects
 
-アプローチに失敗した営業先のうち、**構造的な理由**で今後もアプローチ不可能と判断できる場合は `unreachable` に更新する:
+For prospects where approach failed, if the failure is due to a **structural reason** making future approaches impossible, update to `unreachable`:
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/update_status.py data.db \
   --project "$0" --prospect-id <prospect_id> --status unreachable
 ```
 
-営業お断りの場合は `--do-not-contact` を追加して全プロジェクトで除外する:
+For opt-out of sales outreach, add `--do-not-contact` to exclude from all projects:
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/update_status.py data.db \
   --project "$0" --prospect-id <prospect_id> --status unreachable \
-  --do-not-contact --dnc-reason "営業お断りの記載あり"
+  --do-not-contact --dnc-reason "Site explicitly states no sales outreach"
 ```
 
-> **注意:** DB への直接 SQL 実行は禁止。ステータス更新は必ず専用スクリプト経由で行うこと（`contacted` → `send_and_log.py`、`responded`/`rejected` → `record_response.py`、`unreachable`/`inactive` → `update_status.py`）。
+> **Note:** Direct SQL execution to the DB is prohibited. Status updates must always be done via dedicated scripts (`contacted` → `send_and_log.py`, `responded`/`rejected` → `record_response.py`, `unreachable`/`inactive` → `update_status.py`).
 
-**`unreachable` にすべきケース:**
-- メールアドレスが不正でバウンスした（恒久的なエラー）
-- SNSのDMが開放されていない
-- フォームがB2B問い合わせ用途でなかった
-- そもそも利用可能な連絡手段がなかった
+**Cases where `unreachable` should be set:**
+- Email address was invalid and bounced (permanent error)
+- SNS DMs are not open
+- Form was not suitable for B2B inquiries
+- No available contact method at all
 
-**`unreachable` にしないケース（`new` のまま維持）:**
-- 一時的なネットワークエラーやタイムアウト
-- gog send の認証エラーなどシステム側の問題
+**Cases where `unreachable` should NOT be set (keep as `new`):**
+- Temporary network error or timeout
+- System-side issues such as gog send authentication errors
 
-### 7. 目標未達時の追加アプローチ
+### 7. Additional Outreach When Target Not Met
 
-全営業先の処理が完了した後、成功数（sent）が目標件数に満たない場合:
+After all prospects are processed, if successes (sent) fall short of the target count:
 
-1. 不足数 = 目標件数 - 成功数
-2. `list-reachable` で追加の営業先を取得する（不足数分）:
+1. Shortfall = target count − successes
+2. Retrieve additional prospects with `list-reachable` (shortfall count):
    ```bash
-   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db list-reachable "$0" <不足数>
+   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db list-reachable "$0" <shortfall>
    ```
-3. 取得できた営業先に対してステップ2〜6を繰り返す
-4. リトライは**1ラウンドのみ**。reachable が 0 になった場合もリトライを終了する
-5. 最終的な目標達成状況をレポートに含める（例: 「目標5件中3件成功（リスト枯渇のため終了）」）
+3. Repeat steps 2-6 for retrieved prospects
+4. Retry **one round only**. Also end retry if reachable reaches 0
+5. Include final target achievement in the report (e.g., "Target 5, achieved 3 (ended due to depleted list)")
 
-### 8. 結果レポート
+### 8. Results Report
 
-以下を報告する:
-- アプローチした営業先数
-- チャネル別の試行数・成功数・成功率（メール: 成功X/試行Y件(XX%)、フォーム: 成功X/試行Y件(XX%)、SNS: 成功X/試行Y件(XX%)）
-- 失敗した件数と理由
-- 次のステップとして `/check-results` の実行を案内する
+Report the following:
+- Number of prospects approached
+- Attempts and successes per channel, success rate (Email: X successes/Y attempts (XX%), Form: X successes/Y attempts (XX%), SNS: X successes/Y attempts (XX%))
+- Number of failures and reasons
+- Guide the user to run `/check-results` as the next step

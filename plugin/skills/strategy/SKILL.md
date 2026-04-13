@@ -1,6 +1,6 @@
 ---
 name: strategy
-description: "This skill should be used when the user asks to \"戦略を策定して\", \"営業方針を作って\", \"ビジネス情報をまとめて\", \"SALES_STRATEGY.mdを生成して\", \"戦略を見直して\", \"戦略を更新して\", or wants to create/update sales and marketing strategy. 事業情報を対話的に収集し、BUSINESS.mdとSALES_STRATEGY.mdを自動生成・更新する。"
+description: "This skill should be used when the user asks to \"formulate a strategy\", \"create a sales plan\", \"summarize business info\", \"generate SALES_STRATEGY.md\", \"review strategy\", \"update strategy\", or wants to create/update sales and marketing strategy. Interactively collects business information and auto-generates or updates BUSINESS.md and SALES_STRATEGY.md."
 argument-hint: "<project-directory-name>"
 allowed-tools:
   - Bash
@@ -10,218 +10,218 @@ allowed-tools:
   - AskUserQuestion
 ---
 
-# Strategy - 営業・マーケ戦略策定
+# Strategy - Sales & Marketing Strategy Development
 
-事業・サービス情報をユーザーから収集し、営業戦略ドキュメントを生成・更新するスキル。初回は全情報を対話的に収集し、2回目以降は既存内容のギャップ分析を行い不足分のみ補完する。
+A skill that collects business and service information from the user and generates or updates strategy documents. For the first run, all information is collected interactively; for subsequent runs, gap analysis is performed on existing content to supplement only what is missing.
 
-## 実行手順
+## Steps
 
-### 0. Preflight チェック
+### 0. Preflight Check
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/preflight.py data.db "$0"
 ```
 
-`status` が `error` の場合はエラーメッセージを表示して**即座に中断**する。`migrations_applied` にマイグレーションがあればユーザーに報告する。
+If `status` is `error`, display the error message and **abort immediately**. Report any migrations in `migrations_applied` to the user.
 
-### 1. プロジェクト確認
+### 1. Verify Project
 
-- プロジェクトディレクトリ名: `$0`（必須）
+- Project directory name: `$0` (required)
 
-`$0` ディレクトリが存在することを確認する。存在しない場合は `/setup` の実行を案内する。
+Verify that the `$0` directory exists. If not, guide the user to run `/setup`.
 
-### 2. 環境チェック
+### 2. Environment Check
 
-以下のコマンドを実行して、利用可能なツールを確認する:
+Run the following command to check available tools:
 
 ```bash
 python3 --version 2>&1; echo "---"; git --version 2>&1 && git remote -v 2>&1; echo "---"; which gog 2>&1 && gog version 2>&1; echo "---"; playwright-cli --version 2>&1
 ```
 
-結果をユーザーに伝え、SALES_STRATEGY.md の「環境・ツール状況」セクションに反映する（ステップ7で生成時）:
+Report results to the user and reflect in the "Environment & Tool Status" section of SALES_STRATEGY.md (when generating in step 7):
 
-- **gog**: 利用可/不可 → 不可の場合、営業チャネルの選択肢に影響（メール自動送信不可、ドラフト作成のみ）
-- **git + リモート**: 利用可/不可 → 不可の場合、daily-cycle の自動バックアップが無効
-- **Gmail MCP**: bash では確認不可。ユーザーに「Claude Code で Gmail MCP を設定していますか？」と確認する
-- **playwright-cli**: `playwright-cli --version` で確認。フォーム送信に必要
-- **Claude in Chrome**: bash では確認不可。ユーザーに「Claude in Chrome 拡張機能を使っていますか？」と確認する。SNS DM に必要
+- **gog**: Available / unavailable → if unavailable, affects channel options (email auto-sending not possible, only draft creation)
+- **git + remote**: Available / unavailable → if unavailable, daily-cycle automatic backup is disabled
+- **Gmail MCP**: Cannot verify via bash. Ask user "Have you configured Gmail MCP in Claude Code?"
+- **playwright-cli**: Check with `playwright-cli --version`. Required for form submission
+- **Claude in Chrome**: Cannot verify via bash. Ask user "Are you using the Claude in Chrome extension?" Required for SNS DMs
 
-**更新モード時:** SALES_STRATEGY.md の「環境・ツール状況」セクションが既にある場合、bash で確認できるツール（python3, git, gog, playwright-cli）のみ再チェックし、Gmail MCP / Claude in Chrome はユーザーへの再確認を省略する（変更がある場合はユーザーから申告してもらう）。
+**In update mode:** If the "Environment & Tool Status" section already exists in SALES_STRATEGY.md, only re-check tools verifiable via bash (python3, git, gog, playwright-cli), and skip re-asking about Gmail MCP / Claude in Chrome (users can report changes themselves if any).
 
-**結果がチャネル選定に与える影響:**
-- gog なし + Gmail MCP あり → メールはドラフト作成のみ（手動送信）
-- gog なし + Gmail MCP なし → メール送信・ドラフト作成いずれも不可。フォームまたはSNS DMのみ
-- playwright-cli なし → フォーム送信不可。メールとSNS DMのみ
-- Claude in Chrome なし → SNS DM不可。メールとフォームのみ
-- 全ツールなし → outbound 機能が実質使えないため、ステップ3-6でチャネル設定時に制約を明確に伝える
+**Impact of results on channel selection:**
+- No gog + Gmail MCP available → Email is draft-only (manual sending)
+- No gog + No Gmail MCP → Neither email sending nor draft creation is possible. Forms or SNS DMs only
+- No playwright-cli → Form submission not possible. Email and SNS DMs only
+- No Claude in Chrome → SNS DMs not possible. Email and forms only
+- No tools at all → Outbound is effectively unusable — make constraints clear when setting up channels in steps 3-6
 
-### 3. 既存ファイル確認 & モード判定
+### 3. Check Existing Files & Determine Mode
 
-`$0/BUSINESS.md` と `$0/SALES_STRATEGY.md` の存在と内容を確認する。
+Check existence and content of `$0/BUSINESS.md` and `$0/SALES_STRATEGY.md`.
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db list-projects
 ```
 
-**モード判定:**
-- **初回モード**: 両ファイルとも存在しない → ステップ4の全ステップを順に実行
-- **更新モード**: いずれかのファイルが存在する → 以下のギャップ分析を行う
+**Mode determination:**
+- **Initial mode**: Neither file exists → Execute all steps in step 4 in sequence
+- **Update mode**: Either file exists → Perform the following gap analysis
 
-#### 更新モードのギャップ分析
+#### Gap Analysis in Update Mode
 
-既存ファイルを読み込み、SALES_STRATEGY.md の各セクションの充足度を確認する:
+Load existing files and check the completeness of each section in SALES_STRATEGY.md:
 
-| セクション | 充足の基準 |
+| Section | Completeness Criteria |
 |---|---|
-| エレベーターピッチ | 具体的な記載があるか |
-| 解決する課題 | 課題と解決方法が明記されているか |
-| ターゲット | プライマリ・セカンダリが業種・規模・役職レベルで具体的か |
-| バリュープロポジション | 記載があるか |
-| 実績・社会的証明 | 最低1つの具体的な実績・数字があるか |
-| アウトリーチモード | precision / volume が設定されているか |
-| 営業チャネル | チャネルと優先順位が明記されているか |
-| 送信者情報 | 送信者名・メールアドレス・署名が揃っているか |
-| メッセージング / メールテンプレート | テンプレートが定義されているか |
-| 反応の定義 | 反応とみなす条件が明記されているか |
-| 通知設定 | 記載があるか（「なし」も有効な設定） |
-| KPI | 指標が設定されているか |
-| 検索キーワード | 10個以上あるか |
-| 環境・ツール状況 | 各ツールのステータスが記録されているか |
+| Elevator pitch | Contains specific content |
+| Problems solved | Problem and solution are clearly stated |
+| Target | Primary and secondary are specific by industry, scale, and role |
+| Value proposition | Content is present |
+| Track record / social proof | At least 1 specific achievement or number |
+| Outreach mode | precision / volume is set |
+| Sales channels | Channels and priority are specified |
+| Sender information | Sender name, email address, and signature are all present |
+| Messaging / email template | Template is defined |
+| Response definition | Conditions that count as a response are specified |
+| Notification settings | Content is present ("none" is also a valid setting) |
+| KPI | Metrics are set |
+| Search keywords | 10 or more |
+| Environment & tool status | Status of each tool is recorded |
 
-#### evaluate 改善履歴の確認
+#### Check evaluate Improvement History
 
-evaluate による改善履歴を取得する:
+Retrieve improvement history by evaluate:
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db evaluation-history "$0"
 ```
 
-結果に基づき、各セクションを以下の3カテゴリに分類する:
+Based on results, classify each section into the following 3 categories:
 
-| カテゴリ | 対象セクション | strategy での扱い |
+| Category | Target Sections | How strategy handles it |
 |---|---|---|
-| **未設定** | 存在しない・空・不完全なセクション | 補完対象 |
-| **evaluate 管轄** | メッセージング、ターゲット、営業チャネル、KPI、検索キーワード（evaluate が改善実績を持つ場合） | **デフォルトで触れない** |
-| **静的設定** | 送信者情報、反応定義、通知設定、実績・社会的証明、アウトリーチモード、環境等 | ユーザー指示があれば更新 |
+| **Not set** | Missing, empty, or incomplete sections | Subject to completion |
+| **evaluate-managed** | Messaging, targeting, sales channels, KPI, search keywords (when evaluate has an improvement track record) | **Do not touch by default** |
+| **Static settings** | Sender information, response definition, notification settings, track record, outreach mode, environment, etc. | Update only if user explicitly requests it |
 
-evaluate の改善履歴がない場合（evaluations が0件）は、全セクションを「未設定」または「静的設定」として扱う。
+If there is no evaluate improvement history (0 evaluations), treat all sections as "not set" or "static settings".
 
-**テンプレート更新の検知:** `references/strategy-template.md` のセクション見出しと既存ファイルを比較し、テンプレートにあるが既存ファイルにないセクションがあれば「プラグイン更新で追加された可能性のあるセクション」として報告する。
+**Template update detection:** Compare section headings in `references/strategy-template.md` with the existing file. If a section exists in the template but not in the existing file, report it as "a section possibly added by a plugin update".
 
-#### ユーザーへの報告と方針確認
+#### Report to User and Confirm Policy
 
-ユーザーに現状を報告する:
-1. **記載済みセクション**: 各セクションの要約を1行ずつ
-2. **evaluate 管轄セクション**: evaluate が何回改善を実施したか、直近の改善内容のサマリー。「これらのセクションはデータに基づく改善が蓄積されています」と伝える
-3. **未記載・不完全なセクション**: 何が不足しているか具体的に。テンプレート更新で追加されたセクションの可能性があればその旨を添える
-4. **BUSINESS.md の概要**: 存在するか、主な内容
+Report the current state to the user:
+1. **Completed sections**: 1-line summary of each section
+2. **evaluate-managed sections**: How many times evaluate has made improvements, summary of recent improvements. Note "These sections have accumulated data-driven improvements"
+3. **Missing or incomplete sections**: Specifically state what's missing. Mention if sections may have been added by template updates
+4. **BUSINESS.md overview**: Whether it exists, main content
 
-ユーザーに方針を確認する:
-- **「不足分を埋める」**（デフォルト推奨）: 未設定セクションの情報のみ収集。evaluate 管轄セクションには触れない
-- **「特定セクションを更新」**: ユーザーが指定したセクションの情報を再収集。evaluate 管轄セクションを指定した場合は「蓄積された改善がリセットされます」と警告し、確認を取る
-- **「事業方針の転換」**: 事業・製品・ターゲットの根本的な変更時。evaluate 管轄セクションも含めて全セクションを再構築する（蓄積された改善はリセットされる）
+Confirm policy with user:
+- **"Fill in missing items"** (default recommendation): Only collect information for unset sections. Don't touch evaluate-managed sections
+- **"Update specific sections"**: Only collect information for user-specified sections. If evaluate-managed sections are specified, warn "Accumulated improvements will be reset" and confirm
+- **"Business pivot"**: For fundamental changes to business, product, or target. Reconstruct all sections including evaluate-managed ones (accumulated improvements will be reset)
 
-**他プロジェクトの参照（初回モードのみ）:** ワークスペースルートに `$0` 以外のプロジェクトディレクトリが存在する場合、それらの `BUSINESS.md` / `SALES_STRATEGY.md` を読み込んでおく。2つ目以降のプロジェクト作成時は、既存プロジェクトの戦略を参考にできる（ターゲット像、チャネル選定、メッセージング構成など）。ただし、扱うサービス・製品が異なる場合はその差異に十分留意し、安易にコピーしないこと。既存プロジェクトの存在をユーザーに伝え、参考にするか確認する。更新モードでは不要（既に自プロジェクトの戦略が確立されているため）。
+**Reference other projects (initial mode only):** If projects other than `$0` exist at the workspace root, read their `BUSINESS.md` / `SALES_STRATEGY.md`. For second and subsequent project creation, existing project strategies can be referenced (target persona, channel selection, messaging structure, etc.). However, pay close attention to differences when the service or product differs — don't copy carelessly. Inform the user of existing projects and confirm whether to reference them. (Not needed in update mode — own project strategy is already established.)
 
-### 4. 情報収集（対話式・段階的）
+### 4. Information Collection (Interactive, step by step)
 
-AskUserQuestionを使い、以下の情報を**1ステップずつ順番に**対話的に収集する。
-ユーザーには雑に・箇条書きで入力してもらって構わない旨を伝える。
+Use AskUserQuestion to interactively collect the following information **one step at a time**.
+Let the user know they can enter information casually in bullet points.
 
-**モードに応じた実行範囲:**
-- **初回モード**: 以下の全ステップを順に実行する
-- **更新モード（不足分を埋める）**: ステップ3で未設定と判定されたセクションに対応するステップのみ実行する。充足済み・evaluate 管轄のステップはスキップ
-- **更新モード（特定セクション更新）**: ユーザーが指定したセクションに対応するステップのみ実行する。既存値を提示し変更点を確認
-- **更新モード（事業方針の転換）**: 全ステップを実行するが、各ステップで既存値をデフォルトとして提示し「変更ありますか？」と聞く。変更がなければそのまま維持
+**Execution scope by mode:**
+- **Initial mode**: Execute all steps below in sequence
+- **Update mode (fill in missing items)**: Only execute steps corresponding to sections determined as unset in step 3. Skip completed and evaluate-managed steps
+- **Update mode (update specific sections)**: Only execute steps corresponding to user-specified sections. Show existing values and confirm what changes
+- **Update mode (business pivot)**: Execute all steps, but present existing values as defaults and ask "Any changes?" at each step. Retain if no changes
 
-#### 基本方針
-- **1回の質問で聞くのは1〜2項目まで**。回答を受けてから次の質問に進む
-- **各質問で具体例・選択肢・おすすめを提示**し、ユーザーが答えやすくする
-- 前のステップの回答内容を踏まえて次の質問を組み立てる（文脈に応じた深掘り）
-- 「わからない」「おまかせ」と言われたら、業界のベストプラクティスや一般的な傾向に基づいて合理的に推論し提案する。提案内容をユーザーに示して確認を取ってから採用する
+#### Basic Policy
+- **Ask only 1-2 items per question**. Move to the next question after receiving an answer
+- **Provide examples, choices, and recommendations for each question** to make it easy for the user to answer
+- Build the next question based on the previous answer (context-aware follow-up)
+- If user says "I don't know" or "up to you", reasonably infer based on industry best practices and general trends, propose it to the user, and adopt it after confirmation
 
-#### ステップ 4-1: 事業概要
-質問: 事業・サービス・製品の概要（何をしている組織か、何を売りたいか）
-- 例を示す:「例: SaaS型の勤怠管理システムを提供している」「例: 中小企業向けの税務顧問サービス」など
-- 回答が曖昧な場合は「具体的にはどんなお客様のどんな課題を解決しますか？」と深掘りする
+#### Step 4-1: Business Overview
+Question: Business/service/product overview (what the organization does, what to sell)
+- Show examples: "Example: Provides SaaS attendance management system" "Example: Tax consulting service for small businesses"
+- If vague: Follow up with "Specifically, what problem does it solve for what type of customer?"
 
-#### ステップ 4-2: ターゲット顧客
-質問: 誰に売りたいか（業種・企業規模・役職・特徴）
-- 前ステップの事業内容を踏まえて、ありがちなターゲット像を例示する
-  - 例:「勤怠管理SaaSであれば、従業員50〜300名の中小企業の人事部長や総務担当がよくあるターゲットです」
-- 「おまかせ」の場合: 事業内容から最も合理的なターゲットを推論して提案
+#### Step 4-2: Target Customers
+Question: Who do you want to sell to (industry, company size, role, characteristics)
+- Use the business content from the previous step to give examples of typical target personas
+  - Example: "For attendance management SaaS, HR managers or administrative staff at small companies with 50-300 employees are common targets"
+- If "up to you": Infer the most rational target from the business content and propose
 
-#### ステップ 4-3: 特徴・差別化・競合
-質問: サービスの特徴、セールスポイント、競合と比べた差別化ポイント
-- 前ステップまでの情報をもとに想定される競合を例示する
-  - 例:「この分野だと〇〇や△△が競合として考えられますが、御社の強みは何ですか？」
-- WebSearchで主要な競合を軽く調べて例示してもよい。検索結果のページ内容を確認する場合は `fetch_url.py` を使う:
+#### Step 4-3: Features, Differentiation, and Competition
+Question: Service features, selling points, and differentiation from competitors
+- Use information so far to give examples of likely competitors
+  - Example: "In this field, X and Y are likely competitors — what are your strengths?"
+- May lightly research major competitors via WebSearch and give examples. Use `fetch_url.py` to check page content from search results:
   ```bash
-  python3 ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_url.py --url "<URL>" --prompt "この企業のサービス内容と特徴を抽出" --timeout 15
+  python3 ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_url.py --url "<URL>" --prompt "Extract this company's service content and features" --timeout 15
   ```
-- 「おまかせ」の場合: Web調査結果と事業内容から差別化ポイントを推論して提案
+- If "up to you": Infer differentiation points from web research results and business content and propose
 
-#### ステップ 4-4: 実績・社会的証明
-質問: メールに記載できる具体的な実績・導入事例・数字はあるか
-- 例を示す:「導入企業数」「具体的な改善数値（コスト削減率、時間短縮、売上向上等）」「顧客の声」「メディア掲載」
-- 自社での活用実績も有効（例:「自社の営業で月XX件の商談を創出」）
-- 「まだない」の場合: β版実績や機能から推定できる効果見込みを一緒に考え、記載する。全く実績がない場合でも、信頼の根拠になる情報を1つは用意する（例:「代表のXX年のXX業界経験」「XX技術を活用」等）
+#### Step 4-4: Track Record / Social Proof
+Question: Are there any specific track records, case studies, or numbers that can be included in emails?
+- Show examples: "Number of companies using it", "Specific improvement numbers (cost reduction rate, time savings, sales increase, etc.)", "Customer testimonials", "Media coverage"
+- Own usage track record also works (e.g., "Generated XX sales meetings per month using our own sales process")
+- If "not yet available": Think together about estimated effects derivable from beta results or features, and include them. Even without any track record, prepare at least 1 trust foundation (e.g., "XX years of XX industry experience by founder", "Using XX technology", etc.)
 
-#### ステップ 4-5: 価格帯と課題
-質問: 価格帯（または料金体系）と、現在の営業上の課題や悩み
-- 一般的な料金体系のパターンを選択肢として提示する
-  - 例:「月額サブスク / 従量課金 / 初期費用＋月額 / スポット料金 などが一般的ですが、どれに近いですか？」
-- 「おまかせ」の場合: 同業界の一般的な価格帯を調査して提案
+#### Step 4-5: Pricing and Challenges
+Question: Price range (or pricing structure) and current sales challenges or concerns
+- Show typical pricing structure patterns as options
+  - Example: "Monthly subscription / usage-based / initial fee + monthly / spot pricing are common — which is closest to yours?"
+- If "up to you": Research common price ranges in the industry and propose
 
-#### ステップ 4-6: 送信者情報
-質問: 以下を順に確認する（これらは営業メール送信に必須）
-- 組織の電話番号（問い合わせフォーム入力時に必要になることがある）
-- 送信者名（メールの差出人名）
-- 送信元メールアドレス（営業メールを送るアカウント）
-- 署名情報（組織名・氏名・役職・電話番号・URL等）
-  - 署名の一般的なフォーマット例を提示する
+#### Step 4-6: Sender Information
+Question: Confirm the following in order (these are required for email sending)
+- Organization's phone number (may be needed when filling in contact forms)
+- Sender name (name displayed as email sender)
+- Sender email address (account used to send sales emails)
+- Signature information (organization name, full name, title, phone number, URL, etc.)
+  - Show a common signature format example
 
-これらはoutbound処理で必須なので「おまかせ」不可。必ずユーザーから取得する。
+These are required for outbound processing so "up to you" is not allowed. Must be obtained from the user.
 
-#### ステップ 4-7: 日程調整・反応定義
-質問: 以下を確認する
-- 日程調整リンク（Timerex / Calendly 等のURL。なければ「なし」）
-  - 「日程調整ツールを使っていますか？Timerex、Calendly、Cal.comなどが一般的です」と選択肢を提示
-- 反応の定義: 何を「反応あり」とみなすか
-  - 選択肢を提示:「一般的には以下を『反応あり』とします: ① メールへの直接返信 ② 日程調整の完了通知 ③ フォーム経由の返信。これでよいですか？他にもあれば追加できます」
-- 使用中の日程調整サービス名と通知元メールアドレス
-- 「おまかせ」の場合: 反応定義は上記①②③をデフォルト採用
+#### Step 4-7: Scheduling and Response Definition
+Question: Confirm the following
+- Scheduling link (Timerex / Calendly, etc. URL. "None" if not applicable)
+  - "Do you use a scheduling tool? Timerex, Calendly, Cal.com are common options"
+- Response definition: What counts as a "response"
+  - Show options: "Common responses counted as 'responded': ① Direct email reply ② Scheduling completion notification ③ Reply via contact form. Is this OK? Add if there are others"
+- Scheduling service name in use and notification sender email address
+- If "up to you": Use ①②③ above as default for response definition
 
-#### ステップ 4-8: 通知設定
-質問: daily-cycle完了時の通知先メールアドレス（不要なら「なし」）
-- 「毎日の営業サイクル完了時にレポートをメール通知できます。通知が必要であればメールアドレスを教えてください」と案内
+#### Step 4-8: Notification Settings
+Question: Email address to receive daily-cycle completion notifications (or "none")
+- "We can send you a daily report notification when the daily sales cycle completes. Please provide an email address if you'd like notifications"
 
-### 5. Web調査（補足）
+### 5. Web Research (supplementary)
 
-ユーザーから得た情報を補完するため、必要に応じてWebSearchで市場・競合情報を調査する。検索結果のページ内容を確認する場合は `fetch_url.py` を使う:
+Supplement information obtained from the user with WebSearch for market and competitor information as needed. Use `fetch_url.py` to check page content from search results:
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_url.py --url "<URL>" --prompt "<抽出したい情報>" --timeout 15
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_url.py --url "<URL>" --prompt "<information to extract>" --timeout 15
 ```
 
-### 6. BUSINESS.md 生成/更新
+### 6. Generate/Update BUSINESS.md
 
-- **初回モード**: `references/business-template.md` のテンプレートに従って `$0/BUSINESS.md` を生成する
-- **更新モード**: 既存の `$0/BUSINESS.md` を読み込み、変更・追加があった情報のみ反映する。変更のないセクションはそのまま維持する
+- **Initial mode**: Generate `$0/BUSINESS.md` following the template in `references/business-template.md`
+- **Update mode**: Load existing `$0/BUSINESS.md` and reflect only changed or added information. Keep sections without changes as-is
 
-### 7. SALES_STRATEGY.md 生成/更新
+### 7. Generate/Update SALES_STRATEGY.md
 
-- **初回モード**: `references/strategy-template.md` のテンプレートに従って `$0/SALES_STRATEGY.md` を生成する
-- **更新モード**: 既存の `$0/SALES_STRATEGY.md` を読み込み、変更・追加があったセクションのみ更新する。変更のないセクションはそのまま維持する。ユーザーが明示的に削除を指示しない限り、既存の記載を消さない。**evaluate 管轄セクション（メッセージング、ターゲット、チャネル、KPI、検索キーワード）は、ユーザーが明示的に更新を指示した場合のみ書き換える**
+- **Initial mode**: Generate `$0/SALES_STRATEGY.md` following the template in `references/strategy-template.md`
+- **Update mode**: Load existing `$0/SALES_STRATEGY.md` and update only changed or added sections. Keep sections without changes as-is. Do not erase existing content unless the user explicitly instructs deletion. **Evaluate-managed sections (messaging, targeting, channels, KPI, search keywords) are only rewritten when the user explicitly instructs an update**
 
-生成・更新時に以下のリファレンスも参照し、品質を高める:
+Also refer to the following references when generating/updating to improve quality:
 
-- **`references/targeting-guide.md`**: ターゲットペルソナの具体化、競合分析の観点、USP言語化、チャネル選定基準、KPI逆算ツリー、検索キーワード設計パターン
-- **`references/industry-email-templates.md`**: ターゲット業界に応じたメールテンプレートの選択。ユーザーの業種情報に基づき最適なパターンを自動選択し、ビジネス情報（USP、実績、価格帯）に合わせてカスタマイズしてメッセージングセクションに反映する。テンプレートをそのまま使わず、必ずユーザー固有の情報で肉付けすること
+- **`references/targeting-guide.md`**: Target persona refinement, competitive analysis perspectives, USP articulation, channel selection criteria, KPI reverse calculation tree, search keyword design patterns
+- **`references/industry-email-templates.md`**: Email template selection based on target industry. Auto-select the optimal pattern based on user's industry information and customize to business info (USP, track record, pricing). Do not use templates as-is — always add flesh based on user-specific information
 
-**環境情報の反映:** ステップ2の環境チェック結果を「環境・ツール状況」セクションに記載する。利用不可のツールがある場合、「営業チャネル」セクションの選択肢にも反映する（例: gog不可ならメール自動送信を除外、Chrome不可ならフォーム・SNSを除外）
+**Reflect environment information:** Record the environment check results from step 2 in the "Environment & Tool Status" section. If any tools are unavailable, also reflect in the "Sales Channels" section (e.g., if gog unavailable, exclude email auto-sending; if Chrome unavailable, exclude forms and SNS)
 
-### 8. 完了報告
+### 8. Completion Report
 
-- **初回モード**: 生成した2ファイルの概要を報告し、次のステップとして `/build-list` の実行を案内する
-- **更新モード**: 更新内容のサマリーを報告する。変更・追加したセクションを箇条書きで明示する
+- **Initial mode**: Report an overview of the 2 generated files and guide the user to run `/build-list` as the next step
+- **Update mode**: Report a summary of what was updated. List updated and added sections in bullets

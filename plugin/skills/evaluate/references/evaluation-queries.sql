@@ -1,18 +1,18 @@
--- 評価用SQLクエリテンプレート（リファレンス用）
--- 実行は sales_queries.py の eval-* コマンドを使用すること
+-- Evaluation SQL query templates (for reference)
+-- Use the eval-* commands in sales_queries.py to execute these
 
--- アプローチ総数
+-- Total outreach count
 SELECT COUNT(*) as total_outreach
 FROM outreach_logs
 WHERE project_id = ?;
 
--- チャネル別アプローチ数
+-- Outreach count by channel
 SELECT channel, COUNT(*) as count
 FROM outreach_logs
 WHERE project_id = ?
 GROUP BY channel;
 
--- 反応数・ユニーク回答者数
+-- Response count and unique responders
 SELECT
     COUNT(*) as total_responses,
     COUNT(DISTINCT o.prospect_id) as unique_responders
@@ -20,14 +20,14 @@ FROM responses r
 JOIN outreach_logs o ON r.outreach_log_id = o.id
 WHERE o.project_id = ?;
 
--- センチメント別・反応種別の内訳
+-- Breakdown by sentiment and response type
 SELECT sentiment, response_type, COUNT(*) as count
 FROM responses r
 JOIN outreach_logs o ON r.outreach_log_id = o.id
 WHERE o.project_id = ?
 GROUP BY sentiment, response_type;
 
--- 優先度別の反応率
+-- Response rate by priority
 SELECT
     pp.priority,
     COUNT(DISTINCT CASE WHEN o.id IS NOT NULL THEN pp.prospect_id END) as contacted,
@@ -38,13 +38,13 @@ LEFT JOIN responses r ON o.id = r.outreach_log_id
 WHERE pp.project_id = ?
 GROUP BY pp.priority;
 
--- ステータス別営業先数
+-- Prospect count by status
 SELECT status, COUNT(*) as count
 FROM project_prospects
 WHERE project_id = ?
 GROUP BY status;
 
--- チャネル別反応率
+-- Response rate by channel
 SELECT
     o.channel,
     COUNT(DISTINCT o.prospect_id) as contacted,
@@ -55,14 +55,14 @@ LEFT JOIN responses r ON o.id = r.outreach_log_id
 WHERE o.project_id = ?
 GROUP BY o.channel;
 
--- 反応があったメールの本文（全件）
+-- Full body of emails that received responses
 SELECT o.id, o.channel, o.subject, o.body, r.sentiment, r.response_type
 FROM outreach_logs o
 JOIN responses r ON o.id = r.outreach_log_id
 WHERE o.project_id = ?
 ORDER BY r.received_at DESC;
 
--- 反応がなかったメールの本文（サンプル）
+-- Sample of emails that received no response
 SELECT o.id, o.channel, o.subject, o.body
 FROM outreach_logs o
 LEFT JOIN responses r ON o.id = r.outreach_log_id

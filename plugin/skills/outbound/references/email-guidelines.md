@@ -1,108 +1,108 @@
-# メール作成ガイドライン
+# Email Writing Guidelines
 
-## 基本方針
+## Core Policy
 
-SALES_STRATEGY.md の「メッセージング」セクションと「アウトリーチモード」を基に、各営業先に合わせたメールを作成する。
+Write emails tailored to each prospect based on the "Messaging" section and "Outreach Mode" in SALES_STRATEGY.md.
 
-## アウトリーチモード別の方針
+## Policy by Outreach Mode
 
-SALES_STRATEGY.md の「アウトリーチモード」を確認し、モードに応じてパーソナライズの深さを変える。
+Check the "Outreach Mode" in SALES_STRATEGY.md and vary the depth of personalization accordingly.
 
-### precision モード（デフォルト）
+### precision mode (default)
 
-深いパーソナライズで返信率を最大化する。
+Maximize response rate with deep personalization.
 
-- **情報収集**: 営業先の `overview` と `match_reason` に加え、直近のニュース・プレスリリース・採用情報・資金調達等の最新情報も参照して書く
-- **冒頭**: 相手の具体的な取り組み・数値・実績に言及する（「700社参加の合同企業説明会」等）
-- **課題提起〜解決策**: 相手固有の状況に基づいて組み立てる。汎用的な業界課題だけでは不十分
-- **本文全体**: overview / match_reason から読み取れる具体情報を複数箇所に散りばめる
+- **Information gathering**: In addition to the prospect's `overview` and `match_reason`, reference recent news, press releases, job postings, funding rounds, and other current information
+- **Opening**: Reference specific initiatives, figures, or achievements of the recipient ("e.g., joint job fair with 700 companies")
+- **Problem framing → solution**: Build around the prospect's specific situation. Generic industry challenges alone are insufficient
+- **Overall body**: Weave specific information drawn from overview / match_reason throughout multiple sections
 
-### volume モード
+### volume mode
 
-テンプレートベースのセミパーソナライズで効率を重視する。
+Prioritize efficiency with template-based semi-personalization.
 
-- **情報収集**: `overview` と `match_reason` のみ使用。追加リサーチは不要
-- **冒頭**: 相手の社名・業種・主要サービスに言及する（1行で十分）
-- **課題提起〜解決策**: SALES_STRATEGY.md のメールテンプレートの構成をそのまま使う。業種に応じた課題に差し替える程度の調整
-- **本文全体**: テンプレートの骨格を維持しつつ、冒頭と課題提起の2箇所を営業先ごとに変える
+- **Information gathering**: Use only `overview` and `match_reason`. No additional research needed
+- **Opening**: Reference the recipient's company name, industry, and main service (one line is sufficient)
+- **Problem framing → solution**: Use the email template structure from SALES_STRATEGY.md as-is. Adjust only to swap in industry-relevant challenges
+- **Overall body**: Maintain the template skeleton while varying the opening and problem framing per prospect
 
-## 件名
+## Subject Line
 
-- **15〜20文字**が最適。スマホのファーストビューに収まる長さ
-- 相手のメリットまたは課題が伝わるように
-- 「ご提案」「お知らせ」「ご連絡」等の汎用的な件名は避ける
-- 営業先ごとに変える。全件同じ件名にしない
-- **SALES_STRATEGY.md に件名パターンやA/Bテスト指示がある場合、必ずそれに従う**
-- 例: 「貴校の就職支援×AI面接」「採用コスト30%削減の事例」
+- **15–20 characters** is optimal. Should fit in the first view on a smartphone
+- Convey recipient benefits or challenges
+- Avoid generic subjects like "Proposal", "Announcement", "Notice"
+- Vary the subject for each prospect. Never use the same subject for all outreach
+- **If SALES_STRATEGY.md defines subject line patterns or A/B test instructions, always follow them**
+- Examples: "Your school's career support × AI interviews", "Case study: 30% reduction in hiring costs"
 
-## 本文構成
+## Body Structure
 
-1. **冒頭の挨拶**（1-2行）: 相手の `contact_name` がDBにある場合は「{氏名}様」、ない場合は「{組織名} ご担当者様」とする。「ご担当者様」のみは一斉送信と見なされるため禁止。なぜ連絡したか簡潔に
-2. **課題提起**（2-3行）: 相手が抱えているであろう課題を具体的に
-3. **解決策**（2-3行）: 自社サービスがどう解決するか
-4. **実績/証拠**（1-2行）: SALES_STRATEGY.md の「実績・社会的証明」セクションから最低1つ引用する。具体的な数字があると信頼性が大きく変わる
-5. **CTA**（1行）: 次のアクションを1つだけ提示
-6. **法的必須表示**: オプトアウト案内（後述）
-7. **署名**: SALES_STRATEGY.md の「送信者情報」セクションを使用
+1. **Opening greeting** (1-2 lines): Use "{full name}" if the prospect's `contact_name` is in the DB, otherwise use "{organization name} Team" — using "Team" alone reads as mass outreach and is prohibited. Briefly explain why you're reaching out
+2. **Problem framing** (2-3 lines): Specifically address the challenge the recipient likely faces
+3. **Solution** (2-3 lines): How your service solves it
+4. **Track record / proof** (1-2 lines): Quote at least one item from the "Track Record / Social Proof" section of SALES_STRATEGY.md. Specific numbers significantly increase credibility
+5. **CTA** (1 line): Present exactly one next action
+6. **Legal required disclosures**: Opt-out notice (see below)
+7. **Signature**: Use the "Sender Information" section from SALES_STRATEGY.md
 
-## CTA（Call to Action）
+## CTA (Call to Action)
 
-**1メールにCTAは1つだけ。** 複数のお願い（「資料もご覧ください」「返信もお待ちしています」「サイトもぜひ」）は返信率を下げる。
+**One CTA per email.** Multiple asks ("please also check our materials", "we'd love a reply", "please visit our site") lower response rates.
 
-**質問形式が最も効果的:**
-- 良い例: 「来週15分ほど情報交換のお時間をいただけますか？」
-- 良い例: 「御社でも同じ課題を感じていらっしゃいますか？」
-- 悪い例: 「詳細はこちらをご覧ください」（返信不要に見える）
-- 悪い例: 「ぜひお問い合わせください」（行動が曖昧）
+**Question format is most effective:**
+- Good: "Could we schedule 15 minutes for an information exchange next week?"
+- Good: "Do you face the same challenge at your company?"
+- Bad: "See details here" (looks like no reply needed)
+- Bad: "Please contact us" (action is vague)
 
-**日程調整リンクがある場合:**
-- CTAの質問の後にリンクを添える: 「〜お時間いただけますか？ご都合の良い日時をお選びください: {リンク}」
-- リンクだけ貼って終わりにしない。質問で返信を促す
+**When a scheduling link is available:**
+- Add the link after the CTA question: "Could we find time? Please pick a time that works for you: {link}"
+- Don't just paste the link and stop. Use a question to encourage a reply
 
-## カスタマイズの情報源
+## Customization Sources
 
-- `overview`: その営業先の事業概要。具体的な取り組み・サービス・特徴が書かれている
-- `match_reason`: なぜターゲットとして選んだか。相手の課題・ニーズが書かれている
+- `overview`: Business overview of the prospect. Contains specific initiatives, services, and features
+- `match_reason`: Why this prospect was selected as a target. Contains their challenges and needs
 
-**悪い例（冒頭だけ差し替えでテンプレ感が強い）:**
-> 貴校のIT・ゲーム系人材育成への取り組みを拝見し、ご連絡いたしました。
-> 昨今、○○業界では△△が課題となっており...（以下全員同じ）
+**Bad example (feels templated with only the opening changed):**
+> I noticed your initiatives in IT/game talent development and am reaching out.
+> These days, the ○○ industry is facing the challenge of △△... (identical for everyone below)
 
-**良い例（相手に合わせて書かれている）:**
-> 貴校の約700社参加の合同企業説明会や模擬面接など、充実した就職支援体制を拝見しご連絡いたしました。
-> これだけの規模の就活支援を行われている中で、学生一人ひとりの面接練習機会の確保は課題ではないでしょうか。
+**Good example (written to the specific recipient):**
+> I'm reaching out after seeing your robust career support program — including a joint job fair with roughly 700 companies and mock interviews.
+> With a career support program at this scale, I imagine ensuring sufficient individual mock interview practice time for each student is a real challenge.
 
-## 法的必須表示（特定電子メール法）
+## Required Legal Disclosures (Act on Regulation of Transmission of Specified Electronic Mail)
 
-Web公開メールアドレスへの営業メールは合法だが、以下の表示が**法律で義務付けられている**。署名ブロックの一部として必ず含めること:
+Outbound emails to publicly listed email addresses are legal, but the following disclosures are **required by law**. Always include them as part of the signature block:
 
-- 送信者の氏名または法人名（署名に含まれていればOK）
-- 送信者の住所（署名に含まれていればOK）
-- **受信拒否の案内**: 「今後のご連絡が不要な場合は、本メールにその旨ご返信ください」等の一文
+- Sender's name or corporate name (acceptable if included in signature)
+- Sender's address (acceptable if included in signature)
+- **Opt-out notice**: A line such as "If you would prefer not to receive further emails, please reply to this message."
 
-SALES_STRATEGY.md の署名ブロックにこれらが含まれていることを確認する。含まれていない場合は、メール末尾に受信拒否案内を追記する。
+Verify that these are included in the signature block in SALES_STRATEGY.md. If not, add the opt-out notice at the end of the email.
 
-## 送信方法
+## Sending Method
 
-`send_and_log.py` で送信+DB記録を一括実行する（SKILL.md の手順を参照）。
+Use `send_and_log.py` to send and record to the DB in one step (see SKILL.md for instructions).
 
-## NG パターン（よくある失敗）
+## NG Patterns (Common Mistakes)
 
-以下は返信率を著しく下げるパターン。作成したメールがこれらに該当していないか毎回確認すること。
+Check each email against these patterns that significantly lower response rates before sending.
 
-| NG | 理由 | 正しくは |
+| NG | Reason | Correct approach |
 |---|---|---|
-| 宛名が「ご担当者様」のみ | 一斉送信と判断され読まれない | 「{組織名} ご担当者様」または「{氏名}様」 |
-| CTAがURLだけ | 何をしてほしいか不明。URLクリックはハードルが高い | 質問形式で返信を促す（URLは補助的に添える程度） |
-| 実績・社会的証明がゼロ | 初対面で信頼する根拠がない | SALES_STRATEGY.md の実績から最低1つ引用 |
-| 冒頭だけ差し替えで残りがテンプレ | 相手は「自分宛でない」とわかる | overview / match_reason を本文全体に散りばめる（precision時） |
-| 裸URLの羅列 | スパムフィルターに引っかかりやすい | テキストに自然に組み込むか、CTAに1つだけ |
-| 自社アピールが先に来る | 相手の課題への共感がないと読み進められない | 相手の状況→課題→解決策の順で構成 |
+| Salutation is "Team" only | Perceived as mass outreach; likely to be ignored | Use "{organization name} Team" or "{full name}" |
+| CTA is just a URL | Unclear what action is expected; clicking a URL is a high-friction action | Use question format to prompt a reply (URL is supplementary) |
+| Zero track record / social proof | No basis for trust from a stranger | Quote at least one item from the track record in SALES_STRATEGY.md |
+| Only opening is changed; rest is template | Recipient can tell it's not meant for them | Weave overview / match_reason throughout the body (in precision mode) |
+| Bare URL spam | Prone to spam filters | Embed naturally in text, or include just one URL in the CTA |
+| Self-promotion comes first | Without empathy for the recipient's challenges, they won't read on | Structure as: their situation → challenge → solution |
 
-## 注意事項
+## Notes
 
-- 本文は**150〜250文字以内**（署名・法的表示除く）。短い方が返信率が高い
-- 1メール1CTA
-- 添付ファイルは送らない（初回）
-- 敬語は丁寧すぎず、ビジネスライクに。過剰な敬語はかえって距離を感じさせる
-- 「無料」「限定」「今すぐ」等のスパムトリガーワードを避ける
+- Body text should be **150–250 characters** (excluding signature and legal disclosures). Shorter emails have higher response rates
+- One CTA per email
+- No attachments (for first contact)
+- Polite but not overly formal. Excessive formality creates distance
+- Avoid spam trigger words: "free", "limited", "act now", etc.

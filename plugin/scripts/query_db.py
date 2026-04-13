@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
-"""SQL クエリ実行スクリプト（パラメータバインディング対応）
+"""SQL query execution script (supports parameter binding)
 
-**このスクリプトは /docker スキル専用。通常のスキルからは使用禁止。**
+**This script is for the /docker skill only. Do not use from normal skills.**
 
-通常の DB 操作には以下の専用スクリプトを使用すること:
-- READ クエリ: sales_queries.py
-- メール送信+ログ: send_and_log.py
-- 返信記録: record_response.py
-- ステータス更新: update_status.py
-- 評価記録: record_evaluation.py
-- 営業先登録: add_prospects.py
-- DB初期化: init_db.py
+For regular DB operations, use the dedicated scripts below:
+- READ queries: sales_queries.py
+- Email send + logging: send_and_log.py
+- Response recording: record_response.py
+- Status update: update_status.py
+- Evaluation recording: record_evaluation.py
+- Prospect registration: add_prospects.py
+- DB initialization: init_db.py
 
 Usage:
   query_db.py <db_path> <sql> [param1] [param2] ...
 
-SELECT の場合は結果を JSON 配列で stdout に出力する。
-INSERT の場合は {"last_id": <rowid>} を出力する。
-UPDATE/DELETE の場合は {"rows_affected": <count>} を出力する。
+For SELECT: outputs result as a JSON array to stdout.
+For INSERT: outputs {"last_id": <rowid>}.
+For UPDATE/DELETE: outputs {"rows_affected": <count>}.
 
-パラメータは SQL 内の ? プレースホルダに順番に対応する。
+Parameters correspond in order to the ? placeholders in the SQL.
 """
 
 from __future__ import annotations
@@ -31,13 +31,13 @@ from sales_db import error_exit, get_connection, print_json, rows_to_dicts
 
 
 def detect_stmt_type(sql: str) -> str:
-    """SQL文の種別を判定する。コメントや WITH 句を考慮する。"""
-    # 行コメント (-- ...) を除去
+    """Detect the SQL statement type, accounting for comments and WITH clauses."""
+    # Strip line comments (-- ...)
     clean = re.sub(r"--[^\n]*", "", sql).strip().upper()
     if not clean:
         return "UNKNOWN"
     first = clean.split()[0]
-    # WITH ... SELECT のケース
+    # Handle WITH ... SELECT case
     if first == "WITH":
         if "SELECT" in clean:
             return "SELECT"

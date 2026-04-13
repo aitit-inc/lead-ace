@@ -1,6 +1,6 @@
-"""outreach_logs に送信重複チェック用の複合インデックスを追加
+"""Add a composite index to outreach_logs for send deduplication
 
-send_and_log.py の check_already_attempted() クエリを高速化する。
+Speeds up the check_already_attempted() query in send_and_log.py.
 """
 
 import sqlite3

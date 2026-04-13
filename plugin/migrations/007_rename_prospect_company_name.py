@@ -1,7 +1,7 @@
-"""prospects.company_name を prospects.name にリネーム
+"""Rename prospects.company_name to prospects.name
 
-organizations.name = 正式法人名、prospects.name = 営業先名（学校名・部署など）
-という区別を明確にするためのリネーム。
+Clarifies the distinction: organizations.name = official entity name,
+prospects.name = prospect name (school name, department, etc.).
 """
 
 import sqlite3

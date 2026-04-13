@@ -1,128 +1,128 @@
-# 連絡先取得リファレンス
+# Contact Enrichment Reference
 
-営業先候補の公式サイトを探索し、連絡先情報（メールアドレス・問い合わせフォームURL）を取得する手順。
+A procedure for exploring prospect candidates' official websites to retrieve contact information (email addresses and inquiry form URLs).
 
-## 入力
+## Input
 
-営業先候補のリスト。各候補には最低限以下が含まれる:
-- `name`: 営業先名（学校名・会社名等）
-- `organization_name`: 正式法人名（check_corporate_number.py で確認済み）
-- `corporate_number`: 法人番号（13桁）
-- `website_url`: 公式サイトURL
-- `overview`: 事業概要
-- その他 build-list Phase 1 で取得済みの情報（industry, department 等）
+A list of prospect candidates. Each candidate includes at minimum:
+- `name`: Prospect name (school name, company name, etc.)
+- `organization_name`: Official legal entity name (verified via check_corporate_number.py)
+- `corporate_number`: Corporate number (13 digits)
+- `website_url`: Official website URL
+- `overview`: Business overview
+- Other information already retrieved in build-list Phase 1 (industry, department, etc.)
 
-## 探索手順
+## Exploration Procedure
 
-各候補について、以下の順で探索する。**メールアドレスの取得を最優先**し、見つからない場合のみフォームURLを探す。1候補あたりの探索は**最大8ページ**を上限とする（ステップ2でメールが見つからない場合は**最大12ページ**まで延長可）。
+For each candidate, explore in the following order. **Prioritize finding an email address** — only look for a form URL if no email is found. Limit exploration to **a maximum of 8 pages** per candidate (extendable to **a maximum of 12 pages** if no email is found in step 2).
 
-**ページ取得は `fetch_url.py` を使用する（WebFetch は使わない）:**
+**Use `fetch_url.py` for page retrieval (do not use WebFetch):**
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_url.py --url "<URL>" --prompt "<抽出指示>" --timeout 15
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_url.py --url "<URL>" --prompt "<extraction instruction>" --timeout 15
 ```
 
-### 1. サイト構造の把握（最初に必ず実施）
+### 1. Understand Site Structure (Always do this first)
 
-まず**トップページ**を `fetch_url.py` で取得し、以下を確認する:
-- **営業お断り表示のチェック（最優先）**: ページ内に「営業メールお断り」「営業目的のお問い合わせはご遠慮ください」「セールスお断り」「営業・勧誘はお断り」等の表記がないか確認する。**発見した場合、それ以降の連絡先探索を中止**し、出力JSONに `"do_not_contact": true` と `"notes": "サイトに営業お断りの記載あり: {該当テキスト}"` を設定して次の候補に進む
-- ヘッダー・フッターにメールアドレスがあるか（あればここで終了）
-- ナビゲーション・フッターのリンク一覧から、連絡先情報がありそうなページを洗い出す
+First, retrieve the **top page** with `fetch_url.py` and check:
+- **Check for sales refusal notices (highest priority)**: Look for text like "No sales emails", "Please refrain from sales inquiries", "No solicitation", etc. **If found, stop the contact search** and set `"do_not_contact": true` and `"notes": "Site states no sales outreach: {matching text}"` in the output JSON, then proceed to the next candidate
+- Whether the header/footer contains an email address (if so, stop here)
+- From the navigation/footer link list, identify pages likely to contain contact information
 
-**連絡先が見つかりやすいページの例:**
-- 「お問い合わせ」「Contact」（直接的）
-- 「会社概要」「About」「法人情報」（代表メールが載っていることが多い）
-- 「法人のお客様」「パートナー募集」「業務提携」（B2B向け窓口）
-- 「アクセス」「所在地」（住所と併記されることがある）
-- 「サイトマップ」（隠れたコンタクトページを発見できる）
+**Examples of pages that often have contact info:**
+- "Inquiry", "Contact" (direct)
+- "Company Profile", "About", "Corporate Info" (often contains a main contact email)
+- "For Business Customers", "Partner Recruitment", "Business Collaboration" (B2B-facing)
+- "Access", "Location" (sometimes listed alongside address)
+- "Sitemap" (can reveal hidden contact pages)
 
-トップページのナビゲーションから候補ページを**優先度順にリストアップ**し、上から順にアクセスする。
+**Prioritize candidate pages** from the top page navigation and access them in order.
 
-### 2. メールアドレスの探索
+### 2. Search for Email Address
 
-ステップ1でトップページのヘッダー・フッターにメールが見つかればここで終了。見つからない場合、**公式サイト内を深掘りする前に**まず外部探索を行う（公式サイト内探索より効率が良いことが多い）。
+If an email is found in the top page header/footer in step 1, stop here. If not, **before diving deeper into the official site**, conduct an external search first (often more efficient than internal site exploration).
 
-#### 2a. 外部探索（先に実施）
+#### 2a. External Search (Do this first)
 
-WebSearch で以下を検索する（1〜2クエリ）:
-- `"{会社名}" メールアドレス` または `"{会社名}" 問い合わせ先`
-- `site:prtimes.jp "{会社名}"` （PR TIMES のプレスリリースに広報メールが記載されていることが多い）
+Search with WebSearch using 1-2 queries:
+- `"{company name}" email address` or `"{company name}" contact`
+- `site:prtimes.jp "{company name}"` (PR TIMES press releases often include PR contact emails)
 
-確認先の優先順:
-- **PR TIMES 等プレスリリース配信サイト** — 広報担当メールの記載率が高い
-- **スタートアップDB**（INITIAL, STARTUP DB等）の企業ページ
-- **業界ディレクトリ・法人情報サイト**
+Priority sources to check:
+- **PR TIMES and other press release sites** — high rate of PR contact emails
+- **Startup databases** (INITIAL, STARTUP DB, etc.) company pages
+- **Industry directories and corporate information sites**
 
-ここで見つかれば探索終了。見つからない場合はステップ 2b に進む。
+If found here, stop the search. If not, proceed to step 2b.
 
-#### 2b. 公式サイト内探索
+#### 2b. Internal Site Exploration
 
-ステップ1でリストアップしたページを順に `fetch_url.py` で確認する。メールアドレスが見つかった時点で探索を終了してよい。
+Check the pages identified in step 1 one by one using `fetch_url.py`. Stop as soon as an email address is found.
 
-探索のポイント:
-- `info@`, `contact@` 等の代表メールアドレス、および担当者の個人メールアドレスを探す
-- どちらを優先するかは SALES_STRATEGY.md の方針に従う（方針がなければ見つかったものを採用）
-- ページ内に `mailto:` リンクがあれば抽出する
-- ニュースリリース・プレスリリースページに広報メールが載っていることがある
-- プライバシーポリシー末尾に管理者メールが載っていることがある
+Search tips:
+- Look for general contact emails like `info@`, `contact@`, as well as personal contact emails
+- Which to prefer: follow the policy in SALES_STRATEGY.md (if no policy, use whatever is found)
+- Extract `mailto:` links found on the page
+- News/press release pages sometimes list PR contact emails
+- Privacy policy footers sometimes list an administrator email
 
-### 3. 問い合わせフォームURLの探索（メールが見つからない場合のみ）
+### 3. Search for Inquiry Form URL (Only if no email found)
 
-メールアドレスが見つからなかった場合に限り、問い合わせフォームを探す。ステップ1のリンク一覧から適切なフォームページを探す。
+Only if no email address was found, look for an inquiry form. Use the link list from step 1 to find an appropriate form page.
 
-**適切なフォーム（登録してよい）:**
-- 「お問い合わせ」「ご相談」等の汎用的な問い合わせフォーム
-- 「法人のお客様」「業務提携」等のB2B向けフォーム
+**Appropriate forms (acceptable to register):**
+- General inquiry forms such as "Inquiry" or "Consultation"
+- B2B-oriented forms such as "For Corporate Clients" or "Business Partnership"
 
-**不適切なフォーム（登録しない）:**
-- フォームページに「営業お断り」「営業目的の問い合わせはご遠慮ください」等の記載がある → `do_not_contact: true` を設定
-- 「資料請求」「入学相談」「採用応募」「体験申込」等の用途限定フォーム
-- 「ご意見・ご要望」「お客様の声」等のフィードバック専用フォーム
-- チャットのみの窓口（URLを保存しても自動入力できない）
-- 保険契約者・既存顧客専用の問い合わせフォーム
-- 電話番号・生年月日等の不要な個人情報が必須項目のフォーム
-- 404やリンク切れのフォーム
+**Inappropriate forms (do not register):**
+- If the form page states "No sales inquiries" or "Please refrain from sales outreach" → set `do_not_contact: true`
+- Forms for specific purposes: "Request materials", "Admission inquiry", "Job application", "Trial signup", etc.
+- Feedback-only forms: "Comments/suggestions", "Customer feedback", etc.
+- Chat-only channels (no URL to save for auto-fill)
+- Forms restricted to existing customers or policyholders
+- Forms requiring unnecessary personal information (phone number, date of birth, etc.) as required fields
+- 404 or broken form links
 
-フォームURLを登録する場合は、実際にページにアクセスしてフォームの種別・必須項目を確認した上で判断する。
+When registering a form URL, actually access the page to check the form type and required fields before deciding.
 
-**フォーム種別の判定（form_type）:** フォームURLを登録する際、ページソースから以下の基準で `form_type` を判定し記録する。outbound フェーズでチャネル戦略・処理方法の判断に使用される。
+**Form type classification (form_type):** When registering a form URL, determine and record the `form_type` from the page source using the following criteria. Used by the outbound phase to determine channel strategy and processing method.
 
-| form_type | 判定基準 | outbound での扱い |
+| form_type | Detection Criteria | Handling in outbound |
 |---|---|---|
-| `google_forms` | URL に `docs.google.com/forms` を含む | formResponse POST で送信（成功率高） |
-| `native_html` | 通常の `<form>` タグ。iframe 埋め込みでない | ブラウザ操作で送信 |
-| `wordpress_cf7` | HTML に `class="wpcf7-form"` または URL に `wpcf7` を含む | ブラウザ操作。失敗時は REST API フォールバック |
-| `iframe_embed` | フォームが `<iframe>` 内に埋め込まれている（HubSpot, Marketo 等） | 送信困難。スキップ推奨 |
-| `with_captcha` | reCAPTCHA / hCaptcha / Turnstile のスクリプトタグが存在 | 送信不可。スキップ |
+| `google_forms` | URL contains `docs.google.com/forms` | Submit via formResponse POST (high success rate) |
+| `native_html` | Standard `<form>` tag, not iframe-embedded | Submit via browser automation |
+| `wordpress_cf7` | HTML has `class="wpcf7-form"` or URL contains `wpcf7` | Browser automation; fallback to REST API on failure |
+| `iframe_embed` | Form is embedded in an `<iframe>` (HubSpot, Marketo, etc.) | Difficult to submit; skip recommended |
+| `with_captcha` | reCAPTCHA / hCaptcha / Turnstile script tags present | Cannot submit; skip |
 
-判定はページの `fetch_url.py` 結果から行う（フォームページを開いた時点で確認できる情報のみ）。複数の条件に該当する場合は、より制約の強い方を採用する（例: native_html + with_captcha → `with_captcha`）。
+Determine from `fetch_url.py` results (only from information visible when the form page is opened). If multiple conditions apply, use the more restrictive one (e.g., native_html + with_captcha → `with_captcha`).
 
-### 4. 担当者名の確認（取得できれば）
+### 4. Check for Contact Person Name (If Available)
 
-連絡先探索の過程で担当者名（代表者名・広報担当者名等）が**確実に判明した場合のみ**記録する。メール宛名のパーソナライズに使用する。
+During the contact search process, record a contact person name (representative name, PR contact name, etc.) **only if clearly identified**. Used for personalizing email salutations.
 
-- 「代表取締役 山田太郎」「広報担当 鈴木花子」等、氏名が明記されている場合に取得
-- 推測・曖昧な情報は記録しない（間違った名前で送ると逆効果）
-- 担当者名の探索のためだけに追加ページを開く必要はない。連絡先探索中に自然に見つかった場合のみ
+- Retrieve name when explicitly stated such as "CEO John Smith" or "PR Contact Jane Doe"
+- Do not record guesses or ambiguous information (sending to the wrong name is counterproductive)
+- Do not open additional pages just to find a contact name. Only record if naturally found during the contact search
 
-### 5. SNSアカウントの確認（余裕があれば）
+### 5. Check SNS Accounts (If Time Permits)
 
-公式サイト上にSNSリンク（Twitter/X, LinkedIn等）があれば取得する。ただしメール・フォームの探索を優先し、SNSは見つかれば拾う程度でよい。
+If SNS links (Twitter/X, LinkedIn, etc.) are found on the official website, retrieve them. However, email/form search takes priority — SNS accounts are secondary if found.
 
-## 出力
+## Output
 
-各候補について、取得した情報をJSON形式で返す。**フィールド名は以下の通り厳守すること**（DB登録スクリプトがこの名前を期待している）:
+For each candidate, return retrieved information in JSON format. **Field names must strictly follow the format below** (the DB registration script expects these exact names):
 
 ```json
 [
   {
-    "name": "A社",
-    "organization_name": "A社（正式法人名）",
+    "name": "Company A",
+    "organization_name": "Company A (official legal name)",
     "corporate_number": "1234567890123",
     "department": null,
-    "contact_name": "山田太郎",
+    "contact_name": "John Smith",
     "website_url": "https://a.com",
-    "overview": "事業概要",
-    "industry": "業種",
+    "overview": "Business overview",
+    "industry": "Industry",
     "email": "info@a.com",
     "contact_form_url": null,
     "form_type": null,
@@ -133,17 +133,17 @@ WebSearch で以下を検索する（1〜2クエリ）:
 ]
 ```
 
-**フィールド名の注意:**
-- 担当者名は `contact_name`（確実に判明した場合のみ。不明なら省略またはnull）
-- フォームURLは `contact_form_url`（`form_url` ではない）
-- SNSは `sns_accounts`（JSON object、例: `{"x": "@handle", "linkedin": "URL"}`。`sns_url` や `sns_type` ではない）
-- `priority` は 1-5 の数値（文字列 "high"/"low" 等ではない）
-- `form_type`: フォームの種別（`"google_forms"` / `"native_html"` / `"wordpress_cf7"` / `"iframe_embed"` / `"with_captcha"` / `null`）。`contact_form_url` が null の場合は null
-- `do_not_contact`: サイトに営業お断りの記載があった場合に `true` を設定（省略時は `false`）
-- `notes`: do_not_contact の理由など補足情報（省略可）
+**Field name notes:**
+- Contact person name: `contact_name` (only if clearly identified; omit or null if unknown)
+- Form URL: `contact_form_url` (not `form_url`)
+- SNS: `sns_accounts` (JSON object, e.g., `{"x": "@handle", "linkedin": "URL"}`; not `sns_url` or `sns_type`)
+- `priority` is a numeric value 1-5 (not a string like "high"/"low")
+- `form_type`: Form type (`"google_forms"` / `"native_html"` / `"wordpress_cf7"` / `"iframe_embed"` / `"with_captcha"` / `null`). Null if `contact_form_url` is null
+- `do_not_contact`: Set to `true` if the site has a sales refusal notice (omit or `false` otherwise)
+- `notes`: Supplementary information such as reason for do_not_contact (optional)
 
-**その他:**
-- `email` が見つかった場合は `contact_form_url` は不要（null でよい）
-- 両方見つからなかった場合は、両方 null のまま返す（登録はするが、outbound時にスキップされる）
-- Phase 1 で渡された `match_reason`, `priority` 等の情報はそのまま維持して返す
-- **営業お断りが検出された候補も登録する**（再度同じサイトを訪問して確認する無駄を防ぐため）。`do_not_contact: true` で登録されるため outbound 対象外になる
+**Other:**
+- If `email` is found, `contact_form_url` is not needed (can be null)
+- If neither is found, return both as null (register anyway; will be skipped during outbound)
+- Preserve `match_reason`, `priority`, and other information passed from Phase 1
+- **Candidates with do_not_contact detected should still be registered** (to avoid revisiting the same site). They will be registered with `do_not_contact: true` and thus excluded from outbound

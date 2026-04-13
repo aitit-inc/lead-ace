@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""プロジェクトの全データを1トランザクションで削除するスクリプト
+"""Script to delete all project data in a single transaction
 
 Usage:
   delete_project.py <db_path> <project_id>
 
-削除対象テーブル（外部キー制約の依存順）:
-  1. responses（outreach_logs 経由）
+Tables deleted in foreign key dependency order:
+  1. responses (via outreach_logs)
   2. outreach_logs
   3. evaluations
   4. project_prospects
@@ -28,14 +28,14 @@ def main() -> None:
 
     conn = get_connection(db_path)
     try:
-        # プロジェクトの存在確認
+        # Check project exists
         row = conn.execute(
             "SELECT id FROM projects WHERE id = ?", (project_id,)
         ).fetchone()
         if row is None:
-            error_exit(f"プロジェクト '{project_id}' が見つかりません")
+            error_exit(f"Project '{project_id}' not found")
 
-        # 外部キー制約の依存順に削除
+        # Delete in foreign key dependency order
         r1 = conn.execute(
             "DELETE FROM responses WHERE outreach_log_id IN "
             "(SELECT id FROM outreach_logs WHERE project_id = ?)",
@@ -71,7 +71,7 @@ def main() -> None:
         })
     except Exception as e:
         conn.rollback()
-        error_exit(f"削除中にエラーが発生しました: {e}")
+        error_exit(f"Error during deletion: {e}")
     finally:
         conn.close()
 

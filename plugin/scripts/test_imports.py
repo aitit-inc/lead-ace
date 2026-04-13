@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""全モジュールのインポートテスト
+"""Import test for all modules
 
-各モジュールを import するだけで、モジュールレベルの assertion（フィールド完全性チェック等）が
-実行される。pyright と併用し、コミット前に実行すること:
+Importing each module triggers module-level assertions (field completeness checks, etc.).
+Run this together with pyright before committing:
 
   cd plugins/lead-ace/scripts && npx pyright && python3 test_imports.py
 """
@@ -45,12 +45,12 @@ def main() -> None:
             failures.append(f"  {name}: {e}")
 
     if failures:
-        print(f"FAIL: {len(failures)}/{len(MODULES)} モジュールでエラー", file=sys.stderr)
+        print(f"FAIL: errors in {len(failures)}/{len(MODULES)} modules", file=sys.stderr)
         for line in failures:
             print(line, file=sys.stderr)
         sys.exit(1)
     else:
-        print(f"OK: {len(MODULES)} モジュール全て正常")
+        print(f"OK: all {len(MODULES)} modules loaded successfully")
 
 
 if __name__ == "__main__":

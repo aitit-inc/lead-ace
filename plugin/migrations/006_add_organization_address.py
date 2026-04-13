@@ -1,6 +1,6 @@
-"""organizations テーブルに address カラムを追加
+"""Add address column to the organizations table
 
-国税庁法人番号公表サイトの所在地情報を保持する。法人番号の照合にも使用。
+Stores the address from the NTA Corporate Number Publication Site. Also used for corporate number verification.
 """
 
 import sqlite3

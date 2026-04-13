@@ -1,7 +1,7 @@
-"""prospects テーブルに form_type カラムを追加
+"""Add form_type column to the prospects table
 
-form_type カラムが存在しない古いDBからのアップグレード用。
-sales-db.sql には最初から含まれているため、新規DBでは no-op。
+For upgrading from older DBs that do not have the form_type column.
+Since sales-db.sql already includes it, this is a no-op on new DBs.
 """
 
 import sqlite3

@@ -1,33 +1,33 @@
 #!/usr/bin/env python3
-"""営業DBの定型クエリ実行スクリプト（READ専用）
+"""Standard query execution script for the sales DB (READ-only)
 
 Usage:
   sales_queries.py <db_path> <command> [args...]
 
-シェルのエスケープ問題を回避するため、シングルクォートを含む複雑なSQLを
-名前付きサブコマンドとして実行する。全コマンドは SELECT のみ（書き込みなし）。
+Complex SQL containing single quotes is executed as named subcommands
+to avoid shell escaping issues. All commands are SELECT-only (no writes).
 
 Commands:
-  list-projects                        全プロジェクト一覧
-  project-exists <project_id>          プロジェクトの存在確認
-  count-reachable <project_id>         アプローチ可能な未送信営業先数（email/form/SNSいずれかあり）
-  count-reachable-by-channel <project_id>  チャネル別の未送信営業先数
-  list-reachable <project_id> <limit>  アプローチ可能な未送信営業先リスト（email→form→SNSの優先順）
-  recent-outreach <project_id>         直近4営業日以内のアプローチ済み営業先
-  data-sufficiency <project_id>        evaluate用のデータ充足度チェック
-  last-evaluation <project_id>         最新のevaluation日時
-  evaluation-history <project_id>      evaluate による改善履歴（直近10件）
-  existing-list <project_id>           登録済み営業先の直近50件
-  all-prospect-identifiers <project_id>  全登録済み営業先の名前・URL一覧（重複回避用）
-  eval-total-outreach <project_id>     アプローチ総数
-  eval-channel-counts <project_id>     チャネル別アプローチ数
-  eval-response-counts <project_id>    反応数・ユニーク回答者数
-  eval-sentiment-breakdown <project_id> センチメント別・反応種別の内訳
-  eval-priority-response-rate <project_id> 優先度別反応率
-  eval-status-counts <project_id>      ステータス別営業先数
-  eval-channel-response-rate <project_id> チャネル別反応率
-  eval-responded-messages <project_id> 反応ありメッセージ全文
-  eval-no-response-sample <project_id> 反応なしメッセージサンプル
+  list-projects                        List all projects
+  project-exists <project_id>          Check if a project exists
+  count-reachable <project_id>         Count reachable unsent prospects (with email/form/SNS)
+  count-reachable-by-channel <project_id>  Count unsent prospects by channel
+  list-reachable <project_id> <limit>  List reachable unsent prospects (email→form→SNS priority)
+  recent-outreach <project_id>         Prospects contacted within the last 4 business days
+  data-sufficiency <project_id>        Data sufficiency check for evaluate
+  last-evaluation <project_id>         Timestamp of the most recent evaluation
+  evaluation-history <project_id>      Improvement history from evaluate (last 10)
+  existing-list <project_id>           Last 50 registered prospects
+  all-prospect-identifiers <project_id>  Names and URLs of all registered prospects (for dedup)
+  eval-total-outreach <project_id>     Total outreach count
+  eval-channel-counts <project_id>     Outreach count by channel
+  eval-response-counts <project_id>    Response count and unique responders
+  eval-sentiment-breakdown <project_id> Breakdown by sentiment and response type
+  eval-priority-response-rate <project_id> Response rate by priority
+  eval-status-counts <project_id>      Prospect count by status
+  eval-channel-response-rate <project_id> Response rate by channel
+  eval-responded-messages <project_id> Full body of all messages that received responses
+  eval-no-response-sample <project_id> Sample of messages that received no response
 """
 
 from __future__ import annotations
@@ -40,11 +40,11 @@ from sales_db import error_exit, get_connection, print_json, rows_to_dicts  # py
 
 
 # ---------------------------------------------------------------------------
-# クエリ定義
+# Query definitions
 # ---------------------------------------------------------------------------
 
 def cmd_list_projects(conn: sqlite3.Connection, args: list[str]) -> None:
-    """全プロジェクト一覧"""
+    """List all projects"""
     cursor = conn.execute(
         "SELECT id, created_at FROM projects ORDER BY created_at ASC",
     )
@@ -52,7 +52,7 @@ def cmd_list_projects(conn: sqlite3.Connection, args: list[str]) -> None:
 
 
 def cmd_project_exists(conn: sqlite3.Connection, args: list[str]) -> None:
-    """プロジェクトの存在確認"""
+    """Check if a project exists"""
     if len(args) < 1:
         error_exit("Usage: project-exists <project_id>")
     cursor = conn.execute("SELECT id FROM projects WHERE id = ?", (args[0],))
@@ -60,7 +60,7 @@ def cmd_project_exists(conn: sqlite3.Connection, args: list[str]) -> None:
 
 
 def cmd_count_reachable(conn: sqlite3.Connection, args: list[str]) -> None:
-    """アプローチ可能な未送信営業先数（email/form/SNSいずれかあり）"""
+    """Count reachable unsent prospects (with email, form, or SNS)"""
     if len(args) < 1:
         error_exit("Usage: count-reachable <project_id>")
     cursor = conn.execute(
@@ -81,7 +81,7 @@ def cmd_count_reachable(conn: sqlite3.Connection, args: list[str]) -> None:
 
 
 def cmd_count_reachable_by_channel(conn: sqlite3.Connection, args: list[str]) -> None:
-    """チャネル別の未送信営業先数"""
+    """Count unsent prospects by channel"""
     if len(args) < 1:
         error_exit("Usage: count-reachable-by-channel <project_id>")
     cursor = conn.execute(
@@ -110,7 +110,7 @@ def cmd_count_reachable_by_channel(conn: sqlite3.Connection, args: list[str]) ->
 
 
 def cmd_list_reachable(conn: sqlite3.Connection, args: list[str]) -> None:
-    """アプローチ可能な未送信営業先リスト（email→form→SNSの優先順）"""
+    """List reachable unsent prospects (email→form→SNS priority order)"""
     if len(args) < 1:
         error_exit("Usage: list-reachable <project_id> [limit]")
     if len(args) < 2:
@@ -144,7 +144,7 @@ def cmd_list_reachable(conn: sqlite3.Connection, args: list[str]) -> None:
 
 
 def cmd_recent_outreach(conn: sqlite3.Connection, args: list[str]) -> None:
-    """直近4営業日以内のアプローチ済み営業先"""
+    """Prospects contacted within the last 4 business days"""
     if len(args) < 1:
         error_exit("Usage: recent-outreach <project_id>")
     cursor = conn.execute(
@@ -162,7 +162,7 @@ def cmd_recent_outreach(conn: sqlite3.Connection, args: list[str]) -> None:
 
 
 def cmd_data_sufficiency(conn: sqlite3.Connection, args: list[str]) -> None:
-    """evaluate用のデータ充足度チェック"""
+    """Data sufficiency check for evaluate"""
     if len(args) < 1:
         error_exit("Usage: data-sufficiency <project_id>")
     cursor = conn.execute(
@@ -175,7 +175,7 @@ def cmd_data_sufficiency(conn: sqlite3.Connection, args: list[str]) -> None:
 
 
 def cmd_last_evaluation(conn: sqlite3.Connection, args: list[str]) -> None:
-    """最新のevaluation日時"""
+    """Timestamp of the most recent evaluation"""
     if len(args) < 1:
         error_exit("Usage: last-evaluation <project_id>")
     cursor = conn.execute(
@@ -189,7 +189,7 @@ def cmd_last_evaluation(conn: sqlite3.Connection, args: list[str]) -> None:
 
 
 def cmd_evaluation_history(conn: sqlite3.Connection, args: list[str]) -> None:
-    """evaluate による改善履歴（直近10件）"""
+    """Improvement history from evaluate (last 10 records)"""
     if len(args) < 1:
         error_exit("Usage: evaluation-history <project_id>")
     cursor = conn.execute(
@@ -203,7 +203,7 @@ def cmd_evaluation_history(conn: sqlite3.Connection, args: list[str]) -> None:
 
 
 def cmd_existing_list(conn: sqlite3.Connection, args: list[str]) -> None:
-    """登録済み営業先の直近50件"""
+    """Last 50 registered prospects"""
     if len(args) < 1:
         error_exit("Usage: existing-list <project_id>")
     cursor = conn.execute(
@@ -218,7 +218,7 @@ def cmd_existing_list(conn: sqlite3.Connection, args: list[str]) -> None:
 
 
 def cmd_all_prospect_identifiers(conn: sqlite3.Connection, args: list[str]) -> None:
-    """全登録済み営業先の名前・URL・法人番号一覧（重複回避用）"""
+    """Names, URLs, and corporate numbers of all registered prospects (for deduplication)"""
     if len(args) < 1:
         error_exit("Usage: all-prospect-identifiers <project_id>")
     cursor = conn.execute(
@@ -232,11 +232,11 @@ def cmd_all_prospect_identifiers(conn: sqlite3.Connection, args: list[str]) -> N
 
 
 # ---------------------------------------------------------------------------
-# 評価用クエリ（evaluate スキル用）
+# Evaluation queries (for the evaluate skill)
 # ---------------------------------------------------------------------------
 
 def cmd_eval_total_outreach(conn: sqlite3.Connection, args: list[str]) -> None:
-    """アプローチ総数"""
+    """Total outreach count"""
     if len(args) < 1:
         error_exit("Usage: eval-total-outreach <project_id>")
     cursor = conn.execute(
@@ -247,7 +247,7 @@ def cmd_eval_total_outreach(conn: sqlite3.Connection, args: list[str]) -> None:
 
 
 def cmd_eval_channel_counts(conn: sqlite3.Connection, args: list[str]) -> None:
-    """チャネル別アプローチ数"""
+    """Outreach count by channel"""
     if len(args) < 1:
         error_exit("Usage: eval-channel-counts <project_id>")
     cursor = conn.execute(
@@ -261,7 +261,7 @@ def cmd_eval_channel_counts(conn: sqlite3.Connection, args: list[str]) -> None:
 
 
 def cmd_eval_response_counts(conn: sqlite3.Connection, args: list[str]) -> None:
-    """反応数・ユニーク回答者数"""
+    """Response count and unique responders"""
     if len(args) < 1:
         error_exit("Usage: eval-response-counts <project_id>")
     cursor = conn.execute(
@@ -277,7 +277,7 @@ def cmd_eval_response_counts(conn: sqlite3.Connection, args: list[str]) -> None:
 
 
 def cmd_eval_sentiment_breakdown(conn: sqlite3.Connection, args: list[str]) -> None:
-    """センチメント別・反応種別の内訳"""
+    """Breakdown by sentiment and response type"""
     if len(args) < 1:
         error_exit("Usage: eval-sentiment-breakdown <project_id>")
     cursor = conn.execute(
@@ -292,7 +292,7 @@ def cmd_eval_sentiment_breakdown(conn: sqlite3.Connection, args: list[str]) -> N
 
 
 def cmd_eval_priority_response_rate(conn: sqlite3.Connection, args: list[str]) -> None:
-    """優先度別の反応率"""
+    """Response rate by priority"""
     if len(args) < 1:
         error_exit("Usage: eval-priority-response-rate <project_id>")
     cursor = conn.execute(
@@ -311,7 +311,7 @@ def cmd_eval_priority_response_rate(conn: sqlite3.Connection, args: list[str]) -
 
 
 def cmd_eval_status_counts(conn: sqlite3.Connection, args: list[str]) -> None:
-    """ステータス別営業先数"""
+    """Prospect count by status"""
     if len(args) < 1:
         error_exit("Usage: eval-status-counts <project_id>")
     cursor = conn.execute(
@@ -325,7 +325,7 @@ def cmd_eval_status_counts(conn: sqlite3.Connection, args: list[str]) -> None:
 
 
 def cmd_eval_channel_response_rate(conn: sqlite3.Connection, args: list[str]) -> None:
-    """チャネル別反応率"""
+    """Response rate by channel"""
     if len(args) < 1:
         error_exit("Usage: eval-channel-response-rate <project_id>")
     cursor = conn.execute(
@@ -345,7 +345,7 @@ def cmd_eval_channel_response_rate(conn: sqlite3.Connection, args: list[str]) ->
 
 
 def cmd_eval_responded_messages(conn: sqlite3.Connection, args: list[str]) -> None:
-    """反応があったメールの本文（全件）"""
+    """Full body of all messages that received responses"""
     if len(args) < 1:
         error_exit("Usage: eval-responded-messages <project_id>")
     cursor = conn.execute(
@@ -360,7 +360,7 @@ def cmd_eval_responded_messages(conn: sqlite3.Connection, args: list[str]) -> No
 
 
 def cmd_eval_no_response_sample(conn: sqlite3.Connection, args: list[str]) -> None:
-    """反応がなかったメールの本文（サンプル10件）"""
+    """Sample of messages that received no response (10 records)"""
     if len(args) < 1:
         error_exit("Usage: eval-no-response-sample <project_id>")
     cursor = conn.execute(
@@ -376,31 +376,31 @@ def cmd_eval_no_response_sample(conn: sqlite3.Connection, args: list[str]) -> No
 
 
 # ---------------------------------------------------------------------------
-# コマンドディスパッチ
+# Command dispatch
 # ---------------------------------------------------------------------------
 
 COMMANDS: dict[str, tuple[str, Callable[[sqlite3.Connection, list[str]], None]]] = {
-    "list-projects": ("全プロジェクト一覧", cmd_list_projects),
-    "project-exists": ("プロジェクトの存在確認", cmd_project_exists),
-    "count-reachable": ("アプローチ可能な未送信営業先数（email/form/SNSいずれかあり）", cmd_count_reachable),
-    "count-reachable-by-channel": ("チャネル別の未送信営業先数", cmd_count_reachable_by_channel),
-    "list-reachable": ("未送信営業先リスト（email→form→SNS優先順）", cmd_list_reachable),
-    "recent-outreach": ("直近アプローチ済み営業先", cmd_recent_outreach),
-    "data-sufficiency": ("evaluate用データ充足度", cmd_data_sufficiency),
-    "last-evaluation": ("最新evaluation日時", cmd_last_evaluation),
-    "evaluation-history": ("evaluate改善履歴（直近10件）", cmd_evaluation_history),
-    "existing-list": ("登録済み営業先の直近50件", cmd_existing_list),
-    "all-prospect-identifiers": ("全登録済み営業先の名前・URL一覧", cmd_all_prospect_identifiers),
-    # 評価用クエリ
-    "eval-total-outreach": ("アプローチ総数", cmd_eval_total_outreach),
-    "eval-channel-counts": ("チャネル別アプローチ数", cmd_eval_channel_counts),
-    "eval-response-counts": ("反応数・ユニーク回答者数", cmd_eval_response_counts),
-    "eval-sentiment-breakdown": ("センチメント別・反応種別の内訳", cmd_eval_sentiment_breakdown),
-    "eval-priority-response-rate": ("優先度別反応率", cmd_eval_priority_response_rate),
-    "eval-status-counts": ("ステータス別営業先数", cmd_eval_status_counts),
-    "eval-channel-response-rate": ("チャネル別反応率", cmd_eval_channel_response_rate),
-    "eval-responded-messages": ("反応ありメッセージ全文", cmd_eval_responded_messages),
-    "eval-no-response-sample": ("反応なしメッセージサンプル", cmd_eval_no_response_sample),
+    "list-projects": ("List all projects", cmd_list_projects),
+    "project-exists": ("Check if a project exists", cmd_project_exists),
+    "count-reachable": ("Count reachable unsent prospects (email/form/SNS)", cmd_count_reachable),
+    "count-reachable-by-channel": ("Count unsent prospects by channel", cmd_count_reachable_by_channel),
+    "list-reachable": ("List unsent prospects (email→form→SNS priority)", cmd_list_reachable),
+    "recent-outreach": ("Recently contacted prospects", cmd_recent_outreach),
+    "data-sufficiency": ("Data sufficiency check for evaluate", cmd_data_sufficiency),
+    "last-evaluation": ("Most recent evaluation timestamp", cmd_last_evaluation),
+    "evaluation-history": ("Evaluate improvement history (last 10)", cmd_evaluation_history),
+    "existing-list": ("Last 50 registered prospects", cmd_existing_list),
+    "all-prospect-identifiers": ("Names and URLs of all registered prospects", cmd_all_prospect_identifiers),
+    # Evaluation queries
+    "eval-total-outreach": ("Total outreach count", cmd_eval_total_outreach),
+    "eval-channel-counts": ("Outreach count by channel", cmd_eval_channel_counts),
+    "eval-response-counts": ("Response count and unique responders", cmd_eval_response_counts),
+    "eval-sentiment-breakdown": ("Breakdown by sentiment and response type", cmd_eval_sentiment_breakdown),
+    "eval-priority-response-rate": ("Response rate by priority", cmd_eval_priority_response_rate),
+    "eval-status-counts": ("Prospect count by status", cmd_eval_status_counts),
+    "eval-channel-response-rate": ("Response rate by channel", cmd_eval_channel_response_rate),
+    "eval-responded-messages": ("Full body of all messages that received responses", cmd_eval_responded_messages),
+    "eval-no-response-sample": ("Sample of messages with no response", cmd_eval_no_response_sample),
 }
 
 

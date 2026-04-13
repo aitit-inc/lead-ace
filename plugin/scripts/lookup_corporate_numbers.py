@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""法人番号が未設定の prospects を国税庁法人番号公表サイトで検索し、候補を出力するスクリプト
+"""Script to search for corporate numbers for prospects that don't have one yet
 
 Usage:
   python3 lookup_corporate_numbers.py <db_path> [--limit N]
 
-organization_id が NULL の prospects を抽出し、check_corporate_number.py（国税庁サイト検索）
-で法人番号の候補を検索する。DBの更新は行わない（候補の確定は LLM または人間が判断する）。
+Retrieves prospects with a NULL organization_id and searches for corporate number candidates
+via check_corporate_number.py (NTA site search). Does not update the DB
+(candidate confirmation is left to the LLM or a human).
 
 Output: JSON
   {"searched": N, "candidates_found": N, "not_found": N, "details": [...]}
@@ -27,7 +28,7 @@ from sales_db import get_connection, print_json  # pyright: ignore[reportMissing
 
 
 # ---------------------------------------------------------------------------
-# 型定義
+# Type definitions
 # ---------------------------------------------------------------------------
 
 
@@ -49,7 +50,7 @@ class LookupResult(TypedDict):
 
 
 # ---------------------------------------------------------------------------
-# 法人番号検索
+# Corporate number search
 # ---------------------------------------------------------------------------
 
 _LEGAL_ENTITY_PATTERN = re.compile(
@@ -59,25 +60,25 @@ _LEGAL_ENTITY_PATTERN = re.compile(
 
 
 def _filter_results(results: list[SearchResult]) -> list[SearchResult]:
-    """name が空の候補を除外する（パース失敗）。"""
+    """Remove candidates with an empty name (parse failures)."""
     return [c for c in results if c["name"].strip()]
 
 
 def search_candidates(name: str) -> list[SearchResult]:
-    """国税庁法人番号公表サイトで法人番号の候補を検索する。
+    """Search the NTA Corporate Number Publication Site for corporate number candidates.
 
-    自動採用はしない。候補一覧を返すのみ。
-    確定は LLM または人間が判断する。
+    Does not automatically select a candidate — only returns a list.
+    Confirmation is left to the LLM or a human.
 
-    検索戦略（段階的にフォールバック）:
-    1. 法人格を除去して検索（例: 「株式会社ABC」→「ABC」）
-    2. 0件なら末尾のスペース区切りを削って再検索（例: 「早稲田大学 キャリアセンター」→「早稲田大学」）
-    3. さらに0件ならもう1段短くして再検索
+    Search strategy (progressive fallback):
+    1. Strip legal entity suffix and search (e.g. "株式会社ABC" → "ABC")
+    2. If 0 results, trim the last space-delimited token and retry (e.g. "早稲田大学 キャリアセンター" → "早稲田大学")
+    3. If still 0 results, trim one more token and retry
     """
     search_name = unicodedata.normalize("NFKC", name).strip()
     clean_name = _LEGAL_ENTITY_PATTERN.sub("", search_name).strip()
 
-    # 1. フル名称で検索
+    # 1. Search with full name
     try:
         candidates = _filter_results(search(clean_name)["results"])
     except (RuntimeError, subprocess.TimeoutExpired):
@@ -86,17 +87,17 @@ def search_candidates(name: str) -> list[SearchResult]:
     if candidates:
         return candidates
 
-    # 2. スペースで区切って末尾を削りながらリトライ（最大2回）
+    # 2. Retry by trimming the last space-delimited token (up to 2 times)
     current = clean_name
     for _ in range(2):
         if " " not in current and "　" not in current:
             break
-        # 全角・半角スペースの末尾部分を削除
+        # Strip the trailing full-width or half-width space-separated token
         current = re.split(r"[\s　]+", current)
         current = " ".join(current[:-1]).strip() if len(current) > 1 else current[0]
         if not current:
             break
-        print(f"    リトライ: 「{current}」で再検索...", file=sys.stderr)
+        print(f"    Retry: searching with '{current}'...", file=sys.stderr)
         try:
             candidates = _filter_results(search(current)["results"])
         except (RuntimeError, subprocess.TimeoutExpired):
@@ -108,17 +109,17 @@ def search_candidates(name: str) -> list[SearchResult]:
 
 
 # ---------------------------------------------------------------------------
-# メイン処理
+# Main processing
 # ---------------------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="法人番号未設定の prospects を国税庁法人番号公表サイトで検索し organizations に登録する。",
+        description="Search the NTA Corporate Number Publication Site for prospects without a corporate number.",
     )
-    _ = parser.add_argument("db_path", help="SQLite データベースのパス")
+    _ = parser.add_argument("db_path", help="Path to the SQLite database")
     _ = parser.add_argument(
         "--limit", type=int, default=20,
-        help="検索する最大件数（デフォルト: 20。playwright-cli でブラウザ操作するため件数が多いと時間がかかる）",
+        help="Maximum number of prospects to search (default: 20; higher values take longer due to playwright-cli browser automation)",
     )
     return parser
 
@@ -130,7 +131,7 @@ def main() -> None:
 
     conn = get_connection(db_path)
 
-    # organization_id が NULL かつ org_lookup_status が未設定の prospects を取得（重複する name は1件だけ）
+    # Fetch prospects where organization_id is NULL and org_lookup_status is not set (one per name)
     cursor = conn.execute(
         "SELECT id, name, website_url"
         " FROM prospects"
@@ -145,7 +146,7 @@ def main() -> None:
     conn.close()
 
     if not targets:
-        print("法人番号未設定の prospects はありません。", file=sys.stderr)
+        print("No prospects without a corporate number found.", file=sys.stderr)
         empty: LookupResult = {
             "searched": 0, "candidates_found": 0,
             "not_found": 0, "errors": 0, "details": [],
@@ -153,7 +154,7 @@ def main() -> None:
         print_json(empty)
         return
 
-    print(f"検索対象: {len(targets)}件", file=sys.stderr)
+    print(f"Targets to search: {len(targets)}", file=sys.stderr)
 
     result: LookupResult = {
         "searched": len(targets),
@@ -188,18 +189,18 @@ def main() -> None:
         if candidates:
             detail["status"] = "candidates_found"
             detail["candidates"] = candidates
-            detail["message"] = f"{len(candidates)}件の候補。LLM または人間が確認して確定してください"
+            detail["message"] = f"{len(candidates)} candidates found. Please review and confirm with LLM or manually."
             result["candidates_found"] += 1
             names = ", ".join(c["name"] for c in candidates[:3])
-            print(f"→ {len(candidates)}件: {names}", file=sys.stderr)
+            print(f"→ {len(candidates)} found: {names}", file=sys.stderr)
         else:
             detail["status"] = "not_found"
             result["not_found"] += 1
-            print("→ 見つからず", file=sys.stderr)
+            print("→ Not found", file=sys.stderr)
 
         result["details"].append(detail)
 
-        # playwright-cli のブラウザ操作間隔
+        # Interval between playwright-cli browser operations
         if i < len(targets) - 1:
             time.sleep(2)
 

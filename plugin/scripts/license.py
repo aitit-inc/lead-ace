@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""ライセンス管理モジュール
+"""License management module
 
-~/.leadace/ にグローバル状態を保存し、無料（1プロジェクト）と有料（無制限）を管理する。
+Stores global state in ~/.leadace/ and manages free (1 project) vs. paid (unlimited) tiers.
 
 CLI:
     python3 license.py save-key "LEADACE-XXXX-XXXX-XXXX-XXXX"
@@ -19,7 +19,7 @@ import sys
 import fcntl
 from pathlib import Path
 
-# SHA-512ハッシュ（正解キーのハッシュ。キー自体はコードに含めない）
+# SHA-512 hash of the valid key (the key itself is not embedded in code)
 VALID_KEY_HASH = "44192c18c9d9c4d4195f77a204036fcefe7d3b5a556c5230bdf1c2549e663c523bf2e9fc59a71d75c7b4a6477044c8472a7c2f1b6a9e0201aa048746288650bc"
 
 LEADACE_DIR = Path.home() / ".leadace"
@@ -28,12 +28,12 @@ PROJECTS_FILE = LEADACE_DIR / "projects"
 
 
 def ensure_leadace_dir():
-    """~/.leadace/ ディレクトリがなければ作成"""
+    """Create ~/.leadace/ directory if it does not exist."""
     LEADACE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def save_key(key: str) -> bool:
-    """キーを ~/.leadace/pkey に保存。有効ならTrue"""
+    """Save the key to ~/.leadace/pkey. Returns True if the key is valid."""
     if not validate_key(key):
         return False
     ensure_leadace_dir()
@@ -45,13 +45,13 @@ def save_key(key: str) -> bool:
 
 
 def validate_key(key: str) -> bool:
-    """キーのSHA-512ハッシュをハードコードされた正解ハッシュと比較"""
+    """Compare the SHA-512 hash of the key against the hardcoded valid hash."""
     h = hashlib.sha512(key.strip().encode()).hexdigest()
     return h == VALID_KEY_HASH
 
 
 def is_paid() -> bool:
-    """~/.leadace/pkey が存在し、中身のキーが有効ならTrue"""
+    """Returns True if ~/.leadace/pkey exists and contains a valid key."""
     if not PKEY_FILE.exists():
         return False
     try:
@@ -65,12 +65,12 @@ def is_paid() -> bool:
 
 
 def register_project(project_path: str) -> str:
-    """プロジェクトの絶対パスを ~/.leadace/projects に追記（重複・ライセンスチェックあり）
+    """Append the absolute project path to ~/.leadace/projects (checks for duplicates and license).
     Returns: "REGISTERED" / "ALREADY_REGISTERED" / "FREE_LIMIT"
     """
     ensure_leadace_dir()
     path = os.path.abspath(project_path)
-    # 読み取りと書き込みを同一ロック内で行い、TOCTOU競合を防ぐ
+    # Perform read and write inside the same lock to prevent TOCTOU race conditions
     with open(PROJECTS_FILE, "a+") as f:
         fcntl.flock(f, fcntl.LOCK_EX)
         f.seek(0)
@@ -85,7 +85,7 @@ def register_project(project_path: str) -> str:
 
 
 def unregister_project(project_path: str) -> bool:
-    """プロジェクトの絶対パスを ~/.leadace/projects から削除。成功したらTrue"""
+    """Remove the absolute project path from ~/.leadace/projects. Returns True on success."""
     if not PROJECTS_FILE.exists():
         return False
     path = os.path.abspath(project_path)
@@ -104,7 +104,7 @@ def unregister_project(project_path: str) -> bool:
 
 
 def list_projects() -> list[str]:
-    """~/.leadace/projects から全プロジェクトパスをリストで返す"""
+    """Return a list of all project paths from ~/.leadace/projects."""
     if not PROJECTS_FILE.exists():
         return []
     try:
@@ -118,7 +118,7 @@ def list_projects() -> list[str]:
 
 
 def can_add_project(project_path: str) -> str:
-    """プロジェクト追加可否を判定
+    """Determine whether a project can be added.
     Returns: "PAID" / "FREE_OK" / "FREE_LIMIT" / "ALREADY_REGISTERED"
     """
     path = os.path.abspath(project_path)
@@ -133,7 +133,7 @@ def can_add_project(project_path: str) -> str:
 
 
 def check_project_registered(project_path: str) -> bool:
-    """指定パスが ~/.leadace/projects に登録済みかどうか"""
+    """Check whether the given path is registered in ~/.leadace/projects."""
     path = os.path.abspath(project_path)
     return path in list_projects()
 

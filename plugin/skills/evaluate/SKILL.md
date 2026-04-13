@@ -1,6 +1,6 @@
 ---
 name: evaluate
-description: "This skill should be used when the user asks to \"結果を分析して\", \"戦略を改善して\", \"PDCAを回して\", \"効果を評価して\", \"反応率を見て\", or wants to evaluate sales performance and improve strategy. 反応率等のデータに基づいて戦略・ターゲティング・メッセージングを自動で分析し改善する。"
+description: "This skill should be used when the user asks to \"analyze results\", \"improve strategy\", \"run PDCA\", \"evaluate effectiveness\", \"check response rates\", or wants to evaluate sales performance and improve strategy. Automatically analyzes and improves strategy, targeting, and messaging based on response rate data."
 argument-hint: "<project-directory-name>"
 allowed-tools:
   - Bash
@@ -9,27 +9,27 @@ allowed-tools:
   - WebSearch
 ---
 
-# Evaluate - PDCA評価＆改善
+# Evaluate - PDCA Evaluation & Improvement
 
-営業活動の結果データを分析し、戦略・戦術・ターゲティング・メッセージング等のあらゆる側面を評価して自動改善するスキル。
+A skill that analyzes sales activity result data and automatically evaluates and improves every aspect — strategy, tactics, targeting, and messaging.
 
-**前提:** `${CLAUDE_PLUGIN_ROOT}/references/workspace-conventions.md` の規約に従うこと（data.dbの配置・cdしないルール）。
+**Prerequisite:** Follow the conventions in `${CLAUDE_PLUGIN_ROOT}/references/workspace-conventions.md` (data.db location and no-cd rule).
 
-## 実行手順
+## Steps
 
-### 0. Preflight チェック
+### 0. Preflight Check
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/preflight.py data.db "$0"
 ```
 
-`status` が `error` の場合はエラーメッセージを表示して**即座に中断**する。`migrations_applied` にマイグレーションがあればユーザーに報告する。
+If `status` is `error`, display the error message and **abort immediately**. Report any migrations in `migrations_applied` to the user.
 
-### 1. データ収集
+### 1. Data Collection
 
-- プロジェクトディレクトリ名: `$0`（必須）
+- Project directory name: `$0` (required)
 
-`sales_queries.py` の `eval-*` コマンドを順次実行し、各結果を分析用に保持する:
+Run `sales_queries.py` `eval-*` commands in sequence, keeping each result for analysis:
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db eval-total-outreach "$0"
@@ -43,103 +43,103 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db eval-responded-me
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db eval-no-response-sample "$0"
 ```
 
-### 2. 既存戦略の読み込み
+### 2. Load Existing Strategy
 
-以下を読み込む:
+Load the following:
 - `$0/BUSINESS.md`
 - `$0/SALES_STRATEGY.md`
-- `$0/RESULTS_REPORT.md`（存在する場合）
-- 過去の `evaluations` テーブルの記録（全件）
+- `$0/RESULTS_REPORT.md` (if it exists)
+- Past `evaluations` table records (all records)
 
-過去のevaluationsが存在する場合、各レコードの `evaluation_date`、`findings`、`improvements` を時系列で整理し、これまでに何を試し、何が効果的で、何が効果がなかったかを把握する。この情報はステップ4の改善アクション決定時に使う。
+If past evaluations exist, organize each record's `evaluation_date`, `findings`, and `improvements` chronologically to understand what has been tried, what was effective, and what was not. Use this information when deciding on improvement actions in step 4.
 
-### 3. 多角的分析
+### 3. Multi-angle Analysis
 
-`${CLAUDE_PLUGIN_ROOT}/skills/evaluate/references/analysis-frameworks.md` を参照し、以下の観点で分析を行う:
+Refer to `${CLAUDE_PLUGIN_ROOT}/skills/evaluate/references/analysis-frameworks.md` and analyze from the following perspectives:
 
-**反応率分析:**
-- 全体の反応率
-- チャネル別の反応率（メール vs フォーム vs SNS）
-- 優先度別の反応率
-- 時間帯・曜日別の傾向（送信日時から分析。ただし送信タイミングは daily-cycle の実行スケジュールで決まるため、SALES_STRATEGY.md に送信時間の制約を書かないこと。分析結果はレポートで「推奨実行タイミング」として報告するにとどめる）
+**Response Rate Analysis:**
+- Overall response rate
+- Response rate by channel (email vs form vs SNS)
+- Response rate by priority
+- Trends by time of day and day of week (analyze from send timestamps. However, since sending timing is determined by the daily-cycle execution schedule, do not write sending time constraints in SALES_STRATEGY.md. Report analysis results as "recommended execution timing" in the report only)
 
-**メッセージ分析:**
-- 反応があったメールの本文（outreach_logs.body）を全件読み込み、共通点を抽出
-- 反応がなかったメールからは数件サンプリングして比較
-- 件名の効果
-- 本文の長さ・構成の効果
+**Message Analysis:**
+- Read all email bodies (outreach_logs.body) that received responses and extract common traits
+- Sample a few emails that received no response and compare
+- Effectiveness of subject lines
+- Effectiveness of body length and structure
 
-**ターゲット分析:**
-- 反応が良い業種・規模
-- 反応が悪いセグメント
-- 想定外の反応パターン
+**Target Analysis:**
+- Industries and sizes with good responses
+- Segments with poor responses
+- Unexpected response patterns
 
-**チャネル分析:**
-- 最も効果的なチャネル
-- チャネルごとのコスト対効果
+**Channel Analysis:**
+- Most effective channel
+- Cost-effectiveness by channel
 
-### 4. 改善アクションの決定と自動適用
+### 4. Determine and Apply Improvement Actions
 
-**データ量の確認（必須）:**
+**Data volume check (required):**
 
-改善アクションを適用する前に、データが十分かどうかを確認する:
+Before applying improvement actions, check whether there is sufficient data:
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db data-sufficiency "$0"
 ```
 
-以下のいずれかに該当する場合、**SALES_STRATEGY.mdへの変更適用・優先度再計算は行わない**。レポート生成（ステップ5・6）のみ実行し、「データ不足のためモニタリング継続」と報告する:
-- アプローチ総数（status='sent'）が30件未満
-- 最終送信から3営業日未満
+If any of the following apply, **do not apply changes to SALES_STRATEGY.md or recalculate priorities**. Only run report generation (steps 5 and 6) and report "Insufficient data — continue monitoring":
+- Total approaches (status='sent') fewer than 30
+- Less than 3 business days since last send
 
-データ不足でもevaluationsテーブルへの記録（ステップ5）とレポート生成（ステップ6）は行う。現状把握として有用なため。
+Even with insufficient data, still record to the evaluations table (step 5) and generate the report (step 6) — they are useful for understanding current status.
 
 ---
 
-データが十分な場合、分析結果に基づいて具体的な改善を決定し、**自動で適用する**。
+When data is sufficient, decide on specific improvements based on analysis results and **apply them automatically**.
 
-**戦略変更の安定性（必須）:**
-evaluateは毎日実行されるが、戦略を頻繁に変えすぎないこと。前回の戦略変更後に十分なデータが蓄積されるまでは、現行戦略を維持してデータ収集を優先する。
+**Strategy change stability (required):**
+Evaluate runs daily, but avoid changing strategy too frequently. Until sufficient data has accumulated after the last strategy change, maintain the current strategy and prioritize data collection.
 
-何が「十分なデータ」かは文脈に依存する。送信ボリュームが大きいプロジェクトでは数件の反応増減はノイズだが、少量精鋭のアプローチでは1件の反応でも重要なシグナルになり得る。SALES_STRATEGY.md のターゲット規模や送信頻度を踏まえて判断すること。
+What counts as "sufficient data" depends on context. For high-volume projects, a few response fluctuations are noise, but for precision approaches, even a single response can be an important signal. Judge based on the target scale and send frequency in SALES_STRATEGY.md.
 
-判断の原則:
-- **単発の変動ではなく、繰り返し観測されるパターン**に基づいて変更する
-- **前回の戦略変更の効果がまだ測定できていない**段階では、さらなる変更を重ねない
-- 迷ったら変えない。データを蓄積する方が、中途半端な根拠で方針を変えるより価値が高い
+Judgment principles:
+- Change based on **patterns observed repeatedly, not one-off fluctuations**
+- If the **effect of the last strategy change cannot yet be measured**, do not layer additional changes
+- When in doubt, don't change. Accumulating data is more valuable than changing direction on weak evidence
 
-**過去の改善履歴との照合（必須）:**
-改善アクションを決定する前に、ステップ2で整理した過去のevaluations履歴を確認し、以下を守る:
-- 過去に実施済みで効果がなかった施策を再採用しない
-- 過去に効果があった施策の方向性を継続・深化させる
-- 過去と同じ改善を提案する場合は、なぜ今回は異なる結果が期待できるか理由を明記する
+**Cross-reference with improvement history (required):**
+Before deciding on improvement actions, review the past evaluations history organized in step 2 and follow these rules:
+- Do not re-adopt measures that were tried before and had no effect
+- Continue and deepen the direction of measures that were effective before
+- If proposing the same improvement as before, state why different results are expected this time
 
-**SALES_STRATEGY.md の更新:**
-- ターゲットの絞り込みまたは拡大
-- メッセージングの改善（件名、本文構成、トーン）
-- チャネル優先順位の見直し
-- KPI目標の更新
+**Update SALES_STRATEGY.md:**
+- Narrow or broaden targeting
+- Improve messaging (subject line, body structure, tone)
+- Revise channel priority
+- Update KPI goals
 
-**検索キーワードの更新:**
-- 反応が良いセグメントに関連するキーワードの追加
-- 効果が低いキーワードの削除
+**Update search keywords:**
+- Add keywords related to high-response segments
+- Remove ineffective keywords
 
-**SEARCH_NOTES.md への反応パターン反映:**
-`$0/SEARCH_NOTES.md` が存在する場合、`## evaluate からの探索ヒント` セクションを上書き更新する（セクションがなければ末尾に追加）。build-list が次回実行時にこのセクションを保持して探索方針を調整する。
+**Reflect response patterns in SEARCH_NOTES.md:**
+If `$0/SEARCH_NOTES.md` exists, overwrite the `## Hints from evaluate` section (add it at the end if not present). build-list will preserve this section during the next run and adjust its search policy.
 
-追記する内容:
-- 反応率が全体平均より高い業種・セグメント → 「○○業から反応率X%（全体平均Y%）。同業種を重点的に探索する」
-- 反応があった企業と類似した特徴（規模感、事業内容、課題感） → 「○○のような企業が反応しやすい。類似企業・競合を探す」
-- 反応が悪かったセグメント → 「○○業は反応率が低い（X%）。優先度を下げる」
+Content to add:
+- Industries / segments with response rates above overall average → "XX industry has X% response rate (vs overall average Y%). Explore more of this industry"
+- Characteristics similar to companies that responded (scale, business content, pain points) → "Companies like XX respond well. Search for similar companies and competitors"
+- Segments with poor responses → "XX industry has low response rate (X%). Lower priority"
 
-SEARCH_NOTES.md が存在しない場合はスキップする（build-list 未実行の状態なので）。
+Skip if SEARCH_NOTES.md does not exist (build-list hasn't been run yet).
 
-**優先度の再計算:**
-- 反応パターンに基づいてprospectsの優先度を更新（ステップ5で一括実行）
+**Recalculate priorities:**
+- Update prospect priorities based on response patterns (bulk execution in step 5)
 
-### 5. 評価記録の保存
+### 5. Save Evaluation Record
 
-`record_evaluation.py` で評価記録と優先度更新をアトミックに実行する:
+Use `record_evaluation.py` to atomically execute the evaluation record and priority update:
 
 ```bash
 echo "<findings_text>" > /tmp/eval_findings.txt
@@ -151,17 +151,17 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/record_evaluation.py data.db \
   --priority-updates '[{"industry": "<industry>", "priority": <1-5>}, ...]'
 ```
 
-`--priority-updates` は省略可能（データ不足で優先度変更なしの場合）。
+`--priority-updates` is optional (omit if no priority changes due to insufficient data).
 
-> **注意:** DB への直接 SQL 実行は禁止。評価記録は必ず `record_evaluation.py` 経由で行うこと。
+> **Note:** Direct SQL execution to the DB is prohibited. Evaluation records must be recorded via `record_evaluation.py`.
 
-### 6. 結果レポート
+### 6. Results Report
 
-以下を報告する:
-- 主要KPI（反応率、ポジティブ率等）
-- 前回評価からの変化（あれば）
-- 分析で発見した重要な知見
-- 適用した改善内容の一覧
-- 次に取るべきアクション（`/build-list` で追加探索、`/outbound` で再アプローチ等）
+Report the following:
+- Key KPIs (response rate, positive rate, etc.)
+- Changes from previous evaluation (if any)
+- Important findings from the analysis
+- List of improvements applied
+- Next actions to take (`/build-list` for additional exploration, `/outbound` for re-approach, etc.)
 
-レポートをプロジェクトディレクトリに `EVALUATION_REPORT.md` として保存する（上書き。履歴はDBに保存済み）。
+Save the report to the project directory as `EVALUATION_REPORT.md` (overwrite; history is saved in DB).

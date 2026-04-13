@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""既存 prospect に organizations レコードを紐づけるスクリプト
+"""Script to link existing prospects to organizations records
 
-organization_id が NULL の既存 prospect に対して、法人番号を確定し
-organizations テーブルへの upsert + prospects.organization_id の更新を行う。
+For existing prospects with a NULL organization_id, confirms the corporate number
+and performs an upsert into the organizations table + updates prospects.organization_id.
 
 Usage:
   echo '<json_array>' | python3 link_organization.py <db_path>
 
-JSON配列の各オブジェクト:
-  prospect_id (必須): 紐づけ対象の prospect ID
-  corporate_number (必須): 法人番号（13桁）
-  organization_name (必須): 正式法人名（国税庁公表サイトの名称）
-  address (省略可): 所在地（国税庁公表サイトの所在地）
-  name (省略可): prospects.name を更新する場合に指定
-  department (省略可): prospects.department を更新する場合に指定
+Each object in the JSON array:
+  prospect_id (required): prospect ID to link
+  corporate_number (required): corporate number (13 digits)
+  organization_name (required): official entity name (as listed on the NTA publication site)
+  address (optional): address (as listed on the NTA publication site)
+  name (optional): specify to update prospects.name
+  department (optional): specify to update prospects.department
 
 Output: JSON
   {"updated": N, "errors": N, "details": [...]}
@@ -30,25 +30,25 @@ from sales_db import error_exit, get_connection, print_json, upsert_organization
 
 
 # ---------------------------------------------------------------------------
-# 型定義
+# Type definitions
 # ---------------------------------------------------------------------------
 
 class _LinkEntryOptional(TypedDict, total=False):
-    """LinkEntry のオプションフィールド"""
+    """Optional fields for LinkEntry."""
     address: str
     name: str
     department: str
 
 
 class LinkEntry(_LinkEntryOptional):
-    """入力JSON配列の各エントリ"""
+    """Each entry in the input JSON array."""
     prospect_id: int
     corporate_number: str
     organization_name: str
 
 
 class EntryDetail(TypedDict, total=False):
-    """各エントリの処理結果"""
+    """Processing result for each entry."""
     index: int
     prospect_id: int
     status: str  # "updated" | "error"
@@ -56,28 +56,28 @@ class EntryDetail(TypedDict, total=False):
 
 
 class ResultSummary(TypedDict):
-    """全体の処理結果"""
+    """Overall processing result."""
     updated: int
     errors: int
     details: list[EntryDetail]
 
 
 # ---------------------------------------------------------------------------
-# 定数
+# Constants
 # ---------------------------------------------------------------------------
 
 REQUIRED_FIELDS = ("prospect_id", "corporate_number", "organization_name")
 
 
 # ---------------------------------------------------------------------------
-# メイン処理
+# Main processing
 # ---------------------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="既存 prospect に法人番号を紐づけ、organizations に upsert する。JSON を stdin から読む。",
+        description="Link a corporate number to an existing prospect and upsert into organizations. Reads JSON from stdin.",
     )
-    _ = parser.add_argument("db_path", help="SQLite データベースのパス")
+    _ = parser.add_argument("db_path", help="Path to the SQLite database")
     return parser
 
 
@@ -87,15 +87,15 @@ def main() -> None:
 
     raw = sys.stdin.read().strip()
     if not raw:
-        error_exit("stdin が空です。JSON 配列を入力してください。")
+        error_exit("stdin is empty. Please provide a JSON array.")
 
     try:
         data: list[LinkEntry] = json.loads(raw)
     except json.JSONDecodeError as e:
-        error_exit(f"JSON パースエラー: {e}")
+        error_exit(f"JSON parse error: {e}")
 
     if not isinstance(data, list):  # type: ignore[reportUnnecessaryIsinstance]
-        error_exit("入力は JSON 配列である必要があります。")
+        error_exit("Input must be a JSON array.")
 
     conn = get_connection(db_path)
     result = ResultSummary(updated=0, errors=0, details=[])
@@ -104,11 +104,11 @@ def main() -> None:
         for i, entry in enumerate(data):
             detail = EntryDetail(index=i, prospect_id=entry.get("prospect_id", 0))
 
-            # バリデーション
+            # Validation
             missing = [f for f in REQUIRED_FIELDS if not entry.get(f)]
             if missing:
                 detail["status"] = "error"
-                detail["message"] = f"必須フィールド不足: {', '.join(missing)}"
+                detail["message"] = f"Missing required fields: {', '.join(missing)}"
                 result["errors"] += 1
                 result["details"].append(detail)
                 continue
@@ -118,7 +118,7 @@ def main() -> None:
             organization_name: str = entry["organization_name"]
             address: str | None = entry.get("address")
 
-            # prospect の存在確認
+            # Verify prospect exists
             row = conn.execute(
                 "SELECT id, name, website_url, industry, overview, organization_id"
                 " FROM prospects WHERE id = ?",
@@ -126,7 +126,7 @@ def main() -> None:
             ).fetchone()
             if row is None:
                 detail["status"] = "error"
-                detail["message"] = f"prospect_id={prospect_id} が見つかりません"
+                detail["message"] = f"prospect_id={prospect_id} not found"
                 result["errors"] += 1
                 result["details"].append(detail)
                 continue
@@ -134,14 +134,14 @@ def main() -> None:
             if row["organization_id"] is not None:
                 detail["status"] = "error"
                 detail["message"] = (
-                    f"prospect_id={prospect_id} は既に organization_id="
-                    f"{row['organization_id']} が設定されています"
+                    f"prospect_id={prospect_id} already has organization_id="
+                    f"{row['organization_id']} set"
                 )
                 result["errors"] += 1
                 result["details"].append(detail)
                 continue
 
-            # organizations に upsert
+            # Upsert into organizations
             upsert_organization(
                 conn,
                 corporate_number=corporate_number,
@@ -152,7 +152,7 @@ def main() -> None:
                 address=address,
             )
 
-            # prospects.organization_id を更新
+            # Update prospects.organization_id
             update_fields: list[str] = ["organization_id = ?"]
             update_params: list[str | int] = [corporate_number]
 
@@ -179,13 +179,13 @@ def main() -> None:
             detail["prospect_id"] = prospect_id
             detail["message"] = (
                 f"organization_id={corporate_number}"
-                f" (法人名: {organization_name}) を設定しました"
+                f" (entity name: {organization_name}) set"
             )
             result["updated"] += 1
             result["details"].append(detail)
 
     except Exception as e:
-        error_exit(f"予期しないエラー: {e}")
+        error_exit(f"Unexpected error: {e}")
     finally:
         conn.close()
 

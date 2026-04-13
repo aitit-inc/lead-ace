@@ -1,78 +1,78 @@
-# 分析・改善フレームワーク
+# Analysis & Improvement Frameworks
 
-/evaluate で分析精度を高めるための参照ガイド。
+A reference guide for improving analysis accuracy in /evaluate.
 
-## 返信率が低い場合の原因分析（6つの観点）
+## Root Cause Analysis for Low Response Rates (6 Perspectives)
 
-返信率が期待を下回る場合、以下の6つの原因を順に検討する:
+When response rates fall below expectations, examine the following 6 causes in order:
 
-### 1. 件名の問題（開封されていない）
-- 兆候: 全体的に反応が低い
-- 対策: 件名を短くする、数字を入れる、相手の社名を入れる、好奇心を刺激する
+### 1. Subject Line Problem (Not Being Opened)
+- Symptoms: Overall low engagement
+- Remedies: Shorten the subject line, add numbers, include the recipient's company name, spark curiosity
 
-### 2. ターゲティングの問題（そもそも対象外）
-- 兆候: 大量送信しても反応ゼロ
-- 対策: ターゲット定義を見直す、反応があった企業の共通点を分析
+### 2. Targeting Problem (Wrong Audience)
+- Symptoms: Zero responses despite high volume
+- Remedies: Revisit target definition, analyze common traits among companies that did respond
 
-### 3. 本文の問題（読まれるが行動に至らない）
-- 兆候: 一部の返信は来るがポジティブ率が低い
-- 対策: 相手のメリットを先に、自社アピールを減らす、具体的な数字/事例を追加
+### 3. Body Content Problem (Read but No Action)
+- Symptoms: Some responses come in but positive rate is low
+- Remedies: Lead with recipient benefits, reduce self-promotion, add specific numbers/case studies
 
-### 4. CTAの問題（返信ハードルが高い）
-- 兆候: 関心はありそうだが返信がない
-- 対策: 「30分の商談」→「15分の情報交換」、「資料だけでもお送りしましょうか？」
+### 4. CTA Problem (Response Barrier Too High)
+- Symptoms: Interest seems present but no replies
+- Remedies: "30-minute meeting" → "15-minute information exchange", "Shall I send you materials?"
 
-### 5. タイミングの問題（送信日時が悪い）
-- 兆候: 曜日・時間帯で反応率に偏りがある
-- 対策: daily-cycle の実行スケジュール（cron等）で送信タイミングが決まるため、SALES_STRATEGY.md に送信時間の制約を書いてはならない。代わりに、レポートや「次回への申し送り」で「火〜木の午前中に実行すると反応率が高い傾向」等の**推奨**として報告する。実行タイミングの変更はユーザーが cron 設定を調整して対応する
+### 5. Timing Problem (Poor Send Time)
+- Symptoms: Response rate skewed by day of week or time of day
+- Remedies: Since sending timing is determined by the daily-cycle execution schedule (cron, etc.), do NOT write sending time constraints in SALES_STRATEGY.md. Instead, report in the report or "notes for next time" as a **recommendation** such as "Tue-Thu mornings tend to show higher response rates." Users adjust execution timing by modifying cron settings
 
-### 6. チャネルの問題（メール以外が有効）
-- 兆候: メールで反応がないがSNSでは反応がある（またはその逆）
-- 対策: チャネル優先順位を変更
+### 6. Channel Problem (Other Channels More Effective)
+- Symptoms: No response from email but responses from SNS (or vice versa)
+- Remedies: Change channel priority order
 
-## A/Bテスト設計
+## A/B Test Design
 
-改善仮説がある場合、以下の要素でA/Bテストを設計する:
+When there is an improvement hypothesis, design A/B tests with the following elements:
 
-### テスト対象要素
-- **件名パターン**: 好奇心型 vs 数字型 vs 課題言及型
-- **メール長さ**: 短文（150文字） vs 詳細（300文字）
-- **CTA表現**: 「商談」vs「情報交換」vs「デモ」vs「資料送付」
-- **トーン**: フォーマル vs カジュアル
-- **フック**: 社名言及 vs 業界課題 vs 数字/実績
+### Test Elements
+- **Subject line patterns**: Curiosity-type vs. number-type vs. problem-mention-type
+- **Email length**: Short (150 characters) vs. detailed (300 characters)
+- **CTA phrasing**: "Meeting" vs. "information exchange" vs. "demo" vs. "send materials"
+- **Tone**: Formal vs. casual
+- **Hook**: Company name mention vs. industry challenge vs. numbers/achievements
 
-### テスト条件
-- 1回のテストで変える要素は1つだけ
-- 各パターン最低15件以上送信（統計的有意性のため）
-- 同じ属性の営業先に均等に割り振る
-- 測定指標を事前に決める（返信率、ポジティブ返信率等）
+### Test Conditions
+- Change only one element per test
+- Send at least 15 of each pattern (for statistical significance)
+- Distribute evenly among prospects with the same attributes
+- Define measurement metrics in advance (response rate, positive response rate, etc.)
 
-### evaluations テーブルへの記録
-テスト結果は improvements JSON に以下の形式で記録する:
+### Recording in the evaluations Table
+Record test results in the improvements JSON in the following format:
 ```json
 {
   "type": "ab_test",
   "element": "subject_line",
-  "pattern_a": "数字型: XX%改善の実績",
-  "pattern_b": "課題型: {課題}でお困りではないですか",
-  "result": "pattern_a が 2.1% 高い返信率",
-  "applied": "pattern_a をデフォルトに採用"
+  "pattern_a": "Number type: Track record of XX% improvement",
+  "pattern_b": "Problem type: Struggling with {problem}?",
+  "result": "pattern_a had 2.1% higher response rate",
+  "applied": "Adopted pattern_a as default"
 }
 ```
 
-## ターゲティング精度の検証
+## Targeting Accuracy Verification
 
-送信データが蓄積されたら、以下の分析を行う:
+Once send data has accumulated, perform the following analyses:
 
-### 反応企業の共通点分析
-- 業種、規模、地域、検索キーワード、優先度スコア
-- 反応があった企業に共通するが、非反応企業にない特徴
+### Analysis of Common Traits Among Responding Companies
+- Industry, size, region, search keywords, priority score
+- Traits common to responding companies but absent in non-responding companies
 
-### 非反応企業の共通点分析
-- 反応がない企業に共通する特徴
-- 除外すべきセグメントの特定
+### Analysis of Common Traits Among Non-Responding Companies
+- Traits common to companies with no response
+- Identify segments to exclude
 
-### アクション
-- SALES_STRATEGY.md のターゲット定義を更新
-- 検索キーワードを追加・削除
-- 優先度スコアの調整（`record_evaluation.py --priority-updates` で一括更新）
+### Actions
+- Update target definition in SALES_STRATEGY.md
+- Add/remove search keywords
+- Adjust priority scores (bulk update via `record_evaluation.py --priority-updates`)

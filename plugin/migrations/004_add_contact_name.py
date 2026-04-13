@@ -1,6 +1,6 @@
-"""prospects テーブルに contact_name カラムを追加
+"""Add contact_name column to the prospects table
 
-担当者名が取得できた場合に記録する。メール宛名のパーソナライズに使用。
+Records the contact person's name when available. Used for personalizing email salutations.
 """
 
 import sqlite3

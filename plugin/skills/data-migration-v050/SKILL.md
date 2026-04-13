@@ -1,43 +1,43 @@
 ---
 name: data-migration-v050
-description: "v0.5.0で追加されたorganizationsテーブルへの既存データ移行。organization_idがNULLのprospectsに法人番号を特定・紐づけする。一時スキル（v0.6.0で削除予定）。"
+description: "Migrate existing data to the organizations table added in v0.5.0. Identifies and links corporate numbers for prospects with NULL organization_id. Temporary skill (scheduled for deletion in v0.6.0)."
 argument-hint: "[--limit N]"
 ---
 
-## 概要
+## Overview
 
-v0.5.0 で organizations テーブルを追加し、prospects に organization_id（法人番号FK）を必須化した。
-このスキルは、**旧データ（organization_id が NULL の prospects）を新スキーマに移行する**ための一時的なスキル。
+v0.5.0 added the organizations table and made organization_id (corporate number FK) required in prospects.
+This skill is a temporary skill to **migrate old data (prospects with NULL organization_id) to the new schema**.
 
-大量レコード処理のため、サブエージェントによるバッチ並列照合を行う。
+Processes large record sets using batch parallel matching with sub-agents.
 
-## 手順
+## Steps
 
-### 0. プリフライト
+### 0. Preflight
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/preflight.py data.db --migrate-only
 ```
 
-### 1. 候補検索
+### 1. Candidate Search
 
-法人番号候補を検索し、結果をファイルに保存する（メインコンテキスト圧迫を防止）:
+Search for corporate number candidates and save results to a file (to prevent main context bloat):
 
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/lookup_corporate_numbers.py data.db --limit <N> > /tmp/la_lookup.json 2>/dev/null
 ```
 
-`--limit` はユーザー引数があればそれを使う。省略時は 5。
+Use the user argument for `--limit` if provided; default is 5.
 
-件数サマリーだけ取得してユーザーに報告する（JSON 全体を出力しない）:
+Retrieve only the count summary and report to the user (do not output the full JSON):
 
 ```bash
 python3 -c "import json; d=json.load(open('/tmp/la_lookup.json')); print(f'searched={d[\"searched\"]}, found={d[\"candidates_found\"]}, not_found={d[\"not_found\"]}, errors={d[\"errors\"]}')"
 ```
 
-### 2. バッチ分割
+### 2. Batch Split
 
-`candidates_found` と `not_found` の両方を **20件ずつ** のバッチファイルに分割する:
+Split both `candidates_found` and `not_found` into batch files of **20 each**:
 
 ```bash
 python3 -c "
@@ -52,122 +52,122 @@ print(f'{len(targets)} prospects -> {math.ceil(len(targets)/bs)} batches')
 "
 ```
 
-### 3. バッチ照合（サブエージェントで並列実行）
+### 3. Batch Matching (parallel execution with sub-agents)
 
-各バッチファイルに対して **Agent tool** でサブエージェントを起動する。
-**独立したバッチは1つのメッセージ内で複数の Agent tool call を発行し、並列実行すること。**
+Launch a sub-agent for each batch file using the **Agent tool**.
+**Issue multiple Agent tool calls within a single message to run independent batches in parallel.**
 
-各サブエージェントのプロンプトとして、以下のテンプレートの `<BATCH_FILE>` を実際のパスに置き換えて渡す:
+Pass the following template to each sub-agent as a prompt, replacing `<BATCH_FILE>` with the actual path:
 
 ---
 
-**↓ サブエージェントプロンプトテンプレート ↓**
+**↓ Sub-agent Prompt Template ↓**
 
 ```
-法人番号の照合バッチを処理してください。
+Process a corporate number matching batch.
 
-## 入力
-Read tool で <BATCH_FILE> を読み、JSON 配列を取得する。
-各エントリは以下のいずれか:
+## Input
+Read <BATCH_FILE> using the Read tool to get the JSON array.
+Each entry is one of:
 - candidates_found: {prospect_id, name, website_url, status: "candidates_found", candidates: [{number, name, reading, address}]}
 - not_found: {prospect_id, name, website_url, status: "not_found"}
 
-## 処理手順
+## Processing Steps
 
-### A. candidates_found エントリ
+### A. candidates_found entries
 
-#### 自動確定（Web調査不要）
-候補が1件のみで、以下を**全て**満たす場合はそのまま確定してよい:
-- 候補の法人名と prospect の name が実質同一（全角半角・法人種別の位置違いは許容）
-- 法人種別が prospect の業種と矛盾しない（例: 営業先が学校なのに候補が株式会社→矛盾）
+#### Auto-confirm (no web investigation needed)
+If there is only 1 candidate and **all** of the following apply, confirm it directly:
+- The candidate's legal name and the prospect's name are essentially identical (full-width/half-width, legal entity type position differences are acceptable)
+- The legal entity type is not inconsistent with the prospect's industry (e.g., if the prospect is a school but the candidate is a stock company → inconsistent)
 
-#### 要調査
-自動確定できない場合、以下で調査する:
-1. fetch_url.py で prospect の website を確認:
-   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_url.py --url "<website_url>" --prompt "この法人の正式名称、業種、所在地を抽出して"
-2. 必要に応じて WebSearch で追加調査
+#### Needs investigation
+If auto-confirm is not possible, investigate as follows:
+1. Confirm the prospect's website via fetch_url.py:
+   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_url.py --url "<website_url>" --prompt "Extract this organization's official name, industry, and location"
+2. Conduct additional investigation via WebSearch as needed
 
-#### 判定
-- **確定**: 法人名・業種が整合 → confirmed に追加
-- **スキップ**: 判断できない or 候補が無関係 → skipped に追加
+#### Determination
+- **Confirm**: Legal name and industry are consistent → add to confirmed
+- **Skip**: Cannot determine or candidate is unrelated → add to skipped
 
-### B. not_found エントリ
+### B. not_found entries
 
-NTA 検索で見つからなかった営業先。以下の順で法人番号の特定を試みる:
+Prospects not found in NTA search. Try to identify the corporate number in the following order:
 
-1. **WebSearch**: 「<prospect名> 法人番号」や「<prospect名> 会社概要」で検索し、法人番号や正式法人名を探す
-2. **fetch_url.py**: prospect の website_url から正式名称を取得し、それで再度 WebSearch
-3. 上記で法人番号が判明した場合 → confirmed に追加
-4. 特定できない場合 → skipped に追加（reason に試したことを簡潔に記載）
+1. **WebSearch**: Search for "<prospect name> corporate number" or "<prospect name> company profile" to find the corporate number or official legal name
+2. **fetch_url.py**: Get the official name from the prospect's website_url, then WebSearch again
+3. If the corporate number is found → add to confirmed
+4. If not found → add to skipped (briefly note what was tried in reason)
 
-## 出力
-処理完了後、以下の JSON 構造を**テキストとして**返すこと:
+## Output
+After processing, return the following JSON structure **as text**:
 
 {
   "confirmed": [
     {
       "prospect_id": 42,
       "corporate_number": "1234567890123",
-      "organization_name": "候補の name をそのまま使用",
-      "address": "候補の address をそのまま使用"
+      "organization_name": "Use the candidate's name as-is",
+      "address": "Use the candidate's address as-is"
     }
   ],
   "skipped": [
-    {"prospect_id": 99, "status": "not_applicable", "reason": "個人事業主"}
+    {"prospect_id": 99, "status": "not_applicable", "reason": "Sole proprietor"}
   ]
 }
 
-### フィールド補足（confirmed）
-- organization_name: 候補の name（国税庁公表サイトの名称）をそのまま使う
-- name（省略可）: prospects.name を変更する場合のみ追加。例: organization_name="学校法人○○" で prospect が個別学校の場合 name="○○専門学校"
-- department（省略可）: 部署を設定する場合のみ追加
+### Field notes (confirmed)
+- organization_name: Use the candidate's name from the NTA public site as-is
+- name (optional): Only add if changing prospects.name. Example: if organization_name="School Corp. XYZ" and prospect is individual school → name="XYZ Vocational School"
+- department (optional): Only add if setting a department
 
-### フィールド補足（skipped）
-- status: "not_applicable"（法人番号が存在しない: 個人事業主、法人格なし、海外企業等）or "unresolvable"（検索したが特定できなかった: 同名多数、サイトアクセス不可等）
-- reason: スキップ理由（簡潔に）
+### Field notes (skipped)
+- status: "not_applicable" (corporate number does not exist: sole proprietor, no legal entity, foreign company, etc.) or "unresolvable" (searched but could not identify: many with same name, site inaccessible, etc. — retryable later)
+- reason: Skip reason (briefly)
 
-### 注意
-- fetch_url.py は Jina Reader（20 RPM 制限）を使用する。大量にフェッチする場合はエラーハンドリングすること
-- 自動確定できるものを先に処理し、要調査を後にまとめることで効率化する
+### Notes
+- fetch_url.py uses Jina Reader (20 RPM limit). Handle errors when fetching many pages
+- Process auto-confirmable ones first, then group those needing investigation for efficiency
 ```
 
-**↑ サブエージェントプロンプトテンプレート ↑**
+**↑ Sub-agent Prompt Template ↑**
 
 ---
 
-### 4. 結果集約・DB更新
+### 4. Aggregate Results and Update DB
 
-全サブエージェントの `confirmed` 配列を結合し、`link_organization.py` で一括更新する:
+Combine the `confirmed` arrays from all sub-agents and bulk update via `link_organization.py`:
 
 ```bash
 echo '<merged_json>' | python3 ${CLAUDE_PLUGIN_ROOT}/scripts/link_organization.py data.db
 ```
 
-### 5. スキップ済みのマーキング
+### 5. Mark Skipped Records
 
-全サブエージェントの `skipped` 配列を結合し、`mark_org_lookup_status.py` で再検索防止の印をつける。
+Combine the `skipped` arrays from all sub-agents and mark them to prevent re-searching via `mark_org_lookup_status.py`.
 
 ```bash
 echo '<skipped_json>' | python3 ${CLAUDE_PLUGIN_ROOT}/scripts/mark_org_lookup_status.py data.db
 ```
 
-JSON 配列の各オブジェクト:
+Each object in the JSON array:
 
 ```json
-{"prospect_id": 99, "status": "not_applicable", "reason": "個人事業主のため法人番号なし"}
+{"prospect_id": 99, "status": "not_applicable", "reason": "Sole proprietor — no corporate number"}
 ```
 
-status の使い分け:
-- `not_applicable` — 法人番号が存在しない（個人事業主、法人格なし、海外企業等）
-- `unresolvable` — 検索したが特定できなかった（同名多数、サイトアクセス不可等。後日リトライ可能）
+Status values:
+- `not_applicable` — Corporate number does not exist (sole proprietor, no legal entity, foreign company, etc.)
+- `unresolvable` — Searched but could not identify (many with same name, site inaccessible, etc. — retryable later)
 
-### 6. 結果報告
+### 6. Results Report
 
-ユーザーに報告する:
+Report to the user:
 
-- 確定・更新した件数
-- スキップした件数（not_applicable / unresolvable 内訳）
-- 残りの未移行件数:
+- Number confirmed and updated
+- Number skipped (not_applicable / unresolvable breakdown)
+- Remaining unmigreted count:
 
 ```bash
 python3 -c "import sqlite3; c=sqlite3.connect('data.db'); print(c.execute('SELECT COUNT(*) FROM prospects WHERE organization_id IS NULL').fetchone()[0])"

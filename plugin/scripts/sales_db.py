@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lead Ace DB - 共有モジュール（型定義・DB接続・共通操作）"""
+"""Lead Ace DB - shared module (type definitions, DB connection, common operations)"""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from typing import Literal, NoReturn, TypedDict
 
 
 # ---------------------------------------------------------------------------
-# 型エイリアス（文字列リテラル）
+# Type aliases (string literals)
 # ---------------------------------------------------------------------------
 
 FormType = Literal[
@@ -29,34 +29,34 @@ MatchType = Literal["EXACT_MATCH", "POSSIBLE_MATCH"]
 
 
 # ---------------------------------------------------------------------------
-# 型定義
+# Type definitions
 # ---------------------------------------------------------------------------
 
 class Project(TypedDict):
-    id: str  # PRIMARY KEY (テキスト、例: "my-product")
+    id: str  # PRIMARY KEY (text, e.g. "my-product")
     created_at: str
     updated_at: str
 
 
 class Organization(TypedDict, total=False):
-    corporate_number: str  # PRIMARY KEY（法人番号13桁）
+    corporate_number: str  # PRIMARY KEY (13-digit corporate number)
     name: str
     normalized_name: str
     domain: str | None
     website_url: str
     industry: str | None
     overview: str | None
-    address: str | None  # 国税庁法人番号公表サイトの所在地
+    address: str | None  # Address from the NTA Corporate Number Publication Site
     created_at: str
     updated_at: str
 
 
 class Prospect(TypedDict, total=False):
     id: int
-    name: str  # 営業先名（法人名・学校名等。小さい会社は organizations.name と同じ）
+    name: str  # Prospect name (corporate name, school name, etc. Same as organizations.name for small companies)
     contact_name: str | None
-    organization_id: str | None  # FK → organizations.corporate_number（レガシーデータは NULL）
-    department: str | None  # 法人内の区分（部署名・学科名等）
+    organization_id: str | None  # FK → organizations.corporate_number (NULL for legacy data)
+    department: str | None  # Division within the organization (department, school, etc.)
     overview: str
     industry: str | None
     website_url: str
@@ -65,7 +65,7 @@ class Prospect(TypedDict, total=False):
     form_type: FormType | None
     sns_accounts: str | None  # JSON string
     do_not_contact: int
-    org_lookup_status: str | None  # NULL=未検索, not_applicable, unresolvable
+    org_lookup_status: str | None  # NULL=not searched, not_applicable, unresolvable
     notes: str | None
     created_at: str
     updated_at: str
@@ -116,31 +116,32 @@ class Evaluation(TypedDict, total=False):
 class DuplicateMatch(TypedDict):
     match_type: MatchType
     prospect_id: int
-    name: str  # 営業先名
+    name: str  # Prospect name
     reason: str
 
 
 # ---------------------------------------------------------------------------
-# Prospect フィールドグループ
-# TypedDict と同期必須。下部の assertion でインポート時に完全性を自動検証する。
+# Prospect field groups
+# Must be kept in sync with the TypedDict. The assertion below automatically
+# verifies completeness at import time.
 # ---------------------------------------------------------------------------
 
-# DB自動生成フィールド（id, timestamps）
+# DB auto-generated fields (id, timestamps)
 _PROSPECT_AUTO_FIELDS = frozenset({"id", "created_at", "updated_at"})
 
-# Phase 1（候補収集）で取得するフィールド
+# Fields retrieved in Phase 1 (candidate collection)
 PROSPECT_CANDIDATE_FIELDS: tuple[str, ...] = (
     "name", "organization_id", "department", "overview", "industry", "website_url",
     "org_lookup_status",
 )
 
-# Phase 2（連絡先取得）で取得するフィールド
+# Fields retrieved in Phase 2 (contact enrichment)
 PROSPECT_CONTACT_FIELDS: tuple[str, ...] = (
     "contact_name", "email", "contact_form_url", "form_type", "sns_accounts",
     "do_not_contact", "notes",
 )
 
-# 完全性チェック: 全 Prospect フィールドがいずれかのグループに属すること
+# Completeness check: all Prospect fields must belong to one of the groups
 _all_prospect_fields = frozenset(Prospect.__annotations__)
 _grouped_prospect_fields = (
     frozenset(PROSPECT_CANDIDATE_FIELDS)
@@ -148,25 +149,25 @@ _grouped_prospect_fields = (
     | _PROSPECT_AUTO_FIELDS
 )
 assert _all_prospect_fields == _grouped_prospect_fields, (
-    f"Prospect フィールドグループの不整合 — "
-    f"グループ未登録: {_all_prospect_fields - _grouped_prospect_fields}, "
-    f"TypedDict未定義: {_grouped_prospect_fields - _all_prospect_fields}"
+    f"Prospect field group mismatch — "
+    f"not in any group: {_all_prospect_fields - _grouped_prospect_fields}, "
+    f"not in TypedDict: {_grouped_prospect_fields - _all_prospect_fields}"
 )
 
 
 # ---------------------------------------------------------------------------
-# DB接続
+# DB connection
 # ---------------------------------------------------------------------------
 
 def get_db_path(explicit_path: str | None = None) -> str:
-    """DBパスを決定する。明示的に指定されていなければCWDの data.db を使う。"""
+    """Determine the DB path. Uses data.db in the CWD if not explicitly specified."""
     if explicit_path:
         return explicit_path
     return os.path.join(os.getcwd(), "data.db")
 
 
 def get_connection(db_path: str) -> sqlite3.Connection:
-    """SQLite接続を取得する。外部キー制約を有効化し、行をdictで返す設定。"""
+    """Get a SQLite connection with foreign keys enabled and rows returned as dicts."""
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     _ = conn.execute("PRAGMA foreign_keys = ON")
@@ -174,42 +175,42 @@ def get_connection(db_path: str) -> sqlite3.Connection:
 
 
 def get_schema_path() -> str:
-    """スキーマファイルのパスを返す。"""
+    """Return the path to the schema file."""
     return os.path.join(os.path.dirname(__file__), "sales-db.sql")
 
 
 # ---------------------------------------------------------------------------
-# 出力ヘルパー
+# Output helpers
 # ---------------------------------------------------------------------------
 
 def rows_to_dicts(rows: list[sqlite3.Row]) -> list[dict[str, object]]:
-    """sqlite3.Row のリストを dict のリストに変換する。"""
+    """Convert a list of sqlite3.Row objects to a list of dicts."""
     return [dict(row) for row in rows]
 
 
 def print_json(data: object) -> None:
-    """JSON を stdout に出力する。"""
+    """Print JSON to stdout."""
     json.dump(data, sys.stdout, ensure_ascii=False, indent=2)
     print()
 
 
 def error_exit(message: str, code: int = 1) -> NoReturn:
-    """エラーメッセージを stderr に出力して終了する。"""
+    """Print an error message to stderr and exit."""
     print(f"ERROR: {message}", file=sys.stderr)
     sys.exit(code)
 
 
 # ---------------------------------------------------------------------------
-# 文字列ユーティリティ
+# String utilities
 # ---------------------------------------------------------------------------
 
 def normalize_name(name: str) -> str:
-    """企業名を正規化する。全角→半角変換、小文字化、前後空白除去。"""
+    """Normalize a company name: full-width to half-width conversion, lowercase, strip whitespace."""
     return unicodedata.normalize("NFKC", name).lower().strip()
 
 
 def extract_domain(url: str) -> str:
-    """URLからドメインを抽出する。プロトコル・www・パスを除去し、小文字化する。"""
+    """Extract the domain from a URL, removing protocol, www prefix, and path. Returns lowercase."""
     domain = re.sub(r"^https?://", "", url, flags=re.IGNORECASE)
     domain = re.sub(r"^www\.", "", domain, flags=re.IGNORECASE)
     domain = domain.split("/")[0]
@@ -217,7 +218,7 @@ def extract_domain(url: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Organization 操作
+# Organization operations
 # ---------------------------------------------------------------------------
 
 def upsert_organization(
@@ -229,7 +230,7 @@ def upsert_organization(
     overview: str | None = None,
     address: str | None = None,
 ) -> None:
-    """organizations テーブルに INSERT or UPDATE する。"""
+    """INSERT or UPDATE the organizations table."""
     domain = extract_domain(website_url) if website_url else None
     normalized = normalize_name(name)
     conn.execute(

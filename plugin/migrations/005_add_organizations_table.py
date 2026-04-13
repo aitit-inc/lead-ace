@@ -1,9 +1,9 @@
-"""organizations テーブルの追加、prospects に department カラムと UNIQUE 制約を追加
+"""Add organizations table, and add department column and UNIQUE constraints to prospects
 
-organizations: 法人単位のマスタ（corporate_number が PK）
-prospects.department: 法人内の部署・拠点名（nullable）
-prospects.corporate_number: 旧スキーマの UNIQUE 制約を除去（FKなので複数 prospect が同一法人番号を共有可能）
-email/contact_form_url: グローバル UNIQUE 制約で二重送信を防止
+organizations: entity-level master table (corporate_number is the PK)
+prospects.department: department or branch name within an entity (nullable)
+prospects.corporate_number: remove old schema UNIQUE constraint (as a FK, multiple prospects can share the same corporate number)
+email/contact_form_url: global UNIQUE constraints to prevent duplicate outreach
 """
 
 import re
@@ -23,7 +23,7 @@ def _extract_domain(url: str) -> str:
 
 
 def up(conn: sqlite3.Connection) -> None:
-    # 1. organizations テーブル作成
+    # 1. Create organizations table
     conn.execute("""
         CREATE TABLE IF NOT EXISTS organizations (
             corporate_number TEXT PRIMARY KEY,
@@ -44,8 +44,8 @@ def up(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_org_normalized_name ON organizations(normalized_name)"
     )
 
-    # 2. 既存 prospects から organizations にデータ移行
-    # 007/008 適用済みなら name/organization_id、未適用なら company_name/corporate_number
+    # 2. Migrate existing prospects data into organizations
+    # If 007/008 already applied: name/organization_id columns; otherwise: company_name/corporate_number
     cols = {col[1] for col in conn.execute("PRAGMA table_info(prospects)").fetchall()}
     name_col = "name" if "name" in cols else "company_name"
     org_col = "organization_id" if "organization_id" in cols else "corporate_number"
@@ -76,10 +76,10 @@ def up(conn: sqlite3.Connection) -> None:
             ),
         )
 
-    # 3. prospects.corporate_number の UNIQUE 制約を除去
-    # 旧スキーマでは corporate_number TEXT UNIQUE だったが、organizations への FK なので
-    # 複数 prospect が同一法人番号を共有できる必要がある。
-    # SQLite はカラム制約の変更ができないため、テーブル再作成で対応する。
+    # 3. Remove the UNIQUE constraint on prospects.corporate_number
+    # In the old schema it was corporate_number TEXT UNIQUE, but as a FK to organizations,
+    # multiple prospects need to be able to share the same corporate number.
+    # SQLite does not support altering column constraints, so we recreate the table.
     autoindex_names = {
         idx[1] for idx in conn.execute("PRAGMA index_list(prospects)").fetchall()
         if idx[1] and idx[1].startswith("sqlite_autoindex_prospects")
@@ -88,18 +88,18 @@ def up(conn: sqlite3.Connection) -> None:
     for idx_name in autoindex_names:
         cols = conn.execute(f"PRAGMA index_info('{idx_name}')").fetchall()
         col_names = {col[2] for col in cols}
-        # corporate_number または organization_id（リネーム後）の autoindex
+        # autoindex for corporate_number or organization_id (after rename)
         if col_names & {"corporate_number", "organization_id"}:
             has_unique_on_corp_num = True
             break
 
     if has_unique_on_corp_num:
-        # 現在のカラム名を取得（007/008 適用済みなら name/organization_id、未適用なら company_name/corporate_number）
+        # Get current column names (name/organization_id if 007/008 already applied; otherwise company_name/corporate_number)
         col_info = conn.execute("PRAGMA table_info(prospects)").fetchall()
         current_cols = [col[1] for col in col_info]
 
         cols_csv = ", ".join(current_cols)
-        # 新テーブルのカラム定義を動的に構築
+        # Dynamically build column definitions for the new table
         col_defs: list[str] = []
         for col in col_info:
             col_name: str = col[1]
@@ -113,13 +113,13 @@ def up(conn: sqlite3.Connection) -> None:
                 parts.append("PRIMARY KEY AUTOINCREMENT")
             elif not_null:
                 if default_val is not None:
-                    # 式を含む DEFAULT は () で囲む必要がある
+                    # DEFAULT expressions containing functions must be wrapped in ()
                     parts.append(f"NOT NULL DEFAULT ({default_val})")
                 else:
                     parts.append("NOT NULL")
             elif default_val is not None:
                 parts.append(f"DEFAULT ({default_val})")
-            # UNIQUE は付けない（これが修正の目的）
+            # Do not add UNIQUE (this is the whole point of the fix)
             col_defs.append(" ".join(parts))
 
         conn.execute("ALTER TABLE prospects RENAME TO _prospects_old")
@@ -127,20 +127,20 @@ def up(conn: sqlite3.Connection) -> None:
         conn.execute(f"INSERT INTO prospects ({cols_csv}) SELECT {cols_csv} FROM _prospects_old")
         conn.execute("DROP TABLE _prospects_old")
 
-    # 4. prospects に department カラム追加
+    # 4. Add department column to prospects
     existing_cols = {
         col[1] for col in conn.execute("PRAGMA table_info(prospects)").fetchall()
     }
     if "department" not in existing_cols:
         conn.execute("ALTER TABLE prospects ADD COLUMN department TEXT")
 
-    # 5. email / contact_form_url に UNIQUE 制約追加
+    # 5. Add UNIQUE constraints on email / contact_form_url
     existing_indexes = {
         idx[1] for idx in conn.execute("PRAGMA index_list(prospects)").fetchall()
     }
 
     if "idx_prospect_unique_email" not in existing_indexes:
-        # 既存の重複メールがあればログ出力（制約作成は成功する前提）
+        # Log any existing duplicate emails (assuming the constraint creation will succeed)
         dupes = conn.execute(
             "SELECT email, COUNT(*) as cnt FROM prospects"
             " WHERE email IS NOT NULL GROUP BY email HAVING cnt > 1"
@@ -148,7 +148,7 @@ def up(conn: sqlite3.Connection) -> None:
         if dupes:
             for d in dupes:
                 print(
-                    f"WARNING: 重複email検出: {d[0]} ({d[1]}件) — 手動でマージしてください",
+                    f"WARNING: Duplicate email detected: {d[0]} ({d[1]} records) — merge manually",
                     file=sys.stderr,
                 )
         else:
@@ -165,7 +165,7 @@ def up(conn: sqlite3.Connection) -> None:
         if dupes:
             for d in dupes:
                 print(
-                    f"WARNING: 重複form検出: {d[0]} ({d[1]}件) — 手動でマージしてください",
+                    f"WARNING: Duplicate contact form URL detected: {d[0]} ({d[1]} records) — merge manually",
                     file=sys.stderr,
                 )
         else:
