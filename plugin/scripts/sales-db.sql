@@ -6,16 +6,16 @@ CREATE TABLE IF NOT EXISTS projects (
     updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
--- Entity master table (corporate number is the primary key)
+-- Entity master table (apex domain is the unique identifier)
 CREATE TABLE IF NOT EXISTS organizations (
-    corporate_number TEXT PRIMARY KEY,  -- corporate number (13 digits)
+    domain TEXT PRIMARY KEY,             -- apex domain (e.g., "example.com")
     name TEXT NOT NULL,
-    normalized_name TEXT NOT NULL,  -- normalized (NFKC + lowercase + trim)
-    domain TEXT,  -- website_url with protocol, www, and path stripped
+    normalized_name TEXT NOT NULL,       -- normalized (NFKC + lowercase + trim)
     website_url TEXT NOT NULL,
+    country TEXT,                        -- ISO 3166-1 alpha-2 (e.g., "JP", "US")
+    address TEXT,
     industry TEXT,
     overview TEXT,
-    address TEXT,  -- address from the NTA Corporate Number Publication Site
     created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
@@ -25,8 +25,8 @@ CREATE TABLE IF NOT EXISTS prospects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,  -- prospect name (entity name, school name, department, etc.; same as organizations.name for small companies)
     contact_name TEXT,  -- contact person's name
-    organization_id TEXT REFERENCES organizations(corporate_number),  -- FK → organizations (NULL for legacy data)
-    department TEXT,  -- department or branch name (NULL if not applicable; school name for educational entities)
+    organization_id TEXT REFERENCES organizations(domain),  -- FK → organizations (NULL if org unknown)
+    department TEXT,  -- department or branch name (NULL if not applicable)
     overview TEXT NOT NULL,
     industry TEXT,
     website_url TEXT NOT NULL,
@@ -35,7 +35,6 @@ CREATE TABLE IF NOT EXISTS prospects (
     form_type TEXT,  -- google_forms, native_html, wordpress_cf7, iframe_embed, with_captcha
     sns_accounts TEXT,  -- JSON: {"twitter": "...", "linkedin": "...", ...}
     do_not_contact INTEGER NOT NULL DEFAULT 0,  -- 1 = do not contact (applies across all projects)
-    org_lookup_status TEXT,  -- NULL=not searched, not_applicable=no corporate number, unresolvable=could not identify
     notes TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
@@ -91,7 +90,7 @@ CREATE TABLE IF NOT EXISTS evaluations (
 );
 
 -- Indexes: organizations
-CREATE INDEX IF NOT EXISTS idx_org_domain ON organizations(domain);
+-- (domain is the PRIMARY KEY, automatically indexed)
 CREATE INDEX IF NOT EXISTS idx_org_normalized_name ON organizations(normalized_name);
 
 -- Indexes: prospects (UNIQUE constraints to prevent duplicate outreach)

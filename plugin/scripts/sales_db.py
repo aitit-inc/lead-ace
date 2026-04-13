@@ -39,14 +39,14 @@ class Project(TypedDict):
 
 
 class Organization(TypedDict, total=False):
-    corporate_number: str  # PRIMARY KEY (13-digit corporate number)
+    domain: str  # PRIMARY KEY (apex domain, e.g., "example.com")
     name: str
     normalized_name: str
-    domain: str | None
     website_url: str
+    country: str | None  # ISO 3166-1 alpha-2 (e.g., "JP", "US")
+    address: str | None
     industry: str | None
     overview: str | None
-    address: str | None  # Address from the NTA Corporate Number Publication Site
     created_at: str
     updated_at: str
 
@@ -55,7 +55,7 @@ class Prospect(TypedDict, total=False):
     id: int
     name: str  # Prospect name (corporate name, school name, etc. Same as organizations.name for small companies)
     contact_name: str | None
-    organization_id: str | None  # FK → organizations.corporate_number (NULL for legacy data)
+    organization_id: str | None  # FK → organizations.domain (NULL if org unknown)
     department: str | None  # Division within the organization (department, school, etc.)
     overview: str
     industry: str | None
@@ -65,7 +65,6 @@ class Prospect(TypedDict, total=False):
     form_type: FormType | None
     sns_accounts: str | None  # JSON string
     do_not_contact: int
-    org_lookup_status: str | None  # NULL=not searched, not_applicable, unresolvable
     notes: str | None
     created_at: str
     updated_at: str
@@ -132,7 +131,6 @@ _PROSPECT_AUTO_FIELDS = frozenset({"id", "created_at", "updated_at"})
 # Fields retrieved in Phase 1 (candidate collection)
 PROSPECT_CANDIDATE_FIELDS: tuple[str, ...] = (
     "name", "organization_id", "department", "overview", "industry", "website_url",
-    "org_lookup_status",
 )
 
 # Fields retrieved in Phase 2 (contact enrichment)
@@ -223,28 +221,29 @@ def extract_domain(url: str) -> str:
 
 def upsert_organization(
     conn: sqlite3.Connection,
-    corporate_number: str,
     name: str,
     website_url: str,
+    country: str | None = None,
     industry: str | None = None,
     overview: str | None = None,
     address: str | None = None,
-) -> None:
-    """INSERT or UPDATE the organizations table."""
-    domain = extract_domain(website_url) if website_url else None
+) -> str:
+    """INSERT or UPDATE the organizations table. Returns the domain (PK)."""
+    domain = extract_domain(website_url)
     normalized = normalize_name(name)
     conn.execute(
         "INSERT INTO organizations"
-        " (corporate_number, name, normalized_name, domain, website_url, industry, overview, address)"
+        " (domain, name, normalized_name, website_url, country, address, industry, overview)"
         " VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-        " ON CONFLICT(corporate_number) DO UPDATE SET"
+        " ON CONFLICT(domain) DO UPDATE SET"
         "   name = excluded.name,"
         "   normalized_name = excluded.normalized_name,"
-        "   domain = excluded.domain,"
         "   website_url = excluded.website_url,"
+        "   country = COALESCE(excluded.country, organizations.country),"
+        "   address = COALESCE(excluded.address, organizations.address),"
         "   industry = COALESCE(excluded.industry, organizations.industry),"
         "   overview = COALESCE(excluded.overview, organizations.overview),"
-        "   address = COALESCE(excluded.address, organizations.address),"
         "   updated_at = datetime('now', 'localtime')",
-        (corporate_number, name, normalized, domain, website_url, industry, overview, address),
+        (domain, name, normalized, website_url, country, address, industry, overview),
     )
+    return domain

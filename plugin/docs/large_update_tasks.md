@@ -164,6 +164,33 @@ lead-ace/                           ← git repo root
 
 ---
 
+## フェーズ1.5: 全コンテンツの英語化 ✅ 完了
+
+**目標:** 日本語ユーザー限定だったプラグインをグローバル版にする。plugin/docs/ 配下（開発用一時ドキュメント）を除く全ファイルを英語化。
+
+### 対応内容
+
+- `plugin/README.md`、`CLAUDE.md`（リポジトリルート）→ 英語化
+- `plugin/.claude-plugin/plugin.json` → 英語化
+- `plugin/references/workspace-conventions.md` → 英語化
+- `plugin/skills/*/SKILL.md`（全9スキル）→ 英語化
+- `plugin/skills/*/references/*.md`（全参照ファイル）→ 英語化
+- `plugin/scripts/*.py`（コメント・docstring・メッセージ）→ 英語化
+- `plugin/migrations/*.py`（コメント・docstring）→ 英語化
+- `plugin/scripts/sales-db.sql`（コメント）→ 英語化
+- `CLAUDE.md` の「言語: 日本語」→「Language: English」に変更
+
+### グローバル化の追加修正（同セッションで対応）
+
+- メール文字数基準を日本語ベース（文字数）→ 英語ベース（words）に変更
+- 法的要件を特定電子メール法（日本）→ CAN-SPAM / GDPR / CASL / Spam Act のグローバル版に変更
+- 日本固有のサービス名（Timerex, PR TIMES, INITIAL, STARTUP DB 等）を削除
+- 代わりに `/strategy` スキルで「どのプラットフォームを使うか」をユーザーに確認し、SALES_STRATEGY.md の `## Prospect Discovery Sources` セクションに記載する設計に変更
+- `enrich-contacts.md` が SALES_STRATEGY.md の Prospect Discovery Sources を参照するよう変更
+- ターゲット例示の地名・業界名を汎用化
+
+---
+
 ## フェーズ1.7: 法人番号システムのグローバル化
 
 **目標:** 日本の国税庁法人番号に依存した組織識別の仕組みを、グローバル対応の汎用識別子に置き換える

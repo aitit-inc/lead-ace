@@ -8,9 +8,8 @@ Reads a JSON array of candidates from stdin, removes prospects already registere
 in the DB, and outputs only new candidates to stdout.
 
 Match criteria (fastest first):
-  1. organizations.corporate_number match
-  2. organizations.domain match
-  3. Normalized match on prospects.name
+  1. organizations.domain match (O(1) PK lookup)
+  2. Normalized match on prospects.name
 
 Output (stdout): Filtered JSON array
 Output (stderr): Filter result summary
@@ -41,13 +40,10 @@ def main() -> None:
 
     conn = get_connection(db_path)
     try:
-        # Fetch corporate_number and domain from organizations (for fast lookup)
-        org_corp_nums: set[str] = set()
+        # Fetch domains from organizations for fast PK lookup
         org_domains: set[str] = set()
-        for row in conn.execute("SELECT corporate_number, domain FROM organizations"):
-            org_corp_nums.add(row["corporate_number"])
-            if row["domain"]:
-                org_domains.add(row["domain"])
+        for row in conn.execute("SELECT domain FROM organizations"):
+            org_domains.add(str(row["domain"]))
 
         # Fetch prospect names for fallback matching
         cursor = conn.execute(
@@ -75,16 +71,13 @@ def main() -> None:
             continue
 
         raw_name = candidate.get("name", "")
-        corp_num = candidate.get("corporate_number", "")
         url = candidate.get("website_url", "")
         domain = extract_domain(url) if url else ""
 
-        # 1. Corporate number check (O(1) set lookup)
-        if corp_num and corp_num in org_corp_nums:
-            duplicates.append({"name": raw_name, "reason": f"Corporate number match: {corp_num}"})
-        # 2. Domain check (organizations takes priority)
-        elif domain and domain in org_domains:
+        # 1. Domain check against organizations (O(1) PK lookup)
+        if domain and domain in org_domains:
             duplicates.append({"name": raw_name, "reason": f"Domain match (org): {domain}"})
+        # 2. Domain check against project prospects
         elif domain and domain in existing_domains:
             duplicates.append({"name": raw_name, "reason": f"Domain match: {domain}"})
         # 3. Name check

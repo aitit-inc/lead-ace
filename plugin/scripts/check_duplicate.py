@@ -3,12 +3,11 @@
 
 Checks in order from most reliable to least, and outputs matching candidates as JSON.
 Check order:
-  1. organizations corporate_number (O(1) PK)
-  2. prospects email (O(1) UNIQUE INDEX)
-  3. prospects contact_form_url (O(1) UNIQUE INDEX)
-  4. SNS accounts
-  5. Name match (fallback)
-  6. Domain match (fallback)
+  1. prospects email (O(1) UNIQUE INDEX)
+  2. prospects contact_form_url (O(1) UNIQUE INDEX)
+  3. SNS accounts
+  4. Name match (fallback)
+  5. Domain match (fallback)
 
 Usage:
   check_duplicate.py <db_path> [options]
@@ -16,7 +15,6 @@ Usage:
 Options:
   --email <email>
   --sns <key> <value>
-  --corporate-number <number>
   --name <name>
   --website-url <url>
   --contact-form-url <url>
@@ -33,56 +31,6 @@ import sqlite3
 import sys
 
 from sales_db import DuplicateMatch, extract_domain, get_connection, normalize_name  # pyright: ignore[reportMissingModuleSource]
-
-
-def check_corporate_number(conn: sqlite3.Connection, number: str) -> list[DuplicateMatch]:
-    """Search organizations → prospects by corporate number (O(1) PK lookup)."""
-    # Check if it exists in organizations
-    org = conn.execute(
-        "SELECT corporate_number, name FROM organizations WHERE corporate_number = ?",
-        (number,),
-    ).fetchone()
-    if org is None:
-        # Even if not in organizations, it may exist in legacy prospects data
-        cursor = conn.execute(
-            "SELECT id, name FROM prospects WHERE organization_id = ?",
-            (number,),
-        )
-        return [
-            DuplicateMatch(
-                match_type="EXACT_MATCH",
-                prospect_id=row["id"],
-                name=row["name"],
-                reason=f"Corporate number match: {number}",
-            )
-            for row in cursor
-        ]
-
-    # Found in organizations → return linked prospects
-    cursor = conn.execute(
-        "SELECT id, name FROM prospects WHERE organization_id = ?",
-        (number,),
-    )
-    results = [
-        DuplicateMatch(
-            match_type="EXACT_MATCH",
-            prospect_id=row["id"],
-            name=row["name"],
-            reason=f"Corporate number match (entity: {org['name']}): {number}",
-        )
-        for row in cursor
-    ]
-    # Even if no prospects exist, org is present → return org_name to indicate duplicate
-    if not results:
-        results.append(
-            DuplicateMatch(
-                match_type="EXACT_MATCH",
-                prospect_id=-1,  # org exists but no prospect registered yet
-                name=str(org["name"]),
-                reason=f"Corporate number match (organizations only): {number}",
-            )
-        )
-    return results
 
 
 def check_email(conn: sqlite3.Connection, email: str) -> list[DuplicateMatch]:
@@ -149,9 +97,9 @@ def check_name(conn: sqlite3.Connection, name: str) -> list[DuplicateMatch]:
 
     # First, fast check using the organizations INDEX
     org_cursor = conn.execute(
-        "SELECT o.corporate_number, o.name, p.id, p.name"
+        "SELECT o.domain, o.name, p.id, p.name"
         " FROM organizations o"
-        " LEFT JOIN prospects p ON o.corporate_number = p.organization_id"
+        " LEFT JOIN prospects p ON o.domain = p.organization_id"
         " WHERE o.normalized_name = ?",
         (normalized,),
     )
@@ -189,11 +137,11 @@ def check_website_domain(conn: sqlite3.Connection, url: str) -> list[DuplicateMa
     if not domain:
         return []
 
-    # Fast check using the organizations INDEX
+    # Fast check using the organizations PK
     org_cursor = conn.execute(
-        "SELECT o.corporate_number, o.name, p.id, p.name"
+        "SELECT o.domain, o.name, p.id, p.name"
         " FROM organizations o"
-        " LEFT JOIN prospects p ON o.corporate_number = p.organization_id"
+        " LEFT JOIN prospects p ON o.domain = p.organization_id"
         " WHERE o.domain = ?",
         (domain,),
     )
@@ -235,7 +183,6 @@ def build_parser() -> argparse.ArgumentParser:
     _ = parser.add_argument("db_path", help="Path to the SQLite database")
     _ = parser.add_argument("--email", help="Exact match check by email address")
     _ = parser.add_argument("--sns", nargs=2, metavar=("KEY", "VALUE"), help="Exact match check by SNS account (e.g. --sns x @account)")
-    _ = parser.add_argument("--corporate-number", help="Exact match check by corporate number")
     _ = parser.add_argument("--name", help="Exact match check by name")
     _ = parser.add_argument("--website-url", help="Match check by website domain")
     _ = parser.add_argument("--contact-form-url", help="Exact match check by contact form URL")
@@ -249,9 +196,6 @@ def main() -> None:
     matches: list[DuplicateMatch] = []
 
     try:
-        if args.corporate_number:
-            matches.extend(check_corporate_number(conn, args.corporate_number))
-
         if args.email:
             matches.extend(check_email(conn, args.email))
 

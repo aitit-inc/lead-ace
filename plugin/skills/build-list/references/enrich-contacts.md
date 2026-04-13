@@ -6,11 +6,9 @@ A procedure for exploring prospect candidates' official websites to retrieve con
 
 A list of prospect candidates. Each candidate includes at minimum:
 - `name`: Prospect name (school name, company name, etc.)
-- `organization_name`: Official legal entity name (verified via check_corporate_number.py)
-- `corporate_number`: Corporate number (13 digits)
 - `website_url`: Official website URL
 - `overview`: Business overview
-- Other information already retrieved in build-list Phase 1 (industry, department, etc.)
+- Other information already retrieved in build-list Phase 1 (organization_name, industry, department, country, etc.)
 
 ## Exploration Procedure
 
@@ -116,13 +114,13 @@ For each candidate, return retrieved information in JSON format. **Field names m
 [
   {
     "name": "Company A",
-    "organization_name": "Company A (official legal name)",
-    "corporate_number": "1234567890123",
+    "organization_name": "Company A Legal Name (if different from name)",
     "department": null,
     "contact_name": "John Smith",
     "website_url": "https://a.com",
     "overview": "Business overview",
     "industry": "Industry",
+    "country": "US",
     "email": "info@a.com",
     "contact_form_url": null,
     "form_type": null,
@@ -141,6 +139,7 @@ For each candidate, return retrieved information in JSON format. **Field names m
 - `form_type`: Form type (`"google_forms"` / `"native_html"` / `"wordpress_cf7"` / `"iframe_embed"` / `"with_captcha"` / `null`). Null if `contact_form_url` is null
 - `do_not_contact`: Set to `true` if the site has a sales refusal notice (omit or `false` otherwise)
 - `notes`: Supplementary information such as reason for do_not_contact (optional)
+- `organization_name`: Legal entity name if different from `name` (e.g., a holding company that operates multiple brands)
 
 **Other:**
 - If `email` is found, `contact_form_url` is not needed (can be null)

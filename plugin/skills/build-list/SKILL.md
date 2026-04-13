@@ -91,33 +91,17 @@ This phase focuses on **discovering candidates**. Contact information (email, fo
 
 **Required (skip the candidate if missing):**
 - Name (company name, school name, organization name, etc.)
-- Corporate number (13 digits) — obtained via the corporate number search described below
 - Business overview (what the organization does; 1-2 sentences summarized from the official site)
 - Official site URL
 
 **If available:**
 - Industry or field
 - Department or branch name (school name for school corporations, target department for large companies)
+- Country (ISO 3166-1 alpha-2, e.g., "US", "JP", "GB")
 - Email addresses or SNS accounts found incidentally during search (no need to look for these intentionally)
+- `organization_name`: the legal entity name if it differs from the prospect name (e.g., a school corporation that operates multiple schools)
 
 Skip any prospect for which the official site URL and business overview cannot be obtained.
-
-**Corporate number search (required for each candidate):**
-
-After collecting candidates, retrieve corporate numbers for those that don't have one yet:
-
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/check_corporate_number.py "{company name}"
-```
-
-JSON is output to stdout. Retrieve `number` (corporate number) and `name` (official legal name) from the `results` array.
-- 1 result → use `number` as `corporate_number`, `name` as `organization_name`
-- Multiple results → identify the correct candidate by cross-referencing address and official site information. If uncertain, verify with WebSearch + fetch_url.py
-- 0 results → retry by removing legal entity type from the name or using the kana reading (`--kana`)
-
-Do not include candidates for which a corporate number cannot be found (they cannot be registered since organizations table uses corporate number as PK).
-
-**Note:** `organization_name` is the official legal name confirmed at NTA (e.g., "学校法人片柳学園" / "Katayagi Gakuen School Corporation"), which may differ from the prospect name (`name`, e.g., "日本工学院専門学校" / "Nihon Kogakuin College").
 
 **Search tips:**
 - A single query finds limited prospects, so vary the angles broadly
@@ -159,7 +143,7 @@ For each prospect, assign a match reason (why they're appropriate as a target, i
 Split Phase 1 candidates into **batches of 5** and launch a sub-agent for each batch to retrieve contact information.
 
 Include the following in each sub-agent's prompt:
-- List of assigned candidates (name, organization_name, corporate_number, website_url, overview, industry, department, match_reason, priority)
+- List of assigned candidates (name, organization_name, website_url, overview, industry, department, country, match_reason, priority)
 - Read `${CLAUDE_PLUGIN_ROOT}/skills/build-list/references/enrich-contacts.md` and follow its procedure
 - Explore each candidate's official site to retrieve email addresses and contact form URLs
 - Use `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_url.py --url <URL> --prompt <instructions>` for page retrieval (do not use WebFetch)
@@ -167,7 +151,7 @@ Include the following in each sub-agent's prompt:
 
 Sub-agent allowed-tools: `Bash`, `WebSearch`, `Read`
 
-Each object in the JSON array returned by the sub-agent includes the Phase 1 information (name, organization_name, corporate_number, overview, website_url, industry, department, match_reason, priority) plus the retrieved contacts (email, contact_form_url, sns_accounts).
+Each object in the JSON array returned by the sub-agent includes the Phase 1 information (name, organization_name, overview, website_url, industry, department, country, match_reason, priority) plus the retrieved contacts (email, contact_form_url, sns_accounts).
 
 ### 6b. Re-search for Candidates Without Contact Info (only when applicable)
 
@@ -205,11 +189,11 @@ cat <<'EOF' | python3 ${CLAUDE_PLUGIN_ROOT}/scripts/add_prospects.py data.db "$0
 [
   {
     "name": "Prospect name (school name, company name, etc.)",
-    "organization_name": "Official legal name (result from check_corporate_number.py)",
-    "corporate_number": "1234567890123",
+    "organization_name": "Legal entity name if different from name (optional)",
     "department": null,
     "overview": "Business overview (1-2 sentences)",
     "website_url": "https://example.com",
+    "country": "US",
     "industry": "Industry",
     "email": "info@example.com",
     "contact_form_url": null,
@@ -222,31 +206,21 @@ EOF
 ```
 
 **Difference between organizations and prospects:**
-- `organizations` = **Legal entity** unit (corporate number is PK). The official legal name confirmed via `check_corporate_number.py` is auto-registered
+- `organizations` = **Legal entity** unit (apex domain is PK, auto-derived from `website_url`). `organization_name` is the entity name stored here
 - `prospects` = **Prospect** unit. Put the actual prospect name in `name`. `department` is the department within the prospect (if any)
 
 Small company: org.name = pros.name (1:1, department is null)
-School corporation: org.name = "学校法人片柳学園", pros.name = "日本工学院専門学校" (1:many possible)
-Department within large company: org.name = "ABC Corp.", pros.name = "ABC Corp.", department = "Sales Planning Dept."
-
-```json
-{
-  "name": "Nihon Kogakuin College",
-  "organization_name": "Katayagi Gakuen School Corporation",
-  "corporate_number": "9010805001803",
-  "department": null,
-  ...
-}
-```
+School corporation operating multiple schools: `organization_name` = "Katayagi Gakuen School Corporation", `name` = "Nihon Kogakuin College" (1:many possible)
+Department within large company: `name` = "ABC Corp.", `department` = "Sales Planning Dept."
 
 **Field details:**
-- Required: `name` (prospect name), `organization_name` (official legal name), `corporate_number`, `overview`, `website_url`, `match_reason`
-- Optional: `department`, `industry`, `email`, `contact_form_url`, `sns_accounts`
+- Required: `name`, `overview`, `website_url`, `match_reason`
+- Optional: `organization_name` (defaults to `name` if omitted), `department`, `country`, `industry`, `email`, `contact_form_url`, `sns_accounts`
 - `priority`: defaults to 3 if omitted
 
 **Script behavior:**
-- Automatically checks for duplicates on each entry (in order: corporate number → email → form URL → SNS → name → domain)
-- `corporate_number` is required. Organizations table is auto-upserted
+- Automatically checks for duplicates by domain → email → form URL → SNS → name
+- `organizations` table is auto-upserted using the apex domain from `website_url`
 - `email` / `contact_form_url` have global UNIQUE constraints to prevent double-sending
 - `EXACT_MATCH`: Uses existing prospect_id and only adds the project_prospects link
 - `POSSIBLE_MATCH` (domain match, etc.): Registers as new but reports as `possible_matches` in output

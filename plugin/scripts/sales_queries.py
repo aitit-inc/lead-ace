@@ -121,7 +121,7 @@ def cmd_list_reachable(conn: sqlite3.Connection, args: list[str]) -> None:
         " p.organization_id, pp.match_reason, pp.priority"
         " FROM prospects p"
         " JOIN project_prospects pp ON p.id = pp.prospect_id"
-        " LEFT JOIN organizations o ON p.organization_id = o.corporate_number"
+        " LEFT JOIN organizations o ON p.organization_id = o.domain"
         " WHERE pp.project_id = ? AND pp.status = 'new'"
         " AND p.do_not_contact = 0"
         " AND ("

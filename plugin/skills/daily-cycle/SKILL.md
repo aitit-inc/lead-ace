@@ -221,8 +221,8 @@ Include the following in the prompt:
 - Project directory: `$0`
 - Target count
 - Read Phase 1 (steps 1-5) of `${CLAUDE_PLUGIN_ROOT}/skills/build-list/SKILL.md` and follow its procedure
-- **Contact retrieval (email, form, etc.) is not needed**. Collect candidate name, corporate number, official legal name, official URL, overview, industry, match reason, and priority
-- After completion, return the candidate list as a JSON array (each object: name, organization_name, corporate_number, website_url, overview, industry, match_reason, priority (numeric 1-5 per build-list SKILL.md definition))
+- **Contact retrieval (email, form, etc.) is not needed**. Collect candidate name, official URL, overview, industry, country, match reason, and priority
+- After completion, return the candidate list as a JSON array (each object: name, organization_name, website_url, overview, industry, country, match_reason, priority (numeric 1-5 per build-list SKILL.md definition))
 - Also update the search notes (`$0/SEARCH_NOTES.md`)
 
 **8b. Duplicate filter (main context)**

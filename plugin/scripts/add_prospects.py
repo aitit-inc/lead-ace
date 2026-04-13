@@ -37,7 +37,7 @@ import sys
 from typing import TypedDict, cast
 
 from check_duplicate import ALLOWED_SNS_KEYS  # pyright: ignore[reportMissingModuleSource]
-from sales_db import DuplicateMatch, error_exit, get_connection, print_json, upsert_organization  # pyright: ignore[reportMissingModuleSource]
+from sales_db import DuplicateMatch, error_exit, extract_domain, get_connection, print_json, upsert_organization  # pyright: ignore[reportMissingModuleSource]
 
 
 # ---------------------------------------------------------------------------
@@ -46,9 +46,8 @@ from sales_db import DuplicateMatch, error_exit, get_connection, print_json, ups
 
 class ProspectEntry(TypedDict, total=False):
     """Each entry in the input JSON array"""
-    # For organizations
-    organization_name: str  # Official legal name (as confirmed by check_corporate_number.py)
-    corporate_number: str
+    # For organizations (organization_name falls back to name if omitted)
+    organization_name: str  # Legal entity name (may differ from prospect name, e.g. school corp vs school)
     # For prospects
     name: str  # Prospect name (school name, company name, etc.)
     contact_name: str
@@ -56,16 +55,17 @@ class ProspectEntry(TypedDict, total=False):
     overview: str
     industry: str
     website_url: str
+    country: str  # ISO 3166-1 alpha-2 (e.g., "JP", "US")
     email: str
     contact_form_url: str
     form_type: str
     sns_accounts: str | dict[str, str]
     do_not_contact: bool
     notes: str
-    # project_prospects 用
+    # For project_prospects
     match_reason: str
     priority: int
-    # 既存prospect紐付け用
+    # For linking an existing prospect
     existing_prospect_id: int
 
 
@@ -99,7 +99,7 @@ class ResultSummary(TypedDict):
 # 定数
 # ---------------------------------------------------------------------------
 
-PROSPECT_REQUIRED = ("name", "organization_name", "corporate_number", "overview", "website_url")
+PROSPECT_REQUIRED = ("name", "overview", "website_url")
 PROJECT_PROSPECT_REQUIRED = ("match_reason",)
 
 
@@ -122,40 +122,39 @@ def validate_entry(entry: ProspectEntry, index: int) -> list[str]:
 
 
 def find_duplicates(conn: sqlite3.Connection, entry: ProspectEntry) -> list[DuplicateMatch]:
-    """Check for duplicate entries. Branches by corporate number; only checks within the same legal entity.
+    """Check for duplicate entries. Uses domain as the organization anchor.
 
-    1. Check organizations by corporate number
-       - New legal entity → no duplicates (return [])
-       - Existing legal entity → check for duplicates among prospects within the same entity
-    2. For prospects within the same entity, check duplicates via email / contact_form_url / SNS
-       - email / contact_form_url also have global UNIQUE constraints and are protected at the DB level on INSERT
+    1. Derive domain from website_url and look up in organizations
+       - Unknown organization → no duplicates (return [])
+       - Known organization → check for duplicates among its prospects
+    2. Within the same organization, check via email / contact_form_url / SNS
+       - email / contact_form_url also have global UNIQUE constraints at the DB level
     """
-    corporate_number = entry.get("corporate_number")
-    if not corporate_number:
+    website_url = entry.get("website_url")
+    if not website_url:
         return []
 
-    # 1. 法人番号で organizations を確認
+    domain = extract_domain(website_url)
     org = conn.execute(
-        "SELECT corporate_number FROM organizations WHERE corporate_number = ?",
-        (corporate_number,),
+        "SELECT domain FROM organizations WHERE domain = ?",
+        (domain,),
     ).fetchone()
     if org is None:
-        return []  # New legal entity → no duplicates
+        return []  # Unknown organization → no duplicates
 
-    # 2. Existing legal entity → check for duplicates among prospects within the same entity
     matches: list[DuplicateMatch] = []
 
     email = entry.get("email")
     if email:
         for row in conn.execute(
             "SELECT id, name FROM prospects WHERE organization_id = ? AND email = ?",
-            (corporate_number, email),
+            (domain, email),
         ):
             matches.append(DuplicateMatch(
                 match_type="EXACT_MATCH",
                 prospect_id=row["id"],
                 name=row["name"],
-                reason=f"Email match within same entity: {email}",
+                reason=f"Email match within same organization: {email}",
             ))
 
     contact_form_url = entry.get("contact_form_url")
@@ -163,13 +162,13 @@ def find_duplicates(conn: sqlite3.Connection, entry: ProspectEntry) -> list[Dupl
         for row in conn.execute(
             "SELECT id, name FROM prospects"
             " WHERE organization_id = ? AND contact_form_url = ?",
-            (corporate_number, contact_form_url),
+            (domain, contact_form_url),
         ):
             matches.append(DuplicateMatch(
                 match_type="EXACT_MATCH",
                 prospect_id=row["id"],
                 name=row["name"],
-                reason=f"Form URL match within same entity: {contact_form_url}",
+                reason=f"Form URL match within same organization: {contact_form_url}",
             ))
 
     sns_raw = entry.get("sns_accounts")
@@ -191,13 +190,13 @@ def find_duplicates(conn: sqlite3.Connection, entry: ProspectEntry) -> list[Dupl
                     " WHERE organization_id = ?"
                     " AND sns_accounts IS NOT NULL"
                     f" AND json_extract(sns_accounts, '$.{key}') = ?",
-                    (corporate_number, value),
+                    (domain, value),
                 ):
                     matches.append(DuplicateMatch(
                         match_type="EXACT_MATCH",
                         prospect_id=row["id"],
                         name=row["name"],
-                        reason=f"SNS match within same entity: {key}={value}",
+                        reason=f"SNS match within same organization: {key}={value}",
                     ))
 
     # Deduplicate (same prospect_id may match at multiple stages)
@@ -214,7 +213,8 @@ def find_duplicates(conn: sqlite3.Connection, entry: ProspectEntry) -> list[Dupl
 def insert_prospect(conn: sqlite3.Connection, entry: ProspectEntry) -> int:
     """Insert one record into the prospects table and return the new ID.
 
-    Also upserts to the organizations table if corporate_number is present.
+    Also upserts to the organizations table using website_url as the domain key.
+    organization_name falls back to name if not provided.
     """
     sns_val = entry.get("sns_accounts")
     sns_str: str | None = None
@@ -224,23 +224,21 @@ def insert_prospect(conn: sqlite3.Connection, entry: ProspectEntry) -> int:
         sns_str = sns_val
 
     do_not_contact = 1 if entry.get("do_not_contact") else 0
-    notes = entry.get("notes")
 
-    # Upsert to organizations (register with official legal name)
-    corp_num = entry.get("corporate_number")
-    org_name = entry.get("organization_name")
     prospect_name = entry.get("name")
     website_url = entry.get("website_url")
-    if not corp_num or not org_name or not prospect_name or not website_url:
+    if not prospect_name or not website_url:
         raise ValueError(
-            f"corporate_number, organization_name, name, website_url are required"
-            f" (organization_name={org_name}, name={prospect_name})"
+            f"name and website_url are required (name={prospect_name})"
         )
-    upsert_organization(
+
+    # Upsert to organizations (organization_name falls back to prospect name)
+    org_name = entry.get("organization_name") or prospect_name
+    domain = upsert_organization(
         conn,
-        corporate_number=corp_num,
         name=org_name,
         website_url=website_url,
+        country=entry.get("country"),
         industry=entry.get("industry"),
         overview=entry.get("overview"),
     )
@@ -257,7 +255,7 @@ def insert_prospect(conn: sqlite3.Connection, entry: ProspectEntry) -> int:
         (
             prospect_name,
             entry.get("contact_name"),
-            corp_num,
+            domain,
             entry.get("department"),
             entry.get("overview"),
             entry.get("industry"),
@@ -267,7 +265,7 @@ def insert_prospect(conn: sqlite3.Connection, entry: ProspectEntry) -> int:
             entry.get("form_type"),
             sns_str,
             do_not_contact,
-            notes,
+            entry.get("notes"),
         ),
     )
     row_id = cursor.lastrowid
