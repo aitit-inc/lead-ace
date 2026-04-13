@@ -1,0 +1,12 @@
+{
+  "name": "lead-ace-api",
+  "main": "src/api/index.ts",
+  "compatibility_date": "2026-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "ENVIRONMENT": "development"
+  }
+  // Secrets (set via wrangler secret or .dev.vars):
+  // DATABASE_URL
+  // SUPABASE_JWT_SECRET
+}

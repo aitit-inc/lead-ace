@@ -1,0 +1,369 @@
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
+import { jwtVerify } from 'jose'
+import { z } from 'zod'
+
+type Env = {
+  WEB_API_URL: string
+  SUPABASE_JWT_SECRET: string
+  ENVIRONMENT: string
+}
+
+// ---------------------------------------------------------------------------
+// Auth helpers
+// ---------------------------------------------------------------------------
+
+async function extractUserId(request: Request, jwtSecret: string): Promise<string | null> {
+  const authHeader = request.headers.get('Authorization')
+  if (!authHeader?.startsWith('Bearer ')) return null
+
+  const token = authHeader.slice(7)
+  try {
+    const secret = new TextEncoder().encode(jwtSecret)
+    const { payload } = await jwtVerify(token, secret, { algorithms: ['HS256'] })
+    const sub = payload['sub']
+    return typeof sub === 'string' ? sub : null
+  } catch {
+    return null
+  }
+}
+
+// ---------------------------------------------------------------------------
+// API call helper
+// ---------------------------------------------------------------------------
+
+async function callApi(
+  method: string,
+  path: string,
+  body: unknown,
+  apiUrl: string,
+  authHeader: string,
+): Promise<{ ok: boolean; status: number; data: unknown }> {
+  const url = `${apiUrl}/api${path}`
+  const res = await fetch(url, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: authHeader,
+    },
+    body: body != null ? JSON.stringify(body) : undefined,
+  })
+
+  const data = await res.json()
+  return { ok: res.ok, status: res.status, data }
+}
+
+// ---------------------------------------------------------------------------
+// MCP server factory (one instance per request for stateless Workers)
+// ---------------------------------------------------------------------------
+
+function createMcpServer(apiUrl: string, authHeader: string): McpServer {
+  const server = new McpServer({ name: 'lead-ace', version: '1.0.0' })
+
+  // --- setup_project ---
+  server.tool(
+    'setup_project',
+    'Create a new Lead Ace project. Returns an error if the free plan limit (1 project) is reached.',
+    { projectId: z.string().describe('Project ID (alphanumeric, _ or -)') },
+    async ({ projectId }) => {
+      const { ok, data } = await callApi('POST', '/projects', { id: projectId }, apiUrl, authHeader)
+      if (!ok) {
+        const err = data as { error: string; detail?: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}${err.detail ? ` — ${err.detail}` : ''}` }], isError: true }
+      }
+      return { content: [{ type: 'text' as const, text: `Project "${projectId}" created successfully.` }] }
+    },
+  )
+
+  // --- delete_project ---
+  server.tool(
+    'delete_project',
+    'Delete a project and all its data (prospects, outreach logs, responses, evaluations).',
+    { projectId: z.string().describe('Project ID to delete') },
+    async ({ projectId }) => {
+      const { ok, data } = await callApi('DELETE', `/projects/${projectId}`, null, apiUrl, authHeader)
+      if (!ok) {
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      return { content: [{ type: 'text' as const, text: `Project "${projectId}" deleted.` }] }
+    },
+  )
+
+  // --- get_prospect_identifiers ---
+  server.tool(
+    'get_prospect_identifiers',
+    'Get names, URLs, emails, and organization domains of all registered prospects in a project. Used to avoid duplicate registrations during build-list.',
+    { projectId: z.string().describe('Project ID') },
+    async ({ projectId }) => {
+      const { ok, data } = await callApi('GET', `/projects/${projectId}/prospects/identifiers`, null, apiUrl, authHeader)
+      if (!ok) {
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      const { identifiers } = data as { identifiers: unknown[] }
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `${identifiers.length} prospects registered.\n${JSON.stringify(identifiers, null, 2)}`,
+        }],
+      }
+    },
+  )
+
+  // --- add_prospects ---
+  server.tool(
+    'add_prospects',
+    'Batch register prospects into a project. Automatically deduplicates by email, contact form URL, and organization domain.',
+    {
+      projectId: z.string().describe('Project ID'),
+      prospects: z.array(z.object({
+        organizationDomain: z.string().describe('Apex domain of the organization (e.g. example.com)'),
+        organizationName: z.string(),
+        organizationNormalizedName: z.string().describe('Lowercase, trimmed name for dedup'),
+        organizationWebsiteUrl: z.string().url(),
+        organizationCountry: z.string().length(2).optional().describe('ISO 3166-1 alpha-2'),
+        organizationIndustry: z.string().optional(),
+        organizationOverview: z.string().optional(),
+        name: z.string().describe('Prospect name (company, school, department, etc.)'),
+        contactName: z.string().optional(),
+        department: z.string().optional(),
+        overview: z.string(),
+        industry: z.string().optional(),
+        websiteUrl: z.string().url(),
+        email: z.string().email().optional(),
+        contactFormUrl: z.string().url().optional(),
+        formType: z.enum(['google_forms', 'native_html', 'wordpress_cf7', 'iframe_embed', 'with_captcha']).optional(),
+        snsAccounts: z.object({
+          x: z.string().optional(),
+          linkedin: z.string().optional(),
+          instagram: z.string().optional(),
+          facebook: z.string().optional(),
+        }).optional(),
+        notes: z.string().optional(),
+        matchReason: z.string().describe('Why this prospect is a good target'),
+        priority: z.number().int().min(1).max(5).default(3),
+      })).describe('Array of prospects to register (max 100)'),
+    },
+    async ({ projectId, prospects }) => {
+      const { ok, data } = await callApi('POST', '/prospects/batch', { projectId, prospects }, apiUrl, authHeader)
+      if (!ok) {
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      const result = data as { inserted: number; skipped: number; insertedIds: number[]; skippedDetails: unknown[] }
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Registered: ${result.inserted}, Skipped: ${result.skipped}\nSkipped details: ${JSON.stringify(result.skippedDetails)}`,
+        }],
+      }
+    },
+  )
+
+  // --- get_outbound_targets ---
+  server.tool(
+    'get_outbound_targets',
+    'Get uncontacted prospects ordered by priority for outbound outreach.',
+    {
+      projectId: z.string(),
+      limit: z.number().int().min(1).max(200).default(50).describe('Max number of prospects to return'),
+    },
+    async ({ projectId, limit }) => {
+      const { ok, data } = await callApi('GET', `/projects/${projectId}/prospects/reachable?limit=${limit}`, null, apiUrl, authHeader)
+      if (!ok) {
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      const { prospects } = data as { prospects: unknown[] }
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `${prospects.length} reachable prospects.\n${JSON.stringify(prospects, null, 2)}`,
+        }],
+      }
+    },
+  )
+
+  // --- record_outreach ---
+  server.tool(
+    'record_outreach',
+    'Record an outreach log entry after sending an email, form submission, or SNS DM. Updates prospect status to "contacted".',
+    {
+      projectId: z.string(),
+      prospectId: z.number().int(),
+      channel: z.enum(['email', 'form', 'sns_twitter', 'sns_linkedin']),
+      subject: z.string().optional(),
+      body: z.string(),
+      status: z.enum(['sent', 'failed']).default('sent'),
+      sentAt: z.string().datetime().optional().describe('ISO 8601 timestamp; defaults to now'),
+      errorMessage: z.string().optional(),
+    },
+    async (input) => {
+      const { ok, data } = await callApi('POST', '/outreach', input, apiUrl, authHeader)
+      if (!ok) {
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      const result = data as { id: number }
+      return { content: [{ type: 'text' as const, text: `Outreach logged (id: ${result.id}).` }] }
+    },
+  )
+
+  // --- update_prospect_status ---
+  server.tool(
+    'update_prospect_status',
+    'Update the status of a prospect in a project (e.g. mark as unreachable, inactive).',
+    {
+      projectId: z.string(),
+      prospectId: z.number().int(),
+      status: z.enum(['new', 'contacted', 'responded', 'converted', 'rejected', 'inactive', 'unreachable']),
+    },
+    async ({ projectId, prospectId, status }) => {
+      const { ok, data } = await callApi(
+        'PATCH',
+        `/prospects/${prospectId}/status`,
+        { projectId, status },
+        apiUrl,
+        authHeader,
+      )
+      if (!ok) {
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      return { content: [{ type: 'text' as const, text: `Status updated to "${status}".` }] }
+    },
+  )
+
+  // --- get_recent_outreach ---
+  server.tool(
+    'get_recent_outreach',
+    'Get recent outreach logs for a project. Used by check-results to match Gmail/SNS replies to sent messages.',
+    {
+      projectId: z.string(),
+      limit: z.number().int().min(1).max(200).default(100),
+    },
+    async ({ projectId, limit }) => {
+      const { ok, data } = await callApi('GET', `/projects/${projectId}/outreach/recent?limit=${limit}`, null, apiUrl, authHeader)
+      if (!ok) {
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      const { logs } = data as { logs: unknown[] }
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `${logs.length} recent outreach logs.\n${JSON.stringify(logs, null, 2)}`,
+        }],
+      }
+    },
+  )
+
+  // --- record_response ---
+  server.tool(
+    'record_response',
+    'Record a response (email reply, SNS DM, etc.) to an outreach. Updates prospect status and optionally marks do-not-contact.',
+    {
+      outreachLogId: z.number().int().describe('ID of the outreach log this response is for'),
+      channel: z.enum(['email', 'form', 'sns_twitter', 'sns_linkedin']),
+      content: z.string().describe('Response content'),
+      sentiment: z.enum(['positive', 'neutral', 'negative']),
+      responseType: z.enum(['reply', 'auto_reply', 'bounce', 'meeting_request', 'rejection']),
+      receivedAt: z.string().datetime().optional(),
+      markDoNotContact: z.boolean().default(false).describe('Set true for bounces or unsubscribes'),
+    },
+    async (input) => {
+      const { ok, data } = await callApi('POST', '/responses', input, apiUrl, authHeader)
+      if (!ok) {
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      const result = data as { id: number }
+      return { content: [{ type: 'text' as const, text: `Response recorded (id: ${result.id}).` }] }
+    },
+  )
+
+  // --- get_eval_data ---
+  server.tool(
+    'get_eval_data',
+    'Get evaluation statistics for a project: response rates, channel performance, sentiment breakdown, etc. Also returns responded message bodies and data sufficiency check.',
+    { projectId: z.string() },
+    async ({ projectId }) => {
+      const { ok, data } = await callApi('GET', `/projects/${projectId}/stats`, null, apiUrl, authHeader)
+      if (!ok) {
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+      }
+    },
+  )
+
+  // --- record_evaluation ---
+  server.tool(
+    'record_evaluation',
+    'Record an evaluation result and optionally bulk-update prospect priorities by industry.',
+    {
+      projectId: z.string(),
+      metrics: z.record(z.string(), z.unknown()).describe('Summary metrics (from get_eval_data, excluding respondedMessages/noResponseSample)'),
+      findings: z.string().describe('Analysis findings text'),
+      improvements: z.string().describe('Improvement actions applied (free text or JSON)'),
+      priorityUpdates: z.array(z.object({
+        industry: z.string(),
+        priority: z.number().int().min(1).max(5),
+      })).optional().describe('Bulk priority updates by industry'),
+    },
+    async (input) => {
+      const { ok, data } = await callApi('POST', '/evaluations', input, apiUrl, authHeader)
+      if (!ok) {
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      const result = data as { evaluationId: number; priorityUpdates: unknown[] }
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Evaluation recorded (id: ${result.evaluationId}). Priority updates: ${JSON.stringify(result.priorityUpdates)}`,
+        }],
+      }
+    },
+  )
+
+  return server
+}
+
+// ---------------------------------------------------------------------------
+// Cloudflare Worker entry point
+// ---------------------------------------------------------------------------
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    // CORS preflight
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, DELETE',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, Mcp-Session-Id',
+        },
+      })
+    }
+
+    // Validate auth and extract user token for API calls
+    const userId = await extractUserId(request, env.SUPABASE_JWT_SECRET)
+    if (!userId) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    const authHeader = request.headers.get('Authorization') ?? ''
+    const server = createMcpServer(env.WEB_API_URL, authHeader)
+    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined })
+
+    await server.connect(transport)
+    return await transport.handleRequest(request)
+  },
+}

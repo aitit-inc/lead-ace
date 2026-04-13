@@ -1,0 +1,31 @@
+{
+  "name": "lead-ace-backend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev:api": "wrangler dev --config wrangler.api.jsonc",
+    "dev:mcp": "wrangler dev --config wrangler.mcp.jsonc --port 8788",
+    "deploy:api": "wrangler deploy --config wrangler.api.jsonc",
+    "deploy:mcp": "wrangler deploy --config wrangler.mcp.jsonc",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "latest",
+    "drizzle-orm": "latest",
+    "hono": "latest",
+    "jose": "latest",
+    "postgres": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "latest",
+    "@hono/zod-validator": "latest",
+    "drizzle-kit": "latest",
+    "drizzle-zod": "latest",
+    "typescript": "latest",
+    "wrangler": "latest"
+  }
+}

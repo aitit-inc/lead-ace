@@ -1,0 +1,15 @@
+# Copy this file to .dev.vars and fill in values for local development.
+# .dev.vars is read by `wrangler dev` automatically (gitignored).
+
+# PostgreSQL connection string
+# For local dev (docker compose): postgresql://postgres:postgres@localhost:5432/leadace
+# For Supabase local: use `supabase status` to get the connection string
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/leadace"
+
+# Supabase JWT secret (used to validate user tokens)
+# For Supabase local: "super-secret-jwt-token-with-at-least-32-characters-long" (default)
+# Run `supabase status` to confirm
+SUPABASE_JWT_SECRET="super-secret-jwt-token-with-at-least-32-characters-long"
+
+# Development environment flag
+ENVIRONMENT="development"

@@ -1,0 +1,6 @@
+# Copy to .dev.vars.mcp for `wrangler dev --config wrangler.mcp.jsonc`
+# Rename to .dev.vars when running MCP worker separately.
+
+WEB_API_URL="http://localhost:8787"
+SUPABASE_JWT_SECRET="super-secret-jwt-token-with-at-least-32-characters-long"
+ENVIRONMENT="development"

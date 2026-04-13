@@ -1,0 +1,12 @@
+{
+  "name": "lead-ace-mcp",
+  "main": "src/mcp/index.ts",
+  "compatibility_date": "2026-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "ENVIRONMENT": "development"
+  }
+  // Secrets (set via wrangler secret or .dev.vars.mcp):
+  // WEB_API_URL       (e.g. http://localhost:8787 for local dev)
+  // SUPABASE_JWT_SECRET
+}
