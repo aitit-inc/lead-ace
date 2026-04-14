@@ -105,7 +105,10 @@ npm run db:migrate
 ### Local Dev
 
 ```bash
-docker compose up          # PostgreSQL + API Worker (8787) + MCP Worker (8788)
+docker compose up -d       # PostgreSQL (port 5432)
+cd backend
+npm run dev:api            # API Worker (port 8787)
+npm run dev:mcp            # MCP Worker (port 8788) — separate terminal
 ```
 
 See `README.md` → For Developers for full details.

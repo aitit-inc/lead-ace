@@ -15,40 +15,5 @@ services:
       timeout: 5s
       retries: 5
 
-  api:
-    image: node:22-alpine
-    working_dir: /app
-    ports:
-      - "8787:8787"
-    environment:
-      DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/leadace"
-      SUPABASE_JWT_SECRET: "super-secret-jwt-token-with-at-least-32-characters-long"
-      ENVIRONMENT: "development"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    volumes:
-      - ./backend:/app
-      - /app/node_modules
-    command: >
-      sh -c "npm install && npx wrangler dev --config wrangler.api.jsonc --port 8787 --ip 0.0.0.0"
-
-  mcp:
-    image: node:22-alpine
-    working_dir: /app
-    ports:
-      - "8788:8788"
-    environment:
-      WEB_API_URL: "http://api:8787"
-      SUPABASE_JWT_SECRET: "super-secret-jwt-token-with-at-least-32-characters-long"
-      ENVIRONMENT: "development"
-    depends_on:
-      - api
-    volumes:
-      - ./backend:/app
-      - /app/node_modules
-    command: >
-      sh -c "npm install && npx wrangler dev --config wrangler.mcp.jsonc --port 8788 --ip 0.0.0.0"
-
 volumes:
   postgres_data:

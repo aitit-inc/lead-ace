@@ -121,20 +121,21 @@ Commit `src/db/schema.ts` and the new `drizzle/` files together.
 ### Backend Local Development
 
 ```bash
-# Start local PostgreSQL + API Worker + MCP Worker
-docker compose up
+# 1. Start PostgreSQL
+docker compose up -d
 
-# Apply migrations (first time only, or after schema changes)
+# 2. Apply migrations (first time only, or after schema changes)
 cd backend
+cp .dev.vars.example .dev.vars          # first time only
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/leadace" npm run db:migrate
 
+# 3. Start Workers dev servers (run in separate terminals)
+npm run dev:api                         # API Server → http://localhost:8787
+npm run dev:mcp                         # MCP Server → http://localhost:8788
+
 # Type check
-cd backend && npm run typecheck
+npm run typecheck
 ```
-
-API Worker runs on `http://localhost:8787`, MCP Worker on `http://localhost:8788`.
-
-Copy `backend/.dev.vars.example` → `backend/.dev.vars` to configure local secrets.
 
 ### Plugin Local Development
 
