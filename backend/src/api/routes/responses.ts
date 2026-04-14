@@ -29,7 +29,7 @@ const recordResponseSchema = z.object({
 export const responsesRouter = new Hono<{ Bindings: Env; Variables: Variables }>()
 
 // POST /responses — record a response and update prospect status
-responsesRouter.post('/', zValidator('json', recordResponseSchema), async (c) => {
+responsesRouter.post('/responses', zValidator('json', recordResponseSchema), async (c) => {
   const input = c.req.valid('json')
   const userId = c.get('userId')
   const db = createDb(c.env.DATABASE_URL)

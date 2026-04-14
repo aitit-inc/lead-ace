@@ -55,7 +55,7 @@ const batchSchema = z.object({
 export const prospectsRouter = new Hono<{ Bindings: Env; Variables: Variables }>()
 
 // POST /prospects/batch — batch register prospects with deduplication
-prospectsRouter.post('/batch', zValidator('json', batchSchema), async (c) => {
+prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async (c) => {
   const { projectId, prospects: inputs } = c.req.valid('json')
   const userId = c.get('userId')
   const db = createDb(c.env.DATABASE_URL)
@@ -287,7 +287,7 @@ prospectsRouter.get('/projects/:id/prospects/identifiers', async (c) => {
 })
 
 // PATCH /prospects/:id/status — update prospect status in a project
-prospectsRouter.patch('/:id/status', async (c) => {
+prospectsRouter.patch('/prospects/:id/status', async (c) => {
   const prospectId = parseInt(c.req.param('id'), 10)
   const userId = c.get('userId')
   const db = createDb(c.env.DATABASE_URL)

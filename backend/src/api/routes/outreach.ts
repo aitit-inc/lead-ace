@@ -20,7 +20,7 @@ const recordOutreachSchema = z.object({
 export const outreachRouter = new Hono<{ Bindings: Env; Variables: Variables }>()
 
 // POST /outreach — record outreach log and update prospect status to 'contacted'
-outreachRouter.post('/', zValidator('json', recordOutreachSchema), async (c) => {
+outreachRouter.post('/outreach', zValidator('json', recordOutreachSchema), async (c) => {
   const input = c.req.valid('json')
   const userId = c.get('userId')
   const db = createDb(c.env.DATABASE_URL)
