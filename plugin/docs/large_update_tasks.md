@@ -278,7 +278,7 @@ lead-ace/                           ← git repo root
 - [x] **「設計方針: 型安全・スキーマ厳密化」セクションの確認事項をユーザーと合意**（ENUM 化 / org_lookup_status 削除 / JSONB 定義等）
 - [x] `backend/src/db/schema.ts` にDrizzleスキーマ定義（6 ENUM + 7 テーブル）
 - [x] `drizzle-kit generate` でマイグレーションファイル生成（`drizzle/0000_empty_white_tiger.sql`）
-- [ ] Supabase local でのマイグレーション動作確認（2-5 の docker compose 起動後に確認）
+- [x] ローカル PostgreSQL でのマイグレーション動作確認（`docker compose up` + `db:migrate` で適用確認済み）
 
 ### 2-3. Web API Server の実装 (Hono) ✅ 完了
 
@@ -297,23 +297,23 @@ lead-ace/                           ← git repo root
 - [x] 全 11 Tool の実装（Web API を呼ぶだけ）
 - [x] 認証（Supabase Auth JWT 検証）
 
-### 2-5. ローカル開発環境 (Docker Compose)
+### 2-5. ローカル開発環境 (Docker Compose) ✅ 完了
 
-- [x] `docker-compose.yml` 作成（PostgreSQL + API Worker + MCP Worker）
+- [x] `docker-compose.yml` 作成（PostgreSQL のみ。Workers dev はホストで実行 — `workerd` はネイティブバイナリのため Docker 内では動作しない）
 - [x] `.dev.vars.example` / `.dev.vars.mcp.example` テンプレート作成
-- [ ] ローカル環境での主要 API エンドポイント動作確認
+- [x] ローカル環境での全 API エンドポイント動作確認（全13エンドポイント OK）
 
 ### レビュー
 
-**できていること（確認必須）:**
-- [ ] `docker compose up` でローカル環境が全部起動する（Supabase local + Workers + MCP）
-- [ ] `POST /projects` でプロジェクトが作成でき、ライセンス制限（1件まで）が動作する
-- [ ] `POST /prospects/batch` で営業先が登録でき、法人番号・メール・ドメイン・名前による重複チェックが動作する
-- [ ] `GET /projects/:id/prospects/reachable` で優先度順に未接触営業先が返る
-- [ ] `POST /outreach` で送信ログが記録され、ステータスが `contacted` に更新される
-- [ ] `POST /responses` で返信記録が保存され、do-not-contact フラグが全プロジェクト横断で反映される
-- [ ] `GET /projects/:id/stats` で evaluate 用の9種類の統計データが返る
-- [ ] MCP Server の全 Tool が動作し、Claude Code からツールとして呼べる
+**できていること（確認済み）:**
+- [x] `docker compose up -d` で PostgreSQL 起動 → `npm run dev:api` / `npm run dev:mcp` で Workers 起動
+- [x] `POST /projects` でプロジェクトが作成でき、ライセンス制限（1件まで）が動作する
+- [x] `POST /prospects/batch` で営業先が登録でき、メール・フォームURL・ドメインによる重複チェックが動作する
+- [x] `GET /projects/:id/prospects/reachable` で優先度順に未接触営業先が返る
+- [x] `POST /outreach` で送信ログが記録され、ステータスが `contacted` に更新される
+- [x] `POST /responses` で返信記録が保存され、do-not-contact フラグが反映される
+- [x] `GET /projects/:id/stats` で evaluate 用の統計データ + dataSufficiency が返る
+- [ ] MCP Server の全 Tool が動作し、Claude Code からツールとして呼べる（フェーズ3でスキル書き直し時に確認予定）
 
 **まだできていなくて良いこと:**
 - プラグイン側（Claude Code スキル）はまだ Python スクリプト版のまま
