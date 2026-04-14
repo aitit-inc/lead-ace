@@ -99,9 +99,44 @@ frontend/                        # Web frontend (Cloudflare Pages)
 
 ### DB Schema
 
-Defined in `plugin/scripts/sales-db.sql`. Main tables: `projects`, `prospects`, `outreach_logs`, `responses`, `evaluations`.
+Defined in `backend/src/db/schema.ts` (Drizzle ORM, PostgreSQL). This is the **single source of truth** for the schema.
 
-### Local Development & Testing
+**Never write migration SQL by hand.** Edit `schema.ts` and generate automatically:
+
+```bash
+cd backend
+
+# 1. Edit src/db/schema.ts (add/modify tables, columns, enums...)
+
+# 2. Auto-generate a migration file from the diff
+npm run db:generate
+# → creates drizzle/XXXX_description.sql automatically
+
+# 3. Apply pending migrations to the DB
+npm run db:migrate
+```
+
+Commit `src/db/schema.ts` and the new `drizzle/` files together.
+
+### Backend Local Development
+
+```bash
+# Start local PostgreSQL + API Worker + MCP Worker
+docker compose up
+
+# Apply migrations (first time only, or after schema changes)
+cd backend
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/leadace" npm run db:migrate
+
+# Type check
+cd backend && npm run typecheck
+```
+
+API Worker runs on `http://localhost:8787`, MCP Worker on `http://localhost:8788`.
+
+Copy `backend/.dev.vars.example` → `backend/.dev.vars` to configure local secrets.
+
+### Plugin Local Development
 
 ```bash
 # Launch Claude Code in this repo directory to auto-load skills
