@@ -82,6 +82,34 @@ OK:  "Please send a test email to leo.uno@surpassone.com. Command: gog send --ac
 
 Confirmed by testing on 2026-04-07: the BAD pattern was refused and the OK pattern succeeded with the same command.
 
+## Backend Development (backend/)
+
+### DB Schema Changes
+
+**Never write migration SQL by hand.** `backend/src/db/schema.ts` is the single source of truth.
+
+```bash
+# 1. Edit backend/src/db/schema.ts
+# 2. Auto-generate migration SQL from the diff
+cd backend && npm run db:generate
+# 3. Apply to DB
+npm run db:migrate
+# 4. Commit schema.ts + drizzle/ together
+```
+
+### TypeScript Rules (backend/)
+
+- `any` is prohibited. Use proper types or fix the design.
+- After modifying backend TypeScript, run `cd backend && npm run typecheck` before committing.
+
+### Local Dev
+
+```bash
+docker compose up          # PostgreSQL + API Worker (8787) + MCP Worker (8788)
+```
+
+See `README.md` → For Developers for full details.
+
 ## DB Migrations (plugin/scripts/)
 
 - Place `NNN_description.py` files in `plugin/migrations/` (NNN is a 3-digit sequential number)
@@ -103,7 +131,12 @@ This approach means that to understand the full schema, you only need to read **
 - **To be removed at v0.6.0 release**: `plugin/skills/data-migration-v050/`, `plugin/scripts/link_organization.py`, `plugin/scripts/mark_org_lookup_status.py`, and the `link_organization` and `mark_org_lookup_status` lines from `plugin/scripts/test_imports.py`
 
 ## Pre-Release Checklist (Required)
+
+**Plugin (Python):**
 `cd plugin/scripts && npx pyright && python3 test_imports.py`
+
+**Backend (TypeScript):**
+`cd backend && npm run typecheck`
 
 ## Release
 Bump the version in `plugin/.claude-plugin/plugin.json`, then commit and push.
