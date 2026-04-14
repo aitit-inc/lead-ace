@@ -8,34 +8,25 @@ allowed-tools:
   - Write
   - Agent
   - WebSearch
+  - mcp__plugin_lead-ace_api__get_prospect_identifiers
+  - mcp__plugin_lead-ace_api__add_prospects
+  - mcp__plugin_lead-ace_api__get_outbound_targets
 ---
 
 # Build List - Prospect List Building
 
 A skill that collects prospect candidates via web search based on the information in BUSINESS.md and SALES_STRATEGY.md, retrieves contact information, and registers them in the database.
 
-**Prerequisite:** Follow the conventions in `${CLAUDE_PLUGIN_ROOT}/references/workspace-conventions.md` (data.db location and no-cd rule).
-
 **2-Phase Structure:**
 - **Phase 1 (Candidate Collection):** Find prospect candidates broadly via web search (name, official URL, overview)
 - **Phase 2 (Contact Retrieval):** Use sub-agents to explore each candidate's official site and retrieve email addresses and contact form URLs
-
-## Phase 0: Prerequisites Check
-
-### 0. Preflight Check
-
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/preflight.py data.db "$0"
-```
-
-If `status` is `error`, display the error message and **abort immediately**. Report any migrations in `migrations_applied` to the user.
 
 ## Phase 1: Candidate Collection
 
 ### 1. Setup
 
 - Project directory name: `$0` (required)
-- Target count: `$1` (default: 30. Approximate is fine — "around N" is sufficient)
+- Target count: `$1` (default: 30. Approximate is fine -- "around N" is sufficient)
 
 Load the following:
 - `$0/BUSINESS.md`
@@ -49,11 +40,11 @@ Before starting exploration, check these two things:
 
 **2a. Retrieve registered prospects (for deduplication):**
 
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db all-prospect-identifiers "$0"
-```
+Call `mcp__plugin_lead-ace_api__get_prospect_identifiers` with `projectId: "$0"`.
 
-Keep this result (list of name + website_url). During Phase 1 candidate collection, **do not include** any prospects already in this list. Match by exact name or website_url domain.
+If the tool returns a "Project not found" error, instruct the user to run `/setup` first and **abort**.
+
+Keep this result (list of name + websiteUrl + email + organizationId). During Phase 1 candidate collection, **do not include** any prospects already in this list. Match by exact name or website URL domain.
 
 **2b. Search notes:**
 
@@ -99,7 +90,7 @@ This phase focuses on **discovering candidates**. Contact information (email, fo
 - Department or branch name (school name for school corporations, target department for large companies)
 - Country (ISO 3166-1 alpha-2, e.g., "US", "JP", "GB")
 - Email addresses or SNS accounts found incidentally during search (no need to look for these intentionally)
-- `organization_name`: the legal entity name if it differs from the prospect name (e.g., a school corporation that operates multiple schools)
+- Organization name: the legal entity name if it differs from the prospect name (e.g., a school corporation that operates multiple schools)
 
 Skip any prospect for which the official site URL and business overview cannot be obtained.
 
@@ -107,15 +98,15 @@ Skip any prospect for which the official site URL and business overview cannot b
 - A single query finds limited prospects, so vary the angles broadly
 - Use portal sites and listing pages to find many candidates at once
 - Stop searching once the target count (`$1`, default 30) is reached. Deduplication rejections don't count (count only newly registered ones)
-- No need to deep-dive individual official sites in this phase — focus on securing a quantity of candidates
+- No need to deep-dive individual official sites in this phase -- focus on securing a quantity of candidates
 
 **Deep-diving when duplicates are frequent:**
 
 As the list grows, well-known prospects appearing at the top of search results will already be registered, increasing duplicates. In that case, **rather than changing the target or strategy**, explore more deeply within the same target:
 
 - Look beyond the top results to page 2, 3, and beyond
-- Add regional qualifiers to keywords (e.g., "SaaS companies" → "SaaS companies Fukuoka", "SaaS companies Nagoya")
-- Use synonyms and related terms (e.g., "cram school" → "prep school", "individual tutoring", "prep academy")
+- Add regional qualifiers to keywords (e.g., "SaaS companies" -> "SaaS companies Portland", "SaaS companies Austin")
+- Use synonyms and related terms (e.g., "consulting firm" -> "advisory firm", "management consultancy")
 - Find industry-specific portal sites and directories and follow the prospects listed there
 - Pick up prospects missed in listing pages
 - Search for "competitors" or "similar services" of already-registered prospects to find new ones organically
@@ -131,7 +122,7 @@ For each prospect, assign a match reason (why they're appropriate as a target, i
 - 4: Marginal (only partially meets criteria)
 - 5: Under consideration (indirect possibility)
 
-**Factor in email retrieval ease:** If the following signals are found during exploration, raise priority by 1 level for equal match quality (more email holders → higher outbound success rate):
+**Factor in email retrieval ease:** If the following signals are found during exploration, raise priority by 1 level for equal match quality (more email holders -> higher outbound success rate):
 - Has press releases on press release distribution sites (high rate of PR contact email inclusion)
 - Listed in startup DB or industry directory (more public information available)
 - Email explicitly shown on official site (e.g., info@) discovered during exploration
@@ -151,7 +142,7 @@ Include the following in each sub-agent's prompt:
 
 Sub-agent allowed-tools: `Bash`, `WebSearch`, `Read`
 
-Each object in the JSON array returned by the sub-agent includes the Phase 1 information (name, organization_name, overview, website_url, industry, department, country, match_reason, priority) plus the retrieved contacts (email, contact_form_url, sns_accounts).
+Each object in the JSON array returned by the sub-agent includes the Phase 1 information (name, organization_name, overview, website_url, industry, department, country, match_reason, priority) plus the retrieved contacts (email, contact_form_url, form_type, sns_accounts, contact_name).
 
 ### 6b. Re-search for Candidates Without Contact Info (only when applicable)
 
@@ -161,7 +152,7 @@ For each such candidate, search WebSearch for:
 - `"{company name}" email address`
 - `"{company name}" contact`
 
-Information may be found from industry directories, press release distribution sites, event speaker information, etc. If found, update the candidate's JSON.
+Information may be found from industry directories, press release distribution sites, event speaker information, etc. If found, update the candidate's data.
 
 **Limit:** Re-search up to a **maximum of 10 candidates** without contact info. Register the rest without contact info (they will be skipped during outbound).
 
@@ -169,85 +160,55 @@ Information may be found from industry directories, press release distribution s
 
 ### 7. Database Registration
 
-Merge Phase 1 candidate information and Phase 2 contact information using `merge_prospects.py`, then register in the DB with `add_prospects.py`.
+Call `mcp__plugin_lead-ace_api__add_prospects` with:
+- `projectId`: "$0"
+- `prospects`: array of prospect objects
 
-First, save the Phase 1 candidate list (without contact info) and all Phase 2 batch results (with contact info) to separate JSON files:
-- Phase 1 candidates → `/tmp/candidates.json`
-- Combine all Phase 2 batch results into a single JSON array → `/tmp/contacts.json`
+**Field mapping for the MCP tool:**
 
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/merge_prospects.py /tmp/candidates.json /tmp/contacts.json \
-  | python3 ${CLAUDE_PLUGIN_ROOT}/scripts/add_prospects.py data.db "$0"
-```
+For each prospect, construct the object as follows:
+- `organizationDomain`: **Extract the apex domain from website_url** (e.g., `https://www.example.com/about` -> `example.com`). Strip `www.` prefix and path. This is the organization's primary key.
+- `organizationName`: the legal entity name (or `name` if not separately available)
+- `organizationNormalizedName`: **lowercase and trimmed** version of organizationName (e.g., "ABC Corp." -> "abc corp.")
+- `organizationWebsiteUrl`: the organization's official website URL
+- `organizationCountry`: ISO 3166-1 alpha-2 (optional)
+- `organizationIndustry`: industry (optional)
+- `organizationOverview`: business overview (optional)
+- `name`: prospect name (company name, school name, department, etc.)
+- `contactName`: contact person name (optional)
+- `department`: department within the organization (optional)
+- `overview`: business overview (1-2 sentences)
+- `industry`: industry (optional)
+- `websiteUrl`: the specific page URL for this prospect
+- `email`: email address (optional)
+- `contactFormUrl`: contact form URL (optional)
+- `formType`: one of `google_forms`, `native_html`, `wordpress_cf7`, `iframe_embed`, `with_captcha` (optional)
+- `snsAccounts`: `{ x?, linkedin?, instagram?, facebook? }` (optional)
+- `matchReason`: why this prospect is a good target
+- `priority`: 1-5 (default 3)
 
-Merge is matched by name + website_url domain. Candidates without contact info are also registered (with email=null, etc.). Unmatched count from merging is output to stderr.
-
-**If the sub-agent output is already in a format passable directly to add_prospects.py** (complete JSON including all Phase 1 fields + contacts), you can skip the merge script and pass it directly:
-
-```bash
-cat <<'EOF' | python3 ${CLAUDE_PLUGIN_ROOT}/scripts/add_prospects.py data.db "$0"
-[
-  {
-    "name": "Prospect name (school name, company name, etc.)",
-    "organization_name": "Legal entity name if different from name (optional)",
-    "department": null,
-    "overview": "Business overview (1-2 sentences)",
-    "website_url": "https://example.com",
-    "country": "US",
-    "industry": "Industry",
-    "email": "info@example.com",
-    "contact_form_url": null,
-    "sns_accounts": {"x": "@account"},
-    "match_reason": "Reason why appropriate as a target (including challenges and needs)",
-    "priority": 3
-  }
-]
-EOF
-```
+The server automatically deduplicates by email, contact form URL, and organization domain within the project.
 
 **Difference between organizations and prospects:**
-- `organizations` = **Legal entity** unit (apex domain is PK, auto-derived from `website_url`). `organization_name` is the entity name stored here
-- `prospects` = **Prospect** unit. Put the actual prospect name in `name`. `department` is the department within the prospect (if any)
+- `organizations` = **Legal entity** unit (apex domain is PK)
+- `prospects` = **Prospect** unit (specific target within an organization)
 
-Small company: org.name = pros.name (1:1, department is null)
-School corporation operating multiple schools: `organization_name` = "Katayagi Gakuen School Corporation", `name` = "Nihon Kogakuin College" (1:many possible)
-Department within large company: `name` = "ABC Corp.", `department` = "Sales Planning Dept."
-
-**Field details:**
-- Required: `name`, `overview`, `website_url`, `match_reason`
-- Optional: `organization_name` (defaults to `name` if omitted), `department`, `country`, `industry`, `email`, `contact_form_url`, `sns_accounts`
-- `priority`: defaults to 3 if omitted
-
-**Script behavior:**
-- Automatically checks for duplicates by domain → email → form URL → SNS → name
-- `organizations` table is auto-upserted using the apex domain from `website_url`
-- `email` / `contact_form_url` have global UNIQUE constraints to prevent double-sending
-- `EXACT_MATCH`: Uses existing prospect_id and only adds the project_prospects link
-- `POSSIBLE_MATCH` (domain match, etc.): Registers as new but reports as `possible_matches` in output
-- No match: Registers as new
-- Processes all entries in a single transaction. Validation errors on individual entries continue processing, but DB exceptions roll back all entries
-
-**If only linking an existing prospect to another project:**
-
-Specify `existing_prospect_id` to skip new prospect registration and only add the link:
-```json
-{"existing_prospect_id": 42, "match_reason": "Reason", "priority": 2}
-```
+Small company: organizationName = name (1:1, department is null)
+School corporation operating multiple schools: organizationName = "Katayagi Gakuen School Corporation", name = "Nihon Kogakuin College" (1:many possible)
+Department within large company: name = "ABC Corp.", department = "Sales Planning Dept."
 
 ### 8. Results Report
 
 After DB registration, check reachable count:
 
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db count-reachable "$0"
-```
+Call `mcp__plugin_lead-ace_api__get_outbound_targets` with `projectId: "$0"` and `limit: 1` to get the `total` and `byChannel` summary.
 
 Report the following:
 - Number of newly registered prospects / target count
 - **Reachable breakdown** (among newly registered: N with email, N with form, N SNS-only, N without contacts)
 - Breakdown by priority
 - Number rejected as duplicates (if many, briefly describe how the search angle was changed)
-- Total project reachable remaining (result of count-reachable)
+- Total project reachable remaining (from `total` field)
 - Guide the user to run `/outbound` as the next step
 
 ### 9. Update Search Notes

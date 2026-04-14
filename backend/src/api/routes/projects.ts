@@ -14,6 +14,23 @@ const createProjectSchema = z.object({
 
 export const projectsRouter = new Hono<{ Bindings: Env; Variables: Variables }>()
 
+// GET /projects — list projects for the current user
+projectsRouter.get('/', async (c) => {
+  const userId = c.get('userId')
+  const db = createDb(c.env.DATABASE_URL)
+
+  const rows = await db
+    .select({
+      id: projects.id,
+      createdAt: projects.createdAt,
+      updatedAt: projects.updatedAt,
+    })
+    .from(projects)
+    .where(eq(projects.userId, userId))
+
+  return c.json({ projects: rows })
+})
+
 // POST /projects — create a project (with free plan limit)
 projectsRouter.post('/', zValidator('json', createProjectSchema), async (c) => {
   const { id } = c.req.valid('json')

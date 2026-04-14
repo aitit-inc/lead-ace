@@ -74,26 +74,40 @@ responsesRouter.post('/responses', zValidator('json', recordResponseSchema), asy
     })
     .returning({ id: responses.id })
 
-  // Update project_prospects status based on sentiment
-  const newStatus =
-    input.sentiment === 'positive'
-      ? 'responded'
-      : input.sentiment === 'negative' && input.responseType === 'rejection'
-        ? 'rejected'
-        : 'responded'
+  // Determine new status from responseType + sentiment
+  let newStatus: typeof projectProspects.$inferSelect.status | null = null
+  switch (input.responseType) {
+    case 'bounce':
+      newStatus = 'inactive'
+      break
+    case 'auto_reply':
+      // No status change for auto-replies
+      break
+    case 'rejection':
+      newStatus = 'rejected'
+      break
+    case 'meeting_request':
+      newStatus = 'responded'
+      break
+    case 'reply':
+      newStatus = input.sentiment === 'negative' ? 'rejected' : 'responded'
+      break
+  }
 
-  await db
-    .update(projectProspects)
-    .set({ status: newStatus, updatedAt: new Date() })
-    .where(
-      and(
-        eq(projectProspects.projectId, log.projectId),
-        eq(projectProspects.prospectId, log.prospectId),
-      ),
-    )
+  if (newStatus) {
+    await db
+      .update(projectProspects)
+      .set({ status: newStatus, updatedAt: new Date() })
+      .where(
+        and(
+          eq(projectProspects.projectId, log.projectId),
+          eq(projectProspects.prospectId, log.prospectId),
+        ),
+      )
+  }
 
-  // Mark do_not_contact globally if requested (e.g. unsubscribe, bounce)
-  if (input.markDoNotContact) {
+  // Mark do_not_contact globally if requested or if bounce
+  if (input.markDoNotContact || input.responseType === 'bounce') {
     await db
       .update(prospects)
       .set({ doNotContact: true, updatedAt: new Date() })

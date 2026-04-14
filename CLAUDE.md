@@ -18,9 +18,9 @@ docker-compose.yml               # Local development environment (added in Phase
 plugin/
 ├── .claude-plugin/
 │   └── plugin.json       # Plugin manifest (required)
+├── .mcp.json             # MCP server configuration (Lead Ace backend)
 ├── skills/                # Slash commands (each subdirectory has SKILL.md)
-├── scripts/               # Helper scripts (to be removed in Phase 3)
-├── migrations/            # DB migrations (to be removed in Phase 3)
+├── scripts/               # Local utility tools (fetch_url.py)
 ├── references/            # Shared reference documents
 └── docs/                  # Design documents
 ```
@@ -32,24 +32,21 @@ The plugin prioritizes **stability, reliability, controllability, and versatilit
 - Defer business-specific decisions to project configuration (BUSINESS.md / SALES_STRATEGY.md, etc.); the plugin provides control mechanisms and visibility
 - Improve skills by increasing user control, not by enforcing specific behavior
 
-### Separation of Responsibilities: LLM vs Scripts
+### Separation of Responsibilities: LLM vs MCP Tools
 
-Clearly separate what the LLM should handle from what should be fixed in scripts.
+Clearly separate what the LLM should handle from what MCP tools handle.
 
-- **Scripts (deterministic logic)**: DB operations, email sending, status updates, validation, data formatting — operations where rules are clear and behavior should be consistent every time. Do not have the LLM write SQL or compose commands directly; execute through dedicated scripts
-- **LLM (judgment & generation)**: Tasks requiring context-dependent judgment and natural language generation, such as drafting email bodies, evaluating prospects, and analyzing/improving strategy
+- **MCP Tools (deterministic logic)**: DB operations (prospect registration, outreach logging, status updates, evaluation recording), data queries (prospect identifiers, outbound targets, evaluation stats) — operations where rules are clear and behavior should be consistent every time
+- **Local tools**: Email sending (`gog` CLI), form submission (`playwright-cli`), SNS DMs (`claude-in-chrome`), web page fetching (`fetch_url.py`) — operations requiring local environment access
+- **LLM (judgment & generation)**: Tasks requiring context-dependent judgment and natural language generation, such as drafting email bodies, evaluating prospects, analyzing/improving strategy, and merging/deduplicating candidate data
 
-**Principle:** Offload tasks the LLM should not do (deterministic, repetitive, accuracy-critical) to scripts, and let the LLM focus on judgment and generation. In skill SKILL.md files, document how to call scripts (command and arguments), not internal implementation details.
+**Principle:** Data operations go through MCP tools (the server handles validation, deduplication, and status management). Local actions stay local. The LLM focuses on judgment and generation.
 
 ## Development Rules
 
 - Use `${CLAUDE_PLUGIN_ROOT}` for path references; do not hard-code paths (`${CLAUDE_PLUGIN_ROOT}` points to `plugin/`)
 - Language: English (both code comments and documentation)
-- All scripts must be written in Python (shell scripts and JS are prohibited)
-- Use `argparse` for all Python script CLI interfaces (do not use `sys.argv` directly)
 - Use `fetch_url.py` for web page retrieval (WebFetch is prohibited due to freeze issues and lack of SPA support). Use the `--raw` flag when raw HTML is needed
-- Type definitions must be thorough in Python scripts. `any` is prohibited. Avoid type casts; let types be inferred correctly
-- After modifying Python scripts, run `cd plugin/scripts && npx pyright && python3 test_imports.py` before committing to pass type checks and import tests (module-level assertions)
 
 ## Writing Skills (Following Official Best Practices)
 
@@ -111,38 +108,15 @@ npm run dev:api            # API Worker (port 8787)
 npm run dev:mcp            # MCP Worker (port 8788) — separate terminal
 ```
 
-See `README.md` → For Developers for full details.
-
-## DB Migrations (plugin/scripts/)
-
-- Place `NNN_description.py` files in `plugin/migrations/` (NNN is a 3-digit sequential number)
-- Each file implements `def up(conn: sqlite3.Connection) -> None:`. Write idempotently (use `IF NOT EXISTS`, etc.)
-- `preflight.py` automatically applies pending migrations before each skill run (tracked via the `applied_migrations` table)
-- Call `preflight.py` in step 0 of every skill (registration check + migration)
-
-### Relationship Between sales-db.sql and Migrations
-
-**`sales-db.sql` always represents the "full, up-to-date schema".** When adding changes via migration, apply the same changes to `sales-db.sql`.
-
-- **New users**: `init_db.py` → `sales-db.sql` creates the complete schema → all migrations are no-ops (they are idempotent)
-- **Existing users**: `preflight.py` → pending migrations are applied incrementally
-
-This approach means that to understand the full schema, you only need to read **`sales-db.sql`** (no need to trace through migration files).
-
-## Scheduled Removal of Temporary Skills and Scripts
-
-- **To be removed at v0.6.0 release**: `plugin/skills/data-migration-v050/`, `plugin/scripts/link_organization.py`, `plugin/scripts/mark_org_lookup_status.py`, and the `link_organization` and `mark_org_lookup_status` lines from `plugin/scripts/test_imports.py`
+See `README.md` -> For Developers for full details.
 
 ## Pre-Release Checklist (Required)
-
-**Plugin (Python):**
-`cd plugin/scripts && npx pyright && python3 test_imports.py`
 
 **Backend (TypeScript):**
 `cd backend && npm run typecheck`
 
 ## Release
 Bump the version in `plugin/.claude-plugin/plugin.json`, then commit and push.
-Unless specified otherwise, increment z in x.y.z (each number can be two or more digits, e.g. 0.3.9 → 0.3.10).
+Unless specified otherwise, increment z in x.y.z (each number can be two or more digits, e.g. 0.3.9 -> 0.3.10).
 When bumping the version, first commit code changes, then make a separate commit for the version bump only.
 Use commit message: `chore: :bookmark: bump version to x.y.z`.

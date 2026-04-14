@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { eq, and, inArray, sql } from 'drizzle-orm'
+import { eq, and, sql } from 'drizzle-orm'
 import { createDb } from '../../db/connection'
 import {
   projects,
@@ -222,38 +222,61 @@ prospectsRouter.get('/projects/:id/prospects/reachable', async (c) => {
     return c.json({ error: 'Project not found' }, 404)
   }
 
-  const rows = await db
-    .select({
-      ppId: projectProspects.id,
-      prospectId: prospects.id,
-      name: prospects.name,
-      contactName: prospects.contactName,
-      overview: prospects.overview,
-      industry: prospects.industry,
-      websiteUrl: prospects.websiteUrl,
-      email: prospects.email,
-      contactFormUrl: prospects.contactFormUrl,
-      formType: prospects.formType,
-      snsAccounts: prospects.snsAccounts,
-      notes: prospects.notes,
-      matchReason: projectProspects.matchReason,
-      priority: projectProspects.priority,
-      status: projectProspects.status,
-      organizationId: prospects.organizationId,
-    })
-    .from(projectProspects)
-    .innerJoin(prospects, eq(prospects.id, projectProspects.prospectId))
-    .where(
-      and(
-        eq(projectProspects.projectId, projectId),
-        eq(projectProspects.status, 'new'),
-        eq(prospects.doNotContact, false),
-      ),
-    )
-    .orderBy(projectProspects.priority, projectProspects.createdAt)
-    .limit(limit)
+  // Run prospect query and summary counts in parallel
+  const reachableCondition = and(
+    eq(projectProspects.projectId, projectId),
+    eq(projectProspects.status, 'new'),
+    eq(prospects.doNotContact, false),
+  )
 
-  return c.json({ prospects: rows })
+  const [rows, summaryRows] = await Promise.all([
+    db
+      .select({
+        ppId: projectProspects.id,
+        prospectId: prospects.id,
+        name: prospects.name,
+        contactName: prospects.contactName,
+        overview: prospects.overview,
+        industry: prospects.industry,
+        websiteUrl: prospects.websiteUrl,
+        email: prospects.email,
+        contactFormUrl: prospects.contactFormUrl,
+        formType: prospects.formType,
+        snsAccounts: prospects.snsAccounts,
+        notes: prospects.notes,
+        matchReason: projectProspects.matchReason,
+        priority: projectProspects.priority,
+        status: projectProspects.status,
+        organizationId: prospects.organizationId,
+      })
+      .from(projectProspects)
+      .innerJoin(prospects, eq(prospects.id, projectProspects.prospectId))
+      .where(reachableCondition)
+      .orderBy(projectProspects.priority, projectProspects.createdAt)
+      .limit(limit),
+    db
+      .select({
+        total: sql<number>`COUNT(*)::int`,
+        email: sql<number>`COUNT(*) FILTER (WHERE ${prospects.email} IS NOT NULL)::int`,
+        formOnly: sql<number>`COUNT(*) FILTER (WHERE ${prospects.email} IS NULL AND ${prospects.contactFormUrl} IS NOT NULL)::int`,
+        snsOnly: sql<number>`COUNT(*) FILTER (WHERE ${prospects.email} IS NULL AND ${prospects.contactFormUrl} IS NULL AND ${prospects.snsAccounts} IS NOT NULL)::int`,
+      })
+      .from(projectProspects)
+      .innerJoin(prospects, eq(prospects.id, projectProspects.prospectId))
+      .where(reachableCondition),
+  ])
+
+  const summary = summaryRows[0] ?? { total: 0, email: 0, formOnly: 0, snsOnly: 0 }
+
+  return c.json({
+    prospects: rows,
+    total: summary.total,
+    byChannel: {
+      email: summary.email,
+      formOnly: summary.formOnly,
+      snsOnly: summary.snsOnly,
+    },
+  })
 })
 
 // GET /projects/:id/prospects/identifiers — all registered prospect identifiers (for dedup)

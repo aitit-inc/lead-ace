@@ -75,4 +75,4 @@ Once send data has accumulated, perform the following analyses:
 ### Actions
 - Update target definition in SALES_STRATEGY.md
 - Add/remove search keywords
-- Adjust priority scores (bulk update via `record_evaluation.py --priority-updates`)
+- Adjust priority scores (bulk update via `record_evaluation` MCP tool with `priorityUpdates`)

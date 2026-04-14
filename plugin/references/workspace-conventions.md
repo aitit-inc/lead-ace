@@ -2,37 +2,26 @@
 
 Common rules for all skills and sub-agents.
 
-## data.db Location
-
-`data.db` is the **single shared DB located at the workspace root (the initial cwd)**. It does not exist inside project subdirectories.
+## Workspace Structure
 
 ```
-workspace-root/          ← this is the initial cwd
-├── data.db              ← shared DB (only here)
+workspace-root/          <- this is the initial cwd
 ├── project-a/
 │   ├── BUSINESS.md
-│   └── SALES_STRATEGY.md
+│   ├── SALES_STRATEGY.md
+│   └── ...
 └── project-b/
     └── ...
 ```
 
-## Datetime Timezone
-
-When handling datetimes in SQLite, always use **`datetime('now', 'localtime')`**. Do not use `datetime('now')` as it returns UTC.
-
-```sql
--- Correct
-DEFAULT (datetime('now', 'localtime'))
-updated_at = datetime('now', 'localtime')
-datetime('now', 'localtime', '-6 days')
-
--- Prohibited
-DEFAULT (datetime('now'))
-updated_at = datetime('now')
-```
+All project data (prospects, outreach logs, responses, evaluations) is stored on the server and accessed via MCP tools (`mcp__plugin_lead-ace_api__*`). There is no local database.
 
 ## Command Execution Rules
 
 - **Do not use cd.** Run all bash commands from the workspace root.
-- `data.db` is always accessible via its relative path (since cwd is the workspace root).
 - Reference files inside project directories using the `$0` prefix, e.g., `$0/BUSINESS.md`.
+- Local utility tools are in `${CLAUDE_PLUGIN_ROOT}/scripts/` (e.g., `fetch_url.py`).
+
+## MCP Tool Error Handling
+
+If any MCP tool call returns a "Project not found" error, instruct the user to run `/setup` first and abort the current skill.

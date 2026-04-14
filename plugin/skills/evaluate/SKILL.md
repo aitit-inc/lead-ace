@@ -7,41 +7,30 @@ allowed-tools:
   - Read
   - Write
   - WebSearch
+  - mcp__plugin_lead-ace_api__get_eval_data
+  - mcp__plugin_lead-ace_api__get_evaluation_history
+  - mcp__plugin_lead-ace_api__record_evaluation
 ---
 
 # Evaluate - PDCA Evaluation & Improvement
 
-A skill that analyzes sales activity result data and automatically evaluates and improves every aspect — strategy, tactics, targeting, and messaging.
-
-**Prerequisite:** Follow the conventions in `${CLAUDE_PLUGIN_ROOT}/references/workspace-conventions.md` (data.db location and no-cd rule).
+A skill that analyzes sales activity result data and automatically evaluates and improves every aspect -- strategy, tactics, targeting, and messaging.
 
 ## Steps
-
-### 0. Preflight Check
-
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/preflight.py data.db "$0"
-```
-
-If `status` is `error`, display the error message and **abort immediately**. Report any migrations in `migrations_applied` to the user.
 
 ### 1. Data Collection
 
 - Project directory name: `$0` (required)
 
-Run `sales_queries.py` `eval-*` commands in sequence, keeping each result for analysis:
+Call `mcp__plugin_lead-ace_api__get_eval_data` with `projectId: "$0"`.
 
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db eval-total-outreach "$0"
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db eval-channel-counts "$0"
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db eval-response-counts "$0"
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db eval-sentiment-breakdown "$0"
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db eval-priority-response-rate "$0"
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db eval-status-counts "$0"
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db eval-channel-response-rate "$0"
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db eval-responded-messages "$0"
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db eval-no-response-sample "$0"
-```
+If the tool returns a "Project not found" error, instruct the user to run `/setup` first and **abort**.
+
+The response includes:
+- `metrics`: totalOutreach, channelCounts, responseCounts, sentimentBreakdown, priorityResponseRate, statusCounts, channelResponseRate
+- `respondedMessages`: all outreach bodies that received responses (with sentiment and responseType)
+- `noResponseSample`: sample of outreach bodies that received no response
+- `dataSufficiency`: `{ sufficient, totalSent, daysSinceLastSend }`
 
 ### 2. Load Existing Strategy
 
@@ -49,9 +38,10 @@ Load the following:
 - `$0/BUSINESS.md`
 - `$0/SALES_STRATEGY.md`
 - `$0/RESULTS_REPORT.md` (if it exists)
-- Past `evaluations` table records (all records)
 
-If past evaluations exist, organize each record's `evaluation_date`, `findings`, and `improvements` chronologically to understand what has been tried, what was effective, and what was not. Use this information when deciding on improvement actions in step 4.
+Call `mcp__plugin_lead-ace_api__get_evaluation_history` with `projectId: "$0"` to retrieve past evaluation records.
+
+If past evaluations exist, organize each record's `evaluationDate`, `findings`, and `improvements` chronologically to understand what has been tried, what was effective, and what was not. Use this information when deciding on improvement actions in step 4.
 
 ### 3. Multi-angle Analysis
 
@@ -64,8 +54,8 @@ Refer to `${CLAUDE_PLUGIN_ROOT}/skills/evaluate/references/analysis-frameworks.m
 - Trends by time of day and day of week (analyze from send timestamps. However, since sending timing is determined by the daily-cycle execution schedule, do not write sending time constraints in SALES_STRATEGY.md. Report analysis results as "recommended execution timing" in the report only)
 
 **Message Analysis:**
-- Read all email bodies (outreach_logs.body) that received responses and extract common traits
-- Sample a few emails that received no response and compare
+- Read all outreach bodies that received responses (from `respondedMessages`) and extract common traits
+- Compare with non-response samples (from `noResponseSample`)
 - Effectiveness of subject lines
 - Effectiveness of body length and structure
 
@@ -82,17 +72,11 @@ Refer to `${CLAUDE_PLUGIN_ROOT}/skills/evaluate/references/analysis-frameworks.m
 
 **Data volume check (required):**
 
-Before applying improvement actions, check whether there is sufficient data:
-
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db data-sufficiency "$0"
-```
-
-If any of the following apply, **do not apply changes to SALES_STRATEGY.md or recalculate priorities**. Only run report generation (steps 5 and 6) and report "Insufficient data — continue monitoring":
+Use the `dataSufficiency` field from step 1. If `sufficient` is `false`, **do not apply changes to SALES_STRATEGY.md or recalculate priorities**. Only run report generation (steps 5 and 6) and report "Insufficient data -- continue monitoring":
 - Total approaches (status='sent') fewer than 30
 - Less than 3 business days since last send
 
-Even with insufficient data, still record to the evaluations table (step 5) and generate the report (step 6) — they are useful for understanding current status.
+Even with insufficient data, still record to the evaluations table (step 5) and generate the report (step 6) -- they are useful for understanding current status.
 
 ---
 
@@ -128,9 +112,9 @@ Before deciding on improvement actions, review the past evaluations history orga
 If `$0/SEARCH_NOTES.md` exists, overwrite the `## Hints from evaluate` section (add it at the end if not present). build-list will preserve this section during the next run and adjust its search policy.
 
 Content to add:
-- Industries / segments with response rates above overall average → "XX industry has X% response rate (vs overall average Y%). Explore more of this industry"
-- Characteristics similar to companies that responded (scale, business content, pain points) → "Companies like XX respond well. Search for similar companies and competitors"
-- Segments with poor responses → "XX industry has low response rate (X%). Lower priority"
+- Industries / segments with response rates above overall average -> "XX industry has X% response rate (vs overall average Y%). Explore more of this industry"
+- Characteristics similar to companies that responded (scale, business content, pain points) -> "Companies like XX respond well. Search for similar companies and competitors"
+- Segments with poor responses -> "XX industry has low response rate (X%). Lower priority"
 
 Skip if SEARCH_NOTES.md does not exist (build-list hasn't been run yet).
 
@@ -139,21 +123,12 @@ Skip if SEARCH_NOTES.md does not exist (build-list hasn't been run yet).
 
 ### 5. Save Evaluation Record
 
-Use `record_evaluation.py` to atomically execute the evaluation record and priority update:
-
-```bash
-echo "<findings_text>" > /tmp/eval_findings.txt
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/record_evaluation.py data.db \
-  --project "$0" \
-  --metrics '<metrics_json>' \
-  --findings-file /tmp/eval_findings.txt \
-  --improvements '<improvements_json>' \
-  --priority-updates '[{"industry": "<industry>", "priority": <1-5>}, ...]'
-```
-
-`--priority-updates` is optional (omit if no priority changes due to insufficient data).
-
-> **Note:** Direct SQL execution to the DB is prohibited. Evaluation records must be recorded via `record_evaluation.py`.
+Call `mcp__plugin_lead-ace_api__record_evaluation` with:
+- `projectId`: "$0"
+- `metrics`: the metrics object from step 1 (excluding respondedMessages and noResponseSample)
+- `findings`: analysis findings text from step 3
+- `improvements`: summary of improvement actions applied (or "Insufficient data -- no changes applied")
+- `priorityUpdates` (optional): array of `{ industry, priority }` for bulk priority updates. Omit if no priority changes due to insufficient data.
 
 ### 6. Results Report
 

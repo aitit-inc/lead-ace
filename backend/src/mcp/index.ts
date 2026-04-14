@@ -60,6 +60,29 @@ async function callApi(
 function createMcpServer(apiUrl: string, authHeader: string): McpServer {
   const server = new McpServer({ name: 'lead-ace', version: '1.0.0' })
 
+  // --- list_projects ---
+  server.tool(
+    'list_projects',
+    'List all projects for the current user.',
+    {},
+    async () => {
+      const { ok, data } = await callApi('GET', '/projects', null, apiUrl, authHeader)
+      if (!ok) {
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      const { projects } = data as { projects: unknown[] }
+      return {
+        content: [{
+          type: 'text' as const,
+          text: projects.length === 0
+            ? 'No projects found.'
+            : `${projects.length} project(s).\n${JSON.stringify(projects, null, 2)}`,
+        }],
+      }
+    },
+  )
+
   // --- setup_project ---
   server.tool(
     'setup_project',
@@ -175,11 +198,11 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
         const err = data as { error: string }
         return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
       }
-      const { prospects } = data as { prospects: unknown[] }
+      const result = data as { prospects: unknown[]; total: number; byChannel: { email: number; formOnly: number; snsOnly: number } }
       return {
         content: [{
           type: 'text' as const,
-          text: `${prospects.length} reachable prospects.\n${JSON.stringify(prospects, null, 2)}`,
+          text: `Total reachable: ${result.total} (email: ${result.byChannel.email}, formOnly: ${result.byChannel.formOnly}, snsOnly: ${result.byChannel.snsOnly})\nReturned: ${result.prospects.length}\n${JSON.stringify(result.prospects, null, 2)}`,
         }],
       }
     },
@@ -325,6 +348,29 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
         content: [{
           type: 'text' as const,
           text: `Evaluation recorded (id: ${result.evaluationId}). Priority updates: ${JSON.stringify(result.priorityUpdates)}`,
+        }],
+      }
+    },
+  )
+
+  // --- get_evaluation_history ---
+  server.tool(
+    'get_evaluation_history',
+    'Get past evaluation records for a project (findings, improvements, dates).',
+    { projectId: z.string().describe('Project ID') },
+    async ({ projectId }) => {
+      const { ok, data } = await callApi('GET', `/projects/${projectId}/evaluations`, null, apiUrl, authHeader)
+      if (!ok) {
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      const { evaluations } = data as { evaluations: unknown[] }
+      return {
+        content: [{
+          type: 'text' as const,
+          text: evaluations.length === 0
+            ? 'No evaluations recorded yet.'
+            : `${evaluations.length} evaluation(s).\n${JSON.stringify(evaluations, null, 2)}`,
         }],
       }
     },

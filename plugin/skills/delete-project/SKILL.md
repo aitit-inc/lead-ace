@@ -1,16 +1,15 @@
 ---
 name: delete-project
-description: "This skill should be used when the user asks to \"delete a project\", \"remove a project\", \"unregister a project\", or wants to delete a registered project. Removes from ~/.leadace/projects and also deletes the corresponding records from local data.db."
+description: "This skill should be used when the user asks to \"delete a project\", \"remove a project\", or wants to permanently delete a registered project and all its data from the server."
 argument-hint: "<project-directory-name>"
 allowed-tools:
-  - Bash
-  - Read
   - AskUserQuestion
+  - mcp__plugin_lead-ace_api__delete_project
 ---
 
-# Delete Project - Project Deletion
+# Delete Project
 
-A skill that unregisters a registered project from `~/.leadace/projects` and optionally deletes its data from the local data.db.
+A skill that permanently deletes a project and all its associated data (prospects, outreach logs, responses, evaluations) from the server.
 
 ## Steps
 
@@ -20,31 +19,19 @@ A skill that unregisters a registered project from `~/.leadace/projects` and opt
 
 Return an error if `$0` is empty.
 
-### 2. Global Unregistration
+### 2. Confirm Deletion
 
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/license.py unregister "$(pwd)/$0"
-```
+Use AskUserQuestion to ask: "Are you sure you want to delete project '$0' and ALL its data (prospects, outreach logs, responses, evaluations)? This cannot be undone."
 
-- Result is `UNREGISTERED` → "Project '$0' has been unregistered."
-- Result is `NOT_FOUND` → Display "Project '$0' is not registered." and exit
+If the user declines, abort.
 
-### 3. Confirm Local Data Deletion
+### 3. Delete Project
 
-Use AskUserQuestion to ask: "Do you also want to delete this project's data from local data.db? (The directory will remain.)"
+Call `mcp__plugin_lead-ace_api__delete_project` with `projectId: "$0"`.
 
-### 4. Delete Local Data (only if user confirms)
+If the tool returns a "Project not found" error, report that the project does not exist and exit.
 
-Delete the project's records from data.db in a single transaction:
+### 4. Completion Report
 
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/delete_project.py data.db "$0"
-```
-
-Note: Records in the prospects table are not deleted as they may be reused by other projects.
-
-### 5. Completion Report
-
-- Result of unregistration
-- Whether data was deleted
-- Note that the directory still remains
+- Confirm project "$0" and all its data have been deleted
+- Note that the local project directory still remains (user can delete it manually if desired)

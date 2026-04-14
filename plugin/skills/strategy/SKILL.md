@@ -8,6 +8,8 @@ allowed-tools:
   - Write
   - WebSearch
   - AskUserQuestion
+  - mcp__plugin_lead-ace_api__list_projects
+  - mcp__plugin_lead-ace_api__get_evaluation_history
 ---
 
 # Strategy - Sales & Marketing Strategy Development
@@ -15,14 +17,6 @@ allowed-tools:
 A skill that collects business and service information from the user and generates or updates strategy documents. For the first run, all information is collected interactively; for subsequent runs, gap analysis is performed on existing content to supplement only what is missing.
 
 ## Steps
-
-### 0. Preflight Check
-
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/preflight.py data.db "$0"
-```
-
-If `status` is `error`, display the error message and **abort immediately**. Report any migrations in `migrations_applied` to the user.
 
 ### 1. Verify Project
 
@@ -35,37 +29,39 @@ Verify that the `$0` directory exists. If not, guide the user to run `/setup`.
 Run the following command to check available tools:
 
 ```bash
-python3 --version 2>&1; echo "---"; git --version 2>&1 && git remote -v 2>&1; echo "---"; which gog 2>&1 && gog version 2>&1; echo "---"; playwright-cli --version 2>&1
+git --version 2>&1 && git remote -v 2>&1; echo "---"; which gog 2>&1 && gog version 2>&1; echo "---"; playwright-cli --version 2>&1
 ```
 
 Report results to the user and reflect in the "Environment & Tool Status" section of SALES_STRATEGY.md (when generating in step 7):
 
-- **gog**: Available / unavailable → if unavailable, affects channel options (email auto-sending not possible, only draft creation)
-- **git + remote**: Available / unavailable → if unavailable, daily-cycle automatic backup is disabled
+- **gog**: Available / unavailable -> if unavailable, affects channel options (email auto-sending not possible, only draft creation)
+- **git + remote**: Available / unavailable -> if unavailable, daily-cycle automatic backup is disabled
 - **Gmail MCP**: Cannot verify via bash. Ask user "Have you configured Gmail MCP in Claude Code?"
 - **playwright-cli**: Check with `playwright-cli --version`. Required for form submission
 - **Claude in Chrome**: Cannot verify via bash. Ask user "Are you using the Claude in Chrome extension?" Required for SNS DMs
 
-**In update mode:** If the "Environment & Tool Status" section already exists in SALES_STRATEGY.md, only re-check tools verifiable via bash (python3, git, gog, playwright-cli), and skip re-asking about Gmail MCP / Claude in Chrome (users can report changes themselves if any).
+**In update mode:** If the "Environment & Tool Status" section already exists in SALES_STRATEGY.md, only re-check tools verifiable via bash (git, gog, playwright-cli), and skip re-asking about Gmail MCP / Claude in Chrome (users can report changes themselves if any).
 
 **Impact of results on channel selection:**
-- No gog + Gmail MCP available → Email is draft-only (manual sending)
-- No gog + No Gmail MCP → Neither email sending nor draft creation is possible. Forms or SNS DMs only
-- No playwright-cli → Form submission not possible. Email and SNS DMs only
-- No Claude in Chrome → SNS DMs not possible. Email and forms only
-- No tools at all → Outbound is effectively unusable — make constraints clear when setting up channels in steps 3-6
+- No gog + Gmail MCP available -> Email is draft-only (manual sending)
+- No gog + No Gmail MCP -> Neither email sending nor draft creation is possible. Forms or SNS DMs only
+- No playwright-cli -> Form submission not possible. Email and SNS DMs only
+- No Claude in Chrome -> SNS DMs not possible. Email and forms only
+- No tools at all -> Outbound is effectively unusable -- make constraints clear when setting up channels in steps 3-6
 
 ### 3. Check Existing Files & Determine Mode
 
 Check existence and content of `$0/BUSINESS.md` and `$0/SALES_STRATEGY.md`.
 
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db list-projects
-```
+Retrieve the list of user's projects:
+
+Call `mcp__plugin_lead-ace_api__list_projects`.
+
+If the tool returns a project-not-found or authentication error, instruct the user to run `/setup` first and **abort**.
 
 **Mode determination:**
-- **Initial mode**: Neither file exists → Execute all steps in step 4 in sequence
-- **Update mode**: Either file exists → Perform the following gap analysis
+- **Initial mode**: Neither file exists -> Execute all steps in step 4 in sequence
+- **Update mode**: Either file exists -> Perform the following gap analysis
 
 #### Gap Analysis in Update Mode
 
@@ -90,11 +86,9 @@ Load existing files and check the completeness of each section in SALES_STRATEGY
 
 #### Check evaluate Improvement History
 
-Retrieve improvement history by evaluate:
+Retrieve improvement history:
 
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db evaluation-history "$0"
-```
+Call `mcp__plugin_lead-ace_api__get_evaluation_history` with `projectId: "$0"`.
 
 Based on results, classify each section into the following 3 categories:
 
@@ -121,7 +115,7 @@ Confirm policy with user:
 - **"Update specific sections"**: Only collect information for user-specified sections. If evaluate-managed sections are specified, warn "Accumulated improvements will be reset" and confirm
 - **"Business pivot"**: For fundamental changes to business, product, or target. Reconstruct all sections including evaluate-managed ones (accumulated improvements will be reset)
 
-**Reference other projects (initial mode only):** If projects other than `$0` exist at the workspace root, read their `BUSINESS.md` / `SALES_STRATEGY.md`. For second and subsequent project creation, existing project strategies can be referenced (target persona, channel selection, messaging structure, etc.). However, pay close attention to differences when the service or product differs — don't copy carelessly. Inform the user of existing projects and confirm whether to reference them. (Not needed in update mode — own project strategy is already established.)
+**Reference other projects (initial mode only):** If projects other than `$0` exist (shown by list_projects), read their `BUSINESS.md` / `SALES_STRATEGY.md`. For second and subsequent project creation, existing project strategies can be referenced (target persona, channel selection, messaging structure, etc.). However, pay close attention to differences when the service or product differs -- don't copy carelessly. Inform the user of existing projects and confirm whether to reference them. (Not needed in update mode -- own project strategy is already established.)
 
 ### 4. Information Collection (Interactive, step by step)
 
@@ -154,8 +148,8 @@ Question: Who do you want to sell to (industry, company size, role, characterist
 #### Step 4-3: Features, Differentiation, and Competition
 Question: Service features, selling points, and differentiation from competitors
 - Use information so far to give examples of likely competitors
-  - Example: "In this field, X and Y are likely competitors — what are your strengths?"
-- May lightly research major competitors via WebSearch and give examples. Use `fetch_url.py` to check page content from search results:
+  - Example: "In this field, X and Y are likely competitors -- what are your strengths?"
+- May lightly research major competitors via WebSearch and use `fetch_url.py` to check page content from search results:
   ```bash
   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_url.py --url "<URL>" --prompt "Extract this company's service content and features" --timeout 15
   ```
@@ -170,7 +164,7 @@ Question: Are there any specific track records, case studies, or numbers that ca
 #### Step 4-5: Pricing and Challenges
 Question: Price range (or pricing structure) and current sales challenges or concerns
 - Show typical pricing structure patterns as options
-  - Example: "Monthly subscription / usage-based / initial fee + monthly / spot pricing are common — which is closest to yours?"
+  - Example: "Monthly subscription / usage-based / initial fee + monthly / spot pricing are common -- which is closest to yours?"
 - If "up to you": Research common price ranges in the industry and propose
 
 #### Step 4-6: Prospect Discovery Sources
@@ -198,9 +192,9 @@ Question: Confirm the following
 - Scheduling link (Calendly / Cal.com / HubSpot Meetings, etc. URL. "None" if not applicable)
   - "Do you use a scheduling tool? Calendly, Cal.com, HubSpot Meetings are popular options"
 - Response definition: What counts as a "response"
-  - Show options: "Common responses counted as 'responded': ① Direct email reply ② Scheduling completion notification ③ Reply via contact form. Is this OK? Add if there are others"
+  - Show options: "Common responses counted as 'responded': (1) Direct email reply (2) Scheduling completion notification (3) Reply via contact form. Is this OK? Add if there are others"
 - Scheduling service name in use and notification sender email address
-- If "up to you": Use ①②③ above as default for response definition
+- If "up to you": Use (1)(2)(3) above as default for response definition
 
 #### Step 4-9: Notification Settings
 Question: Email address to receive daily-cycle completion notifications (or "none")
@@ -227,7 +221,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_url.py --url "<URL>" --prompt "<info
 Also refer to the following references when generating/updating to improve quality:
 
 - **`references/targeting-guide.md`**: Target persona refinement, competitive analysis perspectives, USP articulation, channel selection criteria, KPI reverse calculation tree, search keyword design patterns
-- **`references/industry-email-templates.md`**: Email template selection based on target industry. Auto-select the optimal pattern based on user's industry information and customize to business info (USP, track record, pricing). Do not use templates as-is — always add flesh based on user-specific information
+- **`references/industry-email-templates.md`**: Email template selection based on target industry. Auto-select the optimal pattern based on user's industry information and customize to business info (USP, track record, pricing). Do not use templates as-is -- always add flesh based on user-specific information
 
 **Reflect environment information:** Record the environment check results from step 2 in the "Environment & Tool Status" section. If any tools are unavailable, also reflect in the "Sales Channels" section (e.g., if gog unavailable, exclude email auto-sending; if Chrome unavailable, exclude forms and SNS)
 

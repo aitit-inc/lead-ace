@@ -14,23 +14,16 @@ allowed-tools:
   - mcp__claude_in_chrome__read_page
   - mcp__claude_in_chrome__get_page_text
   - mcp__claude_ai_Gmail__create_draft
+  - mcp__plugin_lead-ace_api__get_recent_outreach
+  - mcp__plugin_lead-ace_api__record_response
+  - mcp__plugin_lead-ace_api__update_prospect_status
 ---
 
 # Check Results - Response Collection
 
 A skill that automatically checks outbound sales responses and records them in the database.
 
-**Prerequisite:** Follow the conventions in `${CLAUDE_PLUGIN_ROOT}/references/workspace-conventions.md` (data.db location and no-cd rule).
-
 ## Steps
-
-### 0. Preflight Check
-
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/preflight.py data.db "$0"
-```
-
-If `status` is `error`, display the error message and **abort immediately**. Report any migrations in `migrations_applied` to the user.
 
 ### 1. Setup
 
@@ -43,11 +36,11 @@ Load `$0/SALES_STRATEGY.md` and understand the following from the "Response Defi
 
 ### 2. Retrieve Recent Outreach Information
 
-Retrieve metadata for outreach sent within the last 4 business days (body text not needed):
+Retrieve metadata for outreach sent within the last 4 business days:
 
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/sales_queries.py data.db recent-outreach "$0"
-```
+Call `mcp__plugin_lead-ace_api__get_recent_outreach` with `projectId: "$0"`.
+
+If the tool returns a "Project not found" error, instruct the user to run `/setup` first and **abort**.
 
 ### 3. Check Incoming Emails
 
@@ -80,7 +73,7 @@ Detect sending failures (unknown recipient, non-existent domain, etc.):
 
 Link received emails to outreach prospects. Match in the following priority order:
 1. **Exact match on sent address**: Direct reply from the recipient
-2. **Domain match**: Reply from a different person in the same organization (e.g., sent to `contact@co.jp` → received from `tanaka@co.jp`)
+2. **Domain match**: Reply from a different person in the same organization (e.g., sent to `contact@co.jp` -> received from `tanaka@co.jp`)
 3. **Organization name match**: The prospect's `name` appears in the email body or sender name (handles replies from group companies or legal secretariats)
 4. **Scheduling notification**: The notification email body contains the prospect's name or email address
 
@@ -102,38 +95,30 @@ Check for DM replies from prospects contacted via SNS using claude-in-chrome. Su
 2. Check for replies from outreach targets
 3. If there are replies, retrieve the content
 
-**If the browser extension is not connected:** Skip SNS checking, but count the number of prospects contacted via SNS that remain unconfirmed. In the results report (step 5), always report this as "**Unconfirmed SNS DMs: N**".
+**If the browser extension is not connected:** Skip SNS checking, but count the number of prospects contacted via SNS that remain unconfirmed. In the results report (step 7), always report this as "**Unconfirmed SNS DMs: N**".
 
 ### 5. Update Database
 
-When there is a response, use `record_response.py` to atomically record the reply, update the status, and set do-not-contact in a single command. **Duplicate records for the same outreach_log_id + response_type are automatically skipped**, so no pre-check SQL is needed (leave it to the script):
+For each response found, call `mcp__plugin_lead-ace_api__record_response` with:
+- `outreachLogId`: the matching outreach log ID from step 2
+- `channel`: the channel the response came through
+- `content`: the response content
+- `sentiment`: `positive` / `neutral` / `negative`
+- `responseType`: `reply` / `auto_reply` / `bounce` / `meeting_request` / `rejection`
+- `markDoNotContact`: set `true` for bounces or explicit opt-out requests
+- `receivedAt`: ISO 8601 timestamp if known
 
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/record_response.py data.db \
-  --project "$0" --prospect-id <prospect_id> \
-  --outreach-log-id <outreach_id> --channel <channel> \
-  --content "<reply content>" \
-  --sentiment <positive|neutral|negative> \
-  --response-type <type> \
-  [--new-status <responded|rejected|inactive>] \
-  [--do-not-contact --dnc-reason "Do not contact: <reason summary>"]
-```
+The server automatically determines the prospect status update based on `responseType` and `sentiment`:
+- Positive reply / meeting_request -> `responded`
+- Rejection -> `rejected`
+- Bounce -> `inactive` (also auto-marks do-not-contact)
+- Auto-reply -> no status change (keeps `contacted`)
 
-Specify `--new-status` based on the response:
-- Positive reply → `--new-status responded`
-- Meeting request / scheduling confirmation → `--new-status responded`
-- Clear rejection → `--new-status rejected`
-- Bounce → `--new-status inactive`
-- Auto-reply only → omit `--new-status` (keep as `contacted`)
+**Do-not-contact determination**: If the reply content contains opt-out intent such as "no further contact needed", "unsubscribe", "please don't contact me", set `markDoNotContact: true`. This applies across all projects.
 
-**response_type values:**
-`reply` / `auto_reply` / `bounce` / `meeting_request` / `scheduling_confirmation` / `rejection`, etc.
+If they simply declined this project's proposal (e.g., "we'll pass this time"), the server sets `rejected` via the responseType -- do not set `markDoNotContact`.
 
-**Do-not-contact determination**: If the reply content contains opt-out intent such as "no further contact needed", "unsubscribe", "please don't contact me", add `--do-not-contact --dnc-reason "Do not contact: <reason>"`. This applies across all projects.
-
-If they simply declined this project's proposal (e.g., "we'll pass this time"), use only `--new-status rejected` without `--do-not-contact`.
-
-> **Note:** Direct SQL execution to the DB is prohibited. Response recording must be done via `record_response.py`.
+**Edge case override**: If the automatic status is incorrect (e.g., a negative-sentiment reply that's actually a "not now, try again later"), use `mcp__plugin_lead-ace_api__update_prospect_status` to set the correct status.
 
 ### 6. Create Reply Drafts
 
@@ -145,10 +130,10 @@ If step 5 recorded a positive response (`responded`) for any prospect, use Gmail
 
 1. Refer to the "Sender Information" and "Messaging" sections of `$0/SALES_STRATEGY.md`
 2. Create an appropriate draft based on the reply content:
-   - **Positive reply (interested)** → Thank you + scheduling link or 3 time slot options
-   - **Material request** → Thank you + note that materials will be sent (the user will attach the actual materials after the draft)
-   - **Question / inquiry** → Draft answer to the question + next step suggestion
-   - **Scheduling confirmation** → Thank you for confirming + details for the day
+   - **Positive reply (interested)** -> Thank you + scheduling link or 3 time slot options
+   - **Material request** -> Thank you + note that materials will be sent (the user will attach the actual materials after the draft)
+   - **Question / inquiry** -> Draft answer to the question + next step suggestion
+   - **Scheduling confirmation** -> Thank you for confirming + details for the day
 3. Create the draft with `mcp__claude_ai_Gmail__create_draft`. Set subject in reply format (`Re: {original subject}`)
 4. Include the number of drafts created in the results report
 

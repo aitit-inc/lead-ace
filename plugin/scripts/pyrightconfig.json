@@ -1,8 +1,0 @@
-{
-  "typeCheckingMode": "standard",
-  "pythonVersion": "3.12",
-  "reportMissingModuleSource": false,
-  "reportUnnecessaryIsInstance": true,
-  "reportReturnType": true,
-  "reportUnusedImport": true
-}

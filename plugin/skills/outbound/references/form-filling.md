@@ -1,6 +1,6 @@
 # Contact Form Submission Procedure
 
-Use playwright-cli to fill in and submit forms, then record the result in the log.
+Use playwright-cli to fill in and submit forms, then record the result via MCP.
 
 **Important: Submit forms only once.** After clicking the submit button, do not retry for any reason. Use the network command to verify submission success.
 
@@ -35,16 +35,11 @@ When taking a snapshot of the form page, check for any text stating "No sales in
 
 ```bash
 playwright-cli close
-
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/send_and_log.py data.db \
-  --project "$PROJECT_ID" --prospect-id $PROSPECT_ID --log-only \
-  --channel form --subject "" --body "" \
-  --status failed --error-message "Sales refusal notice found"
-
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/update_status.py data.db \
-  --project "$PROJECT_ID" --prospect-id $PROSPECT_ID --status unreachable \
-  --do-not-contact --dnc-reason "Sales refusal notice found (form page)"
 ```
+
+Then call `mcp__plugin_lead-ace_api__record_outreach` with `channel: "form"`, `status: "failed"`, `errorMessage: "Sales refusal notice found"`.
+
+Then call `mcp__plugin_lead-ace_api__update_prospect_status` with `status: "unreachable"`.
 
 ## Form Filling Policy
 
@@ -77,9 +72,9 @@ playwright-cli network
 ```
 
 Look for a POST request in the network output:
-- A POST to the form URL or a related endpoint → **Submission successful** (reached the server)
-- POST status is 200 or 302 → **Submission successful**
-- No POST found → **Submission failed** (button click may not have triggered form submission)
+- A POST to the form URL or a related endpoint -> **Submission successful** (reached the server)
+- POST status is 200 or 302 -> **Submission successful**
+- No POST found -> **Submission failed** (button click may not have triggered form submission)
 
 ### Processing Based on Verification Result
 
@@ -87,30 +82,25 @@ Look for a POST request in the network output:
 
 ```bash
 playwright-cli close
-
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/send_and_log.py data.db \
-  --project "$PROJECT_ID" --prospect-id $PROSPECT_ID --log-only \
-  --channel form --subject "<subject>" --body "<body>"
 ```
+
+Then call `mcp__plugin_lead-ace_api__record_outreach` with `channel: "form"`, `status: "sent"`, `subject`, and `body`.
 
 **If submission failed (only when no POST confirmed):**
 
 ```bash
 playwright-cli close
-
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/send_and_log.py data.db \
-  --project "$PROJECT_ID" --prospect-id $PROSPECT_ID --log-only \
-  --channel form --subject "<subject>" --body "<body>" \
-  --status failed --error-message "<reason>"
 ```
+
+Then call `mcp__plugin_lead-ace_api__record_outreach` with `channel: "form"`, `status: "failed"`, `errorMessage: "<reason>"`.
 
 **Important:** Even on failure, do not re-submit to that form. Move on to the next prospect.
 
 ## Error Handling
 
-- **Form not found:** No form element in snapshot → record `status = 'failed'` with `error_message`
+- **Form not found:** No form element in snapshot -> record with `status: "failed"` and `errorMessage`
 - **Input validation error:** Check snapshot for error messages, then attempt one corrected re-submission. Verify the re-submission via network as well
-- **Page load timeout:** Record as `status = 'failed'` and move on
+- **Page load timeout:** Record as `status: "failed"` and move on
 
 ### When reCAPTCHA / hCaptcha or Similar is Present
 
@@ -118,14 +108,11 @@ If the form has reCAPTCHA, hCaptcha, Turnstile, or similar CAPTCHA (detected in 
 
 ```bash
 playwright-cli close
-
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/send_and_log.py data.db \
-  --project "$PROJECT_ID" --prospect-id $PROSPECT_ID --log-only \
-  --channel form --subject "" --body "" \
-  --status failed --error-message "Skipped due to reCAPTCHA"
 ```
 
-- Keep `project_prospects.status` as **`new`** (the CAPTCHA may be removed in a future update)
+Then call `mcp__plugin_lead-ace_api__record_outreach` with `channel: "form"`, `status: "failed"`, `errorMessage: "Skipped due to reCAPTCHA"`.
+
+- The prospect's status stays as `new` (the CAPTCHA may be removed in a future update)
 - If another channel (email, SNS) is available, try that instead
 
 ### For Google Forms
@@ -161,15 +148,11 @@ Submit Google Forms via a direct POST to the `formResponse` endpoint rather than
    ```
 
    - HTTP 200 means submission was successful
-   - Redirect (302 → confirmation page) also means success
+   - Redirect (302 -> confirmation page) also means success
 
 4. **Record the log**
 
-   ```bash
-   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/send_and_log.py data.db \
-     --project "$PROJECT_ID" --prospect-id $PROSPECT_ID --log-only \
-     --channel form --subject "<subject>" --body "<body>"
-   ```
+   Call `mcp__plugin_lead-ace_api__record_outreach` with `channel: "form"`, `status: "sent"`, `subject`, and `body`.
 
 **Notes:**
 - The order of form fields and their entry IDs may not be obvious. Cross-reference with the field definitions (label text) in the page source to map the correct entry IDs

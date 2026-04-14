@@ -323,7 +323,7 @@ lead-ace/                           ← git repo root
 
 ---
 
-## フェーズ3: プラグイン側の更新
+## フェーズ3: プラグイン側の更新 ✅ 完了
 
 **目標:** 全スキルを「Python スクリプト直叩き」から「MCP Server ツール経由」に移行し、Pythonスクリプトを廃止する
 
@@ -331,59 +331,37 @@ lead-ace/                           ← git repo root
 
 メール送信（gog）・フォーム入力（playwright-cli）・SNS DM（Claude-in-Chrome）の「実際の送信アクション」はユーザーのローカルで実行される。MCP化するのはその前後のデータ操作（営業先取得・送信ログ記録・ステータス更新）のみ。
 
-### 3-1. plugin.json に MCP サーバー設定を追加
+### 3-0. バックエンド追加（前提条件） ✅ 完了
 
-- [ ] `plugin/.claude-plugin/plugin.json` に MCP サーバー設定を追加
-  - ローカル開発時: `http://localhost:PORT`
-  - 本番時: `https://mcp.leadace.surpassone.com`（予定URL）
+- [x] `GET /api/projects` エンドポイント + `list_projects` MCP tool 追加
+- [x] `GET /projects/:id/prospects/reachable` に `total` + `byChannel` メタデータ追加（MCP tool も更新）
+- [x] `get_evaluation_history` MCP tool 追加（既存 API エンドポイントへのプロキシ）
+- [x] `record_response` のステータス自動判定ロジック修正（responseType + sentiment ベース）
+- [x] bounce 時の doNotContact 自動設定
 
-### 3-2. 各スキルの書き直し
+### 3-1. MCP サーバー設定を追加 ✅ 完了
 
-**setup スキル:**
-- [ ] `license.py check-can-add` / `license.py register` / `init_db.py` / `preflight.py` → `setup_project` MCP tool に置き換え
-- [ ] ライセンスキー保存フローも Web API 経由に
+- [x] `plugin/.mcp.json` を作成（HTTP type、`${LEADACE_MCP_URL}` + `${LEADACE_AUTH_TOKEN}` 環境変数）
 
-**strategy スキル:**
-- [ ] `preflight.py`, `sales_queries.py list-projects`, `sales_queries.py evaluation-history` → 対応する MCP tool に置き換え
-- [ ] LLM による BUSINESS.md / SALES_STRATEGY.md 生成部分は変更なし
+### 3-2. 各スキルの書き直し ✅ 完了
 
-**build-list スキル:**
-- [ ] `sales_queries.py all-prospect-identifiers` → `get_prospect_identifiers` MCP tool
-- [ ] `filter_duplicates.py`, `merge_prospects.py`, `add_prospects.py` → `add_prospects` MCP tool（重複チェックはサーバー側で実装済み）
-- [ ] `fetch_url.py`, `check_corporate_number.py` はローカル実行のまま（Webアクセスはサーバーではなくローカルで行う）
+- [x] **delete-project**: `license.py` + `delete_project.py` → `delete_project` MCP tool
+- [x] **setup**: `license.py` + `init_db.py` + `preflight.py` → `setup_project` MCP tool。ローカルライセンス管理廃止
+- [x] **strategy**: `preflight.py` + `sales_queries.py` → `list_projects` + `get_evaluation_history` MCP tools
+- [x] **check-results**: `preflight.py` + `sales_queries.py` + `record_response.py` → `get_recent_outreach` + `record_response` MCP tools
+- [x] **evaluate**: `preflight.py` + 9個の eval クエリ + `record_evaluation.py` → `get_eval_data` + `get_evaluation_history` + `record_evaluation` MCP tools
+- [x] **build-list**: `preflight.py` + `filter_duplicates.py` + `merge_prospects.py` + `add_prospects.py` → `get_prospect_identifiers` + `add_prospects` MCP tools。LLM がマージ・重複フィルタを直接担当
+- [x] **outbound**: `preflight.py` + `send_and_log.py` + `update_status.py` → `get_outbound_targets` + `record_outreach` + `update_prospect_status` MCP tools。送信は `gog` ローカル実行のまま
+- [x] **daily-cycle**: 全サブエージェントプロンプトを MCP tool 経由に更新。`data.db` の git commit を削除
 
-**outbound スキル:**
-- [ ] `sales_queries.py list-reachable` → `get_outbound_targets` MCP tool
-- [ ] `send_and_log.py` → 送信処理はローカルのまま + `record_outreach` MCP tool で記録
-- [ ] `update_status.py` → `update_prospect_status` MCP tool
+### 3-3. 廃止ファイルの整理 ✅ 完了
 
-**check-results スキル:**
-- [ ] `sales_queries.py recent-outreach` → `get_recent_outreach` MCP tool
-- [ ] `record_response.py` → `record_response` MCP tool
-- [ ] Gmail検索（Gmail MCP）・SNS確認（Claude-in-Chrome）はローカル実行のまま
-
-**evaluate スキル:**
-- [ ] `sales_queries.py eval-*`（9コマンド）+ `sales_queries.py data-sufficiency` → `get_eval_data` MCP tool
-- [ ] `record_evaluation.py` → `record_evaluation` MCP tool
-- [ ] LLM によるパターン分析・SALES_STRATEGY.md 更新部分は変更なし
-
-**daily-cycle スキル:**
-- [ ] サブエージェント構成は維持しつつ、各スキルが MCP tool 経由になった状態での動作確認
-- [ ] `.tmp/` 中間ファイル管理はそのまま
-
-**delete-project スキル:**
-- [ ] `license.py unregister`, `delete_project.py` → `delete_project` MCP tool
-
-**lead-ace-doctor スキル:**
-- [ ] `query_db.py`（直接SQL）はそのまま維持 or 管理用 API エンドポイントに移行（要検討）
-- [ ] `preflight.py --migrate-only` は廃止（マイグレーションはサーバー管理）
-
-### 3-3. 廃止ファイルの整理
-
-- [ ] `plugin/scripts/` 以下の Python スクリプト全廃止（段階的に。動作確認後に削除）
-- [ ] `plugin/migrations/` 廃止（Drizzle マイグレーションに移管）
-- [ ] `plugin/scripts/sales-db.sql` 廃止（Drizzle スキーマが唯一の真実）
-- [ ] `plugin/scripts/pyrightconfig.json`, `test_imports.py` 廃止
+- [x] `plugin/scripts/` 以下の Python スクリプト全廃止（`fetch_url.py` のみ残存）
+- [x] `plugin/migrations/` 廃止
+- [x] `plugin/skills/lead-ace-doctor/` 廃止（Drizzle Studio で代替）
+- [x] `plugin/skills/evaluate/references/evaluation-queries.sql` 廃止
+- [x] CLAUDE.md 更新（DB Migrations セクション削除、Separation of Responsibilities 更新、Pre-Release Checklist 更新）
+- [x] `workspace-conventions.md` 更新（data.db・SQLite 参照を削除、MCP tool エラーハンドリング追加）
 
 ### レビュー
 
@@ -396,7 +374,7 @@ lead-ace/                           ← git repo root
 - [ ] `/evaluate` でMCPツールから統計データを取得し、SALES_STRATEGY.md が更新される
 - [ ] `/daily-cycle` が全フェーズを通して動作する（check-results → evaluate → outbound + build-list）
 - [ ] `/delete-project` でプロジェクトが削除される
-- [ ] Python スクリプト（`plugin/scripts/`）が全て廃止されている
+- [ ] Python スクリプト（`plugin/scripts/`）が `fetch_url.py` 以外全て廃止されている
 - [ ] `docker compose up` → プラグインの全スキルが一通り使える
 
 **まだできていなくて良いこと:**
