@@ -384,24 +384,51 @@ lead-ace/                           ← git repo root
 
 ---
 
-## フェーズ4: フロントエンド（管理画面）
+## フェーズ4: フロントエンド（管理画面）✅ 完了
 
 **目標:** 結果確認・高リスク操作の承認のための最小限UI
 
 ### 技術スタック
 
-- Cloudflare Pages
-- SvelteKit または React（検討中）
-- Supabase Auth（ログイン）
+- Cloudflare Pages + SvelteKit (Svelte 5, runes mode)
+- Tailwind CSS v4
+- Supabase Auth（`@supabase/supabase-js` クライアントサイドJWT）
+- SPA mode (`ssr: false`)
 
-### タスク
+### 4-0. バックエンド追加（前提条件） ✅ 完了
 
-- [ ] プロジェクト一覧・切り替え
-- [ ] 営業先リスト（ステータス・優先度・チャネルでフィルタ）
-- [ ] アウトバウンドログ（送信日時・チャネル・件名・本文）
-- [ ] 返信一覧（センチメント・タイプ別）
-- [ ] 評価・戦略サマリー（KPI推移、改善履歴）
-- [ ] 高リスク操作の承認UI（一括削除・do-not-contact 設定等）
+- [x] `GET /api/projects/:id/prospects` — 全営業先一覧（status, priority フィルタ対応）
+- [x] `GET /api/projects/:id/responses` — 返信一覧（sentiment, responseType フィルタ対応）
+- [x] `PATCH /api/prospects/:id/do-not-contact` — doNotContact フラグ切り替え
+
+### 4-1. プロジェクトセットアップ ✅ 完了
+
+- [x] SvelteKit + Cloudflare Pages adapter + Tailwind CSS v4
+- [x] Supabase Auth クライアント + auth store
+- [x] API クライアント（Bearer token 自動付与）
+- [x] ログインページ
+- [x] ルートレイアウト（認証ゲート）
+
+### 4-2. レイアウト・プロジェクト切り替え ✅ 完了
+
+- [x] サイドバーナビゲーション（Prospects, Outreach, Responses, Evaluations, Settings）
+- [x] ProjectSwitcher（ドロップダウン、localStorage 永続化）
+
+### 4-3. ページ実装 ✅ 完了
+
+- [x] プロジェクト一覧・切り替え
+- [x] 営業先リスト（ステータス・優先度フィルタ、組織名表示、展開詳細）
+- [x] アウトバウンドログ（送信日時・チャネル・件名・本文、展開表示）
+- [x] 返信一覧（センチメント・タイプ別フィルタ、展開表示）
+- [x] 評価・戦略サマリー（KPIダッシュボード + 評価履歴）
+- [x] Settings（プロジェクト削除 with 確認ダイアログ）
+
+### デザイン
+
+- フラットUI、枠線最小、AI感なし
+- カラー: グレースケール中心 + `#D06A57`（アクセント）, `#333333`（テキスト）, `#F6EEE6`（ウォーム背景）
+- フォント: Inter（本文）+ JetBrains Mono（数値・コード）
+- 全て英語
 
 ### レビュー
 
@@ -511,7 +538,7 @@ lead-ace/                           ← git repo root
 | 有料ライセンスの価格・プラン設計 | 未決 |
 | セルフデプロイユーザーへのライセンス管理方法 | 未決（ライセンスサーバー認証 vs ソース改変禁止のみ） |
 | MCP Server の認証方式 | APIキー vs Supabase Auth JWT |
-| フロントエンドのフレームワーク | SvelteKit vs React |
+| フロントエンドのフレームワーク | **SvelteKit** に決定（フェーズ4で実装済み）|
 | `lead-ace-doctor` の移行方針 | Python `query_db.py` 維持 vs 管理用 API エンドポイント化 |
 | Cloud Scheduled Tasks（Claude Code Web版）との統合タイミング | フェーズ3以降 |
 | build-list の Cloudflare Queues 非同期化 | フェーズ5以降（Web探索は重い処理なので将来的には非同期化したい）|

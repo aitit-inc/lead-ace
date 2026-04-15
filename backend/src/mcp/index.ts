@@ -2,10 +2,20 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { jwtVerify } from 'jose'
 import { z } from 'zod'
+import {
+  handleMetadata,
+  handleResourceMetadata,
+  handleRegister,
+  handleAuthorizeGet,
+  handleAuthorizePost,
+  handleToken,
+} from './oauth'
 
 type Env = {
   WEB_API_URL: string
   SUPABASE_JWT_SECRET: string
+  SUPABASE_URL: string
+  SUPABASE_ANON_KEY: string
   ENVIRONMENT: string
 }
 
@@ -51,6 +61,28 @@ async function callApi(
 
   const data = await res.json()
   return { ok: res.ok, status: res.status, data }
+}
+
+// ---------------------------------------------------------------------------
+// CORS headers
+// ---------------------------------------------------------------------------
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, Mcp-Session-Id',
+}
+
+function withCors(response: Response): Response {
+  const newHeaders = new Headers(response.headers)
+  for (const [k, v] of Object.entries(corsHeaders)) {
+    newHeaders.set(k, v)
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: newHeaders,
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -385,24 +417,53 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url)
+    const path = url.pathname
+    const baseUrl = url.origin
+
     // CORS preflight
     if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, DELETE',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization, Mcp-Session-Id',
-        },
-      })
+      return new Response(null, { headers: corsHeaders })
     }
 
-    // Validate auth and extract user token for API calls
+    // --- OAuth endpoints (no auth required) ---
+
+    if (path === '/.well-known/oauth-authorization-server') {
+      return withCors(handleMetadata(baseUrl))
+    }
+
+    if (path === '/.well-known/oauth-protected-resource') {
+      return withCors(handleResourceMetadata(baseUrl))
+    }
+
+    if (path === '/register' && request.method === 'POST') {
+      return withCors(await handleRegister(request))
+    }
+
+    if (path === '/authorize') {
+      if (request.method === 'GET') {
+        return handleAuthorizeGet(request, baseUrl)
+      }
+      if (request.method === 'POST') {
+        return withCors(await handleAuthorizePost(request, env.SUPABASE_URL, env.SUPABASE_ANON_KEY))
+      }
+    }
+
+    if (path === '/token' && request.method === 'POST') {
+      return withCors(await handleToken(request, env.SUPABASE_URL, env.SUPABASE_ANON_KEY))
+    }
+
+    // --- MCP endpoints (auth required) ---
+
     const userId = await extractUserId(request, env.SUPABASE_JWT_SECRET)
     if (!userId) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      return withCors(new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      })
+        headers: {
+          'Content-Type': 'application/json',
+          'WWW-Authenticate': `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`,
+        },
+      }))
     }
 
     const authHeader = request.headers.get('Authorization') ?? ''
@@ -410,6 +471,6 @@ export default {
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined })
 
     await server.connect(transport)
-    return await transport.handleRequest(request)
+    return withCors(await transport.handleRequest(request))
   },
 }

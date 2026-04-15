@@ -102,18 +102,31 @@ npm run db:migrate
 ### Local Dev
 
 ```bash
-docker compose up -d       # PostgreSQL (port 5432)
+npx supabase start         # Supabase local (Auth + PostgreSQL on port 54322)
 cd backend
 npm run dev:api            # API Worker (port 8787)
 npm run dev:mcp            # MCP Worker (port 8788) — separate terminal
+cd frontend
+npm run dev                # Frontend dev server (port 5173)
 ```
 
 See `README.md` -> For Developers for full details.
+
+## Frontend Development (frontend/)
+
+- SvelteKit (Svelte 5, runes mode) + Cloudflare Pages adapter
+- Tailwind CSS v4 (CSS-based config, no tailwind.config.js)
+- SPA mode (`ssr: false`) — all rendering is client-side
+- Auth via `@supabase/supabase-js` (client-side JWT)
+- Environment variables: `VITE_API_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
 
 ## Pre-Release Checklist (Required)
 
 **Backend (TypeScript):**
 `cd backend && npm run typecheck`
+
+**Frontend (Svelte):**
+`cd frontend && npm run check`
 
 ## Release
 Bump the version in `plugin/.claude-plugin/plugin.json`, then commit and push.

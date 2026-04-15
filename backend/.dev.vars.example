@@ -1,15 +1,16 @@
-# Copy this file to .dev.vars and fill in values for local development.
-# .dev.vars is read by `wrangler dev` automatically (gitignored).
+# Copy this file to .dev.vars for local development.
+# wrangler dev reads it automatically. Both API and MCP workers share this file.
 
-# PostgreSQL connection string
-# For local dev (docker compose): postgresql://postgres:postgres@localhost:5432/leadace
-# For Supabase local: use `supabase status` to get the connection string
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/leadace"
+# --- API Worker ---
+# Run `npx supabase status` to get the DB URL
+DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
 
-# Supabase JWT secret (used to validate user tokens)
-# For Supabase local: "super-secret-jwt-token-with-at-least-32-characters-long" (default)
-# Run `supabase status` to confirm
+# --- MCP Worker ---
+WEB_API_URL="http://localhost:8787"
+
+# --- Shared (both workers) ---
+# Run `npx supabase status` to get the JWT secret and keys
 SUPABASE_JWT_SECRET="super-secret-jwt-token-with-at-least-32-characters-long"
-
-# Development environment flag
+SUPABASE_URL="http://127.0.0.1:54321"
+SUPABASE_ANON_KEY="your-supabase-anon-key-here"
 ENVIRONMENT="development"

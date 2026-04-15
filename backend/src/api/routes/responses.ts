@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, desc } from 'drizzle-orm'
 import { createDb } from '../../db/connection'
 import {
   projects,
@@ -115,4 +115,58 @@ responsesRouter.post('/responses', zValidator('json', recordResponseSchema), asy
   }
 
   return c.json({ id: newResponse?.id }, 201)
+})
+
+// GET /projects/:id/responses — list responses for a project
+responsesRouter.get('/projects/:id/responses', async (c) => {
+  const projectId = c.req.param('id')
+  const userId = c.get('userId')
+  const db = createDb(c.env.DATABASE_URL)
+
+  // Verify project ownership
+  const [project] = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
+    .limit(1)
+
+  if (!project) {
+    return c.json({ error: 'Project not found' }, 404)
+  }
+
+  const limitParam = c.req.query('limit')
+  const limit = limitParam ? Math.min(parseInt(limitParam, 10), 200) : 100
+  const sentimentFilter = c.req.query('sentiment')
+  const responseTypeFilter = c.req.query('responseType')
+
+  const conditions = [eq(outreachLogs.projectId, projectId)]
+
+  if (sentimentFilter && sentimentEnum.enumValues.includes(sentimentFilter as typeof sentimentEnum.enumValues[number])) {
+    conditions.push(eq(responses.sentiment, sentimentFilter as typeof sentimentEnum.enumValues[number]))
+  }
+
+  if (responseTypeFilter && responseTypeEnum.enumValues.includes(responseTypeFilter as typeof responseTypeEnum.enumValues[number])) {
+    conditions.push(eq(responses.responseType, responseTypeFilter as typeof responseTypeEnum.enumValues[number]))
+  }
+
+  const rows = await db
+    .select({
+      id: responses.id,
+      channel: responses.channel,
+      content: responses.content,
+      sentiment: responses.sentiment,
+      responseType: responses.responseType,
+      receivedAt: responses.receivedAt,
+      prospectId: outreachLogs.prospectId,
+      prospectName: prospects.name,
+      outreachSubject: outreachLogs.subject,
+    })
+    .from(responses)
+    .innerJoin(outreachLogs, eq(outreachLogs.id, responses.outreachLogId))
+    .innerJoin(prospects, eq(prospects.id, outreachLogs.prospectId))
+    .where(and(...conditions))
+    .orderBy(desc(responses.receivedAt))
+    .limit(limit)
+
+  return c.json({ responses: rows })
 })

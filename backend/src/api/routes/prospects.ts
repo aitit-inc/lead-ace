@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { eq, and, sql } from 'drizzle-orm'
+import { eq, and, sql, desc } from 'drizzle-orm'
 import { createDb } from '../../db/connection'
 import {
   projects,
@@ -9,6 +9,8 @@ import {
   prospects,
   projectProspects,
   formTypeEnum,
+  prospectStatusEnum,
+  channelEnum,
 } from '../../db/schema'
 import type { Env, Variables } from '../types'
 import type { SnsAccounts } from '../../db/schema'
@@ -359,4 +361,127 @@ prospectsRouter.patch('/prospects/:id/status', async (c) => {
   }
 
   return c.json({ updated: true, prospectId, status })
+})
+
+// GET /projects/:id/prospects — all prospects in a project with optional filters
+prospectsRouter.get('/projects/:id/prospects', async (c) => {
+  const projectId = c.req.param('id')
+  const userId = c.get('userId')
+  const db = createDb(c.env.DATABASE_URL)
+
+  // Verify project ownership
+  const [project] = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
+    .limit(1)
+
+  if (!project) {
+    return c.json({ error: 'Project not found' }, 404)
+  }
+
+  // Parse query params
+  const limitParam = c.req.query('limit')
+  const limit = limitParam ? Math.min(parseInt(limitParam, 10), 500) : 100
+  const statusFilter = c.req.query('status')
+  const priorityFilter = c.req.query('priority')
+
+  // Build conditions
+  const conditions = [eq(projectProspects.projectId, projectId)]
+
+  if (statusFilter && prospectStatusEnum.enumValues.includes(statusFilter as typeof prospectStatusEnum.enumValues[number])) {
+    conditions.push(eq(projectProspects.status, statusFilter as typeof prospectStatusEnum.enumValues[number]))
+  }
+
+  if (priorityFilter) {
+    const p = parseInt(priorityFilter, 10)
+    if (p >= 1 && p <= 5) {
+      conditions.push(eq(projectProspects.priority, p))
+    }
+  }
+
+  const where = and(...conditions)
+
+  const [rows, countRows] = await Promise.all([
+    db
+      .select({
+        ppId: projectProspects.id,
+        prospectId: prospects.id,
+        name: prospects.name,
+        contactName: prospects.contactName,
+        overview: prospects.overview,
+        industry: prospects.industry,
+        websiteUrl: prospects.websiteUrl,
+        email: prospects.email,
+        contactFormUrl: prospects.contactFormUrl,
+        formType: prospects.formType,
+        snsAccounts: prospects.snsAccounts,
+        doNotContact: prospects.doNotContact,
+        notes: prospects.notes,
+        matchReason: projectProspects.matchReason,
+        priority: projectProspects.priority,
+        status: projectProspects.status,
+        organizationId: prospects.organizationId,
+        organizationName: organizations.name,
+        createdAt: projectProspects.createdAt,
+      })
+      .from(projectProspects)
+      .innerJoin(prospects, eq(prospects.id, projectProspects.prospectId))
+      .innerJoin(organizations, eq(organizations.domain, prospects.organizationId))
+      .where(where)
+      .orderBy(projectProspects.priority, desc(projectProspects.createdAt))
+      .limit(limit),
+    db
+      .select({ total: sql<number>`COUNT(*)::int` })
+      .from(projectProspects)
+      .innerJoin(prospects, eq(prospects.id, projectProspects.prospectId))
+      .where(where),
+  ])
+
+  return c.json({
+    prospects: rows,
+    total: countRows[0]?.total ?? 0,
+  })
+})
+
+// PATCH /prospects/:id/do-not-contact — toggle do_not_contact flag
+prospectsRouter.patch('/prospects/:id/do-not-contact', async (c) => {
+  const prospectId = parseInt(c.req.param('id'), 10)
+  const userId = c.get('userId')
+  const db = createDb(c.env.DATABASE_URL)
+
+  let body: { doNotContact: boolean }
+  try {
+    body = await c.req.json<{ doNotContact: boolean }>()
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400)
+  }
+
+  if (typeof body.doNotContact !== 'boolean') {
+    return c.json({ error: 'doNotContact (boolean) is required' }, 400)
+  }
+
+  // Verify the prospect belongs to at least one of the user's projects
+  const [owned] = await db
+    .select({ id: projectProspects.id })
+    .from(projectProspects)
+    .innerJoin(projects, eq(projects.id, projectProspects.projectId))
+    .where(
+      and(
+        eq(projectProspects.prospectId, prospectId),
+        eq(projects.userId, userId),
+      ),
+    )
+    .limit(1)
+
+  if (!owned) {
+    return c.json({ error: 'Prospect not found' }, 404)
+  }
+
+  await db
+    .update(prospects)
+    .set({ doNotContact: body.doNotContact, updatedAt: new Date() })
+    .where(eq(prospects.id, prospectId))
+
+  return c.json({ updated: true, prospectId, doNotContact: body.doNotContact })
 })
