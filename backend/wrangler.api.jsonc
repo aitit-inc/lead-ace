@@ -9,4 +9,5 @@
   // Secrets (set via wrangler secret or .dev.vars):
   // DATABASE_URL
   // SUPABASE_JWT_SECRET
+  // SUPABASE_URL
 }

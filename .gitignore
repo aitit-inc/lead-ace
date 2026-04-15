@@ -6,6 +6,9 @@
 .env.local
 .env.production
 
+# Dev
+plugin-test/
+
 # Python
 __pycache__/
 *.pyc

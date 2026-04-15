@@ -1,5 +1,5 @@
 import { createMiddleware } from 'hono/factory'
-import { jwtVerify } from 'jose'
+import { verifySupabaseJwt } from '../../auth/verify-jwt'
 import type { Env, Variables } from '../types'
 
 export const authMiddleware = createMiddleware<{ Bindings: Env; Variables: Variables }>(
@@ -10,19 +10,13 @@ export const authMiddleware = createMiddleware<{ Bindings: Env; Variables: Varia
     }
 
     const token = authHeader.slice(7)
-    try {
-      const secret = new TextEncoder().encode(c.env.SUPABASE_JWT_SECRET)
-      const { payload } = await jwtVerify(token, secret, { algorithms: ['HS256'] })
+    const userId = await verifySupabaseJwt(token, c.env.SUPABASE_JWT_SECRET, c.env.SUPABASE_URL)
 
-      const sub = payload['sub']
-      if (typeof sub !== 'string' || !sub) {
-        return c.json({ error: 'Invalid token: missing sub' }, 401)
-      }
-
-      c.set('userId', sub)
-      await next()
-    } catch {
+    if (!userId) {
       return c.json({ error: 'Invalid token' }, 401)
     }
+
+    c.set('userId', userId)
+    await next()
   },
 )

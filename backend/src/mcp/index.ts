@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
-import { jwtVerify } from 'jose'
 import { z } from 'zod'
+import { verifySupabaseJwt } from '../auth/verify-jwt'
 import {
   handleMetadata,
   handleResourceMetadata,
@@ -23,19 +23,11 @@ type Env = {
 // Auth helpers
 // ---------------------------------------------------------------------------
 
-async function extractUserId(request: Request, jwtSecret: string): Promise<string | null> {
+async function extractUserId(request: Request, jwtSecret: string, supabaseUrl?: string): Promise<string | null> {
   const authHeader = request.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) return null
-
   const token = authHeader.slice(7)
-  try {
-    const secret = new TextEncoder().encode(jwtSecret)
-    const { payload } = await jwtVerify(token, secret, { algorithms: ['HS256'] })
-    const sub = payload['sub']
-    return typeof sub === 'string' ? sub : null
-  } catch {
-    return null
-  }
+  return verifySupabaseJwt(token, jwtSecret, supabaseUrl)
 }
 
 // ---------------------------------------------------------------------------
@@ -417,60 +409,72 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url)
-    const path = url.pathname
-    const baseUrl = url.origin
-
-    // CORS preflight
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: corsHeaders })
+    try {
+      return await handleRequest(request, env)
+    } catch (e) {
+      console.error('Unhandled error:', e)
+      return withCors(Response.json(
+        { error: 'Internal server error', detail: e instanceof Error ? e.message : undefined },
+        { status: 500 },
+      ))
     }
-
-    // --- OAuth endpoints (no auth required) ---
-
-    if (path === '/.well-known/oauth-authorization-server') {
-      return withCors(handleMetadata(baseUrl))
-    }
-
-    if (path === '/.well-known/oauth-protected-resource') {
-      return withCors(handleResourceMetadata(baseUrl))
-    }
-
-    if (path === '/register' && request.method === 'POST') {
-      return withCors(await handleRegister(request))
-    }
-
-    if (path === '/authorize') {
-      if (request.method === 'GET') {
-        return handleAuthorizeGet(request, baseUrl)
-      }
-      if (request.method === 'POST') {
-        return withCors(await handleAuthorizePost(request, env.SUPABASE_URL, env.SUPABASE_ANON_KEY))
-      }
-    }
-
-    if (path === '/token' && request.method === 'POST') {
-      return withCors(await handleToken(request, env.SUPABASE_URL, env.SUPABASE_ANON_KEY))
-    }
-
-    // --- MCP endpoints (auth required) ---
-
-    const userId = await extractUserId(request, env.SUPABASE_JWT_SECRET)
-    if (!userId) {
-      return withCors(new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: {
-          'Content-Type': 'application/json',
-          'WWW-Authenticate': `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`,
-        },
-      }))
-    }
-
-    const authHeader = request.headers.get('Authorization') ?? ''
-    const server = createMcpServer(env.WEB_API_URL, authHeader)
-    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined })
-
-    await server.connect(transport)
-    return withCors(await transport.handleRequest(request))
   },
+}
+
+async function handleRequest(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url)
+  const path = url.pathname
+  const baseUrl = url.origin
+
+  // CORS preflight
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders })
+  }
+
+  // --- OAuth endpoints (no auth required) ---
+
+  if (path === '/.well-known/oauth-authorization-server') {
+    return withCors(handleMetadata(baseUrl))
+  }
+
+  if (path === '/.well-known/oauth-protected-resource') {
+    return withCors(handleResourceMetadata(baseUrl))
+  }
+
+  if (path === '/register' && request.method === 'POST') {
+    return withCors(await handleRegister(request))
+  }
+
+  if (path === '/authorize') {
+    if (request.method === 'GET') {
+      return handleAuthorizeGet(request, baseUrl)
+    }
+    if (request.method === 'POST') {
+      return withCors(await handleAuthorizePost(request, env.SUPABASE_URL, env.SUPABASE_ANON_KEY))
+    }
+  }
+
+  if (path === '/token' && request.method === 'POST') {
+    return withCors(await handleToken(request, env.SUPABASE_URL, env.SUPABASE_ANON_KEY))
+  }
+
+  // --- MCP endpoints (auth required) ---
+
+  const userId = await extractUserId(request, env.SUPABASE_JWT_SECRET, env.SUPABASE_URL)
+  if (!userId) {
+    return withCors(new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: {
+        'Content-Type': 'application/json',
+        'WWW-Authenticate': `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`,
+      },
+    }))
+  }
+
+  const authHeader = request.headers.get('Authorization') ?? ''
+  const server = createMcpServer(env.WEB_API_URL, authHeader)
+  const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined })
+
+  await server.connect(transport)
+  return withCors(await transport.handleRequest(request))
 }

@@ -176,24 +176,37 @@ export async function handleAuthorizePost(
   }
 
   // Authenticate with Supabase Auth
-  const authRes = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: supabaseAnonKey,
-    },
-    body: JSON.stringify({ email, password }),
-  })
+  let authData: { access_token: string; refresh_token: string }
+  try {
+    const authRes = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: supabaseAnonKey,
+      },
+      body: JSON.stringify({ email, password }),
+    })
 
-  if (!authRes.ok) {
-    const err = await authRes.json().catch(() => ({})) as Record<string, string>
+    if (!authRes.ok) {
+      const errText = await authRes.text()
+      let errMsg = 'Invalid credentials'
+      try {
+        const errJson = JSON.parse(errText) as Record<string, string>
+        errMsg = errJson['error_description'] ?? errJson['msg'] ?? errMsg
+      } catch { /* not JSON */ }
+      return Response.json({
+        error: 'access_denied',
+        error_description: errMsg,
+      }, { status: 401 })
+    }
+
+    authData = await authRes.json() as { access_token: string; refresh_token: string }
+  } catch (e) {
     return Response.json({
-      error: 'access_denied',
-      error_description: err['error_description'] ?? err['msg'] ?? 'Invalid credentials',
-    }, { status: 401 })
+      error: 'server_error',
+      error_description: `Supabase auth failed: ${e instanceof Error ? e.message : 'unknown error'}`,
+    }, { status: 500 })
   }
-
-  const authData = await authRes.json() as { access_token: string; refresh_token: string }
 
   // Generate authorization code
   cleanExpiredCodes()
