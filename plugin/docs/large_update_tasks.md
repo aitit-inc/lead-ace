@@ -557,6 +557,103 @@ project_documents:
 
 ---
 
+## フェーズ4.7: プラグイン側ナレッジ・ロジックのクラウド移行
+
+**目標:** プラグインを「システムを動作させるための必要最小限」にする。ドメイン知識（テンプレート、ガイドライン、分析フレームワーク等）をDBマスターデータに移行し、MCP経由で取得する構成にする。
+
+### 背景・問題
+
+現状、プラグインの `references/` 配下にドメイン知識（テンプレート、メールガイドライン、ターゲティングガイド等、計約1,000行）が存在する。これらはプラグインのバージョンに固定されており：
+
+- クラウド側で改善・更新しても、ユーザーがプラグインを更新しないと反映されない
+- evaluate スキルが戦略を改善しても、テンプレートや基準自体は静的なまま
+- プラグイン内のファイルが増えると Claude のコンテキストを圧迫する
+
+### 設計方針
+
+#### プラグインに残すもの（ローカル実行が必要 or システム制御に直結）
+
+| ファイル | 理由 |
+|---|---|
+| `skills/*/SKILL.md` | スキルの手順定義。Claude Code のスキルローダーが読む |
+| `scripts/fetch_url.py` | ローカル実行が必要（Jina Reader + SPA 対応）|
+| `references/workspace-conventions.md` | システム規約（プラグインの動作ルール自体）|
+| `outbound/references/playwright-guide.md` | ローカルブラウザ操作手順（playwright-cli 依存）|
+| `outbound/references/form-filling.md` | ローカルブラウザ操作手順（同上）|
+
+#### DBマスターデータに移行するもの（ドメイン知識）
+
+| 現在のファイル | slug（案） | 説明 |
+|---|---|---|
+| `strategy/references/business-template.md` | `tpl_business` | BUSINESS.md テンプレート |
+| `strategy/references/strategy-template.md` | `tpl_sales_strategy` | SALES_STRATEGY.md テンプレート |
+| `strategy/references/targeting-guide.md` | `tpl_targeting_guide` | ターゲティング精緻化ガイド |
+| `strategy/references/industry-email-templates.md` | `tpl_email_templates` | 業界別メールテンプレート集 |
+| `outbound/references/email-guidelines.md` | `tpl_email_guidelines` | メール作成ガイドライン |
+| `build-list/references/enrich-contacts.md` | `tpl_enrich_contacts` | 連絡先調査手順 |
+| `evaluate/references/analysis-frameworks.md` | `tpl_analysis_frameworks` | 評価分析フレームワーク |
+
+#### テーブル設計: `master_documents`
+
+```sql
+master_documents:
+  id            INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  slug          TEXT NOT NULL UNIQUE  -- "tpl_business", "tpl_email_guidelines", etc.
+  content       TEXT NOT NULL         -- markdown 全文
+  version       INT NOT NULL DEFAULT 1
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+```
+
+プロジェクト非依存のグローバルマスターデータ。認証不要（全ユーザー共通）or 読み取り専用。
+
+### 4.7-0. 責務分離・境界の定義
+
+実装前に、現状のスキル・リファレンスを全て精査し、以下を確定する：
+
+- [ ] 全 reference ファイルの内容を確認し、上記分類が正しいか検証
+- [ ] SKILL.md 内にインラインで埋め込まれているドメイン知識（テンプレート断片、判断基準等）を洗い出す
+- [ ] 移行対象の最終リストを確定し、ユーザーと合意
+- [ ] `master_documents` vs `project_documents` の使い分けルールを文書化
+
+### 4.7-1. バックエンド（DB + API + MCP）
+
+- [ ] `master_documents` テーブルを `backend/src/db/schema.ts` に追加
+- [ ] マイグレーション生成・適用
+- [ ] `GET /api/master-documents/:slug` — マスタードキュメント取得（認証不要 or 読み取り専用）
+- [ ] `GET /api/master-documents` — マスタードキュメント一覧
+- [ ] `get_master_document(slug)` MCP ツール追加
+- [ ] `list_master_documents` MCP ツール追加
+- [ ] 初期データ投入（seed）: 現在の reference ファイルの内容を DB に登録
+
+### 4.7-2. スキル書き換え
+
+- [ ] 各スキルの `Read references/...` を `get_master_document` MCP ツール呼び出しに置換
+- [ ] SKILL.md 内のインラインドメイン知識があれば、マスタードキュメントに抽出
+- [ ] プラグインから移行済みの reference ファイルを削除
+
+### 4.7-3. 整理・レビュー
+
+- [ ] プラグインに残るファイル一覧を確認（SKILL.md + ローカル操作系 reference + scripts + workspace-conventions のみ）
+- [ ] CLAUDE.md 更新（マスタードキュメントの説明追加）
+- [ ] workspace-conventions.md 更新（マスタードキュメント参照方法）
+- [ ] 全スキルの動作確認
+
+### レビュー
+
+**できていること（確認必須）:**
+- [ ] `/strategy` がマスタードキュメントからテンプレートを取得し、正しく BUSINESS.md / SALES_STRATEGY.md を生成できる
+- [ ] `/build-list` がマスタードキュメントから enrich-contacts 手順を取得し、連絡先調査できる
+- [ ] `/outbound` がマスタードキュメントからメールガイドラインを取得し、メール作成できる
+- [ ] `/evaluate` がマスタードキュメントから分析フレームワークを取得し、評価・改善できる
+- [ ] プラグイン側に移行済みの reference ファイルが残っていない
+- [ ] マスタードキュメントの内容を更新すると、次回のスキル実行から反映される
+
+**まだできていなくて良いこと:**
+- マスタードキュメントの管理UI（フロントエンド）は未実装でも良い
+- マスタードキュメントのバージョン管理（変更履歴）は最小限で良い
+
+---
+
 ## フェーズ5: ライセンス・マネタイズ・デプロイ
 
 **目標:** プロジェクト数制限を本番で機能させ、Cloudflare + Supabase 本番環境にデプロイ
@@ -639,6 +736,8 @@ project_documents:
 フェーズ4（フロントエンド）→ フェーズ4 レビュー
     ↓
 フェーズ4.5（ナレッジDB集約）→ フェーズ4.5 レビュー
+    ↓
+フェーズ4.7（プラグイン側ナレッジのクラウド移行）→ フェーズ4.7 レビュー
     ↓
 フェーズ6（リリース・移行）→ フェーズ6 レビュー
 ```
