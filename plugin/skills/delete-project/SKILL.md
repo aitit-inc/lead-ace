@@ -1,7 +1,7 @@
 ---
 name: delete-project
 description: "This skill should be used when the user asks to \"delete a project\", \"remove a project\", or wants to permanently delete a registered project and all its data from the server."
-argument-hint: "<project-directory-name>"
+argument-hint: "<project-id>"
 allowed-tools:
   - AskUserQuestion
   - mcp__plugin_lead-ace_api__delete_project
@@ -15,7 +15,7 @@ A skill that permanently deletes a project and all its associated data (prospect
 
 ### 1. Verify Arguments
 
-- Project directory name: `$0` (required)
+- Project ID: `$0` (required)
 
 Return an error if `$0` is empty.
 
