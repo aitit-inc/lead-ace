@@ -445,6 +445,118 @@ lead-ace/                           ← git repo root
 
 ---
 
+## フェーズ4.5: ナレッジ・ドキュメントのDB集約
+
+**目標:** ローカルファイル（BUSINESS.md, SALES_STRATEGY.md 等）をすべてDBに移行し、データ管理を完全にDB集約する。ローカルにプロジェクトディレクトリを作る必要をなくし、git 依存も廃止する。
+
+### 背景・問題
+
+現状、データが2箇所に分散している：
+- **DB（MCP経由）:** prospects, outreach_logs, responses, evaluations
+- **ローカルファイル:** BUSINESS.md, SALES_STRATEGY.md, SEARCH_NOTES.md, RESULTS_REPORT.md, EVALUATION_REPORT.md, DAILY_CYCLE_REPORT.md
+
+この分散は以下の問題を生む：
+- Cloud Scheduled Tasks（ウェブ版）ではローカルファイルにアクセスできない
+- 複数マシンから同じプロジェクトで作業するとファイルが同期されない
+- git でのバージョン管理が本質的でない作業を増やしている
+
+### 設計方針
+
+#### テーブル設計: `project_documents`
+
+```sql
+project_documents:
+  id            INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+  project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE
+  slug          TEXT NOT NULL  -- "business", "sales_strategy", "search_notes", etc.
+  content       TEXT NOT NULL  -- markdown 全文
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+
+  INDEX idx_doc_latest ON (project_id, slug, created_at DESC)
+```
+
+**設計判断の根拠:**
+
+1. **構造化しない**: BUSINESS.md や SALES_STRATEGY.md の中身は LLM にコンテキストとして丸ごと投げるだけ。セクション単位でDBカラムに分けても意味がない。構造はスキルのテンプレートが定義し、LLM が解釈する。
+2. **イミュータブル追記**: 更新のたびに新行を追加。最新版は `ORDER BY created_at DESC LIMIT 1`。変更履歴はそのまま残る。
+3. **古いバージョンの処理は後回し**: 初期はそのまま蓄積。データが増えてきたら古いバージョンを archive テーブルに移す or 削除するポリシーを後で決めればよい。
+4. **一時ファイル（.tmp/）はDB不要**: 旧設計ではサブエージェントの詳細結果を .tmp/ に書いて wrap-up で読んでいたが、今は全詳細データが MCP 経由で DB に入っている（record_outreach, record_response 等）。サブエージェントは短い完了サマリーだけ返し、wrap-up は DB クエリで詳細を取得する。一時ストレージ（ファイル、DB、Durable Objects）は不要。
+
+#### ドキュメント種別（slug）
+
+| slug | 旧ファイル名 | 作成 | 更新 | 備考 |
+|---|---|---|---|---|
+| `business` | BUSINESS.md | /strategy | /strategy | 事業情報。めったに変わらない |
+| `sales_strategy` | SALES_STRATEGY.md | /strategy | /strategy, /evaluate, /daily-cycle | 最も頻繁に更新。evaluate-managed sections あり |
+| `search_notes` | SEARCH_NOTES.md | /build-list | /build-list, /evaluate | 検索戦略メモ |
+
+**廃止するドキュメント（二次情報）:**
+- `RESULTS_REPORT.md` — `responses` + `outreach_logs` のクエリで再生成可能。削除
+- `EVALUATION_REPORT.md` — `evaluations` テーブルに findings + improvements が既にある。削除
+- `DAILY_CYCLE_REPORT.md` — 実行結果は DB にある。引き継ぎ判断（「次回 build-list 優先」等）は DB の状態（残 reachable 数等）から再判断すればよく、スキルにロジックが書いてある。削除
+
+### 4.5-1. バックエンド（DB + API + MCP）
+
+#### DB スキーマ
+
+- [ ] `project_documents` テーブルを `backend/src/db/schema.ts` に追加
+- [ ] マイグレーション生成・適用
+
+#### API エンドポイント
+
+- [ ] `GET /api/projects/:id/documents` — slug 一覧（各 slug の最終更新日時）
+- [ ] `GET /api/projects/:id/documents/:slug` — 最新版の content を返す（なければ 404）
+- [ ] `GET /api/projects/:id/documents/:slug/history?limit=10` — バージョン履歴（content 含む）
+- [ ] `PUT /api/projects/:id/documents/:slug` — 新バージョンを追記。body: `{ content: string }`
+
+#### MCP ツール
+
+- [ ] `get_document(projectId, slug)` — 最新版を取得
+- [ ] `save_document(projectId, slug, content)` — 新バージョンを保存
+- [ ] `list_documents(projectId)` — ドキュメント一覧
+
+### 4.5-2. スキル書き換え
+
+全スキルからローカルファイル操作を MCP ドキュメント操作に置き換える。
+
+- [ ] **setup**: ローカルディレクトリ作成を廃止。`.gitignore` 作成を廃止。依存チェックから `git` を外す
+- [ ] **strategy**: BUSINESS.md / SALES_STRATEGY.md の Read/Write を `get_document` / `save_document` に置換
+- [ ] **build-list**: SEARCH_NOTES.md の Read/Write を MCP に置換。BUSINESS.md / SALES_STRATEGY.md の Read を MCP に置換
+- [ ] **outbound**: BUSINESS.md / SALES_STRATEGY.md の Read を MCP に置換
+- [ ] **check-results**: RESULTS_REPORT.md 生成を廃止。SALES_STRATEGY.md の Read を MCP に置換
+- [ ] **evaluate**: EVALUATION_REPORT.md 生成を廃止。SALES_STRATEGY.md / SEARCH_NOTES.md の Read/Write を MCP に置換
+- [ ] **daily-cycle**: `.tmp/` ディレクトリを廃止（サブエージェントは短い完了サマリーのみ返し、詳細は各自が `record_outreach` / `record_response` 等で既に DB に記録済み）。DAILY_CYCLE_REPORT.md 生成を廃止。SALES_STRATEGY.md の KPI Actuals 更新を MCP に置換。**git add / commit / push を廃止**。通知メール用レポートは DB クエリから生成。引き継ぎ判断は次回実行時に DB の状態（残 reachable 数等）から再判断する
+- [ ] **delete-project**: 変更不要（cascade delete で documents も消える）
+
+### 4.5-3. フロントエンド更新
+
+- [ ] Documents ページ追加（business / sales_strategy / search_notes の最新版表示 + 変更履歴）
+- [ ] サイドバーに Documents リンク追加
+
+### 4.5-4. 整理
+
+- [ ] `plugin/references/workspace-conventions.md` 更新（ローカルディレクトリ構造の記述を削除、MCP ドキュメント操作の説明に置換）
+- [ ] CLAUDE.md 更新（git 関連の記述を削除、ドキュメント管理の説明を追加）
+
+### レビュー
+
+**できていること（確認必須）:**
+- [ ] `/strategy` で BUSINESS.md / SALES_STRATEGY.md が DB に保存され、再取得できる
+- [ ] `/build-list` が DB から SALES_STRATEGY.md / SEARCH_NOTES.md を読み、SEARCH_NOTES.md を DB に保存できる
+- [ ] `/outbound` が DB から戦略ドキュメントを読んで送信できる
+- [ ] `/check-results` が DB からデータを取得し、ローカルファイルを一切使わない
+- [ ] `/evaluate` が DB のドキュメントを読み書きし、SALES_STRATEGY.md を更新できる
+- [ ] `/daily-cycle` が全フェーズを通して動作し、ローカルファイル・git を一切使わない
+- [ ] ドキュメント（business, sales_strategy, search_notes）の変更履歴が DB に残り、過去バージョンを参照できる
+- [ ] プロジェクト削除で関連ドキュメントも cascade 削除される
+- [ ] フロントエンドでドキュメント一覧・内容が閲覧できる
+
+**まだできていなくて良いこと:**
+- 古いバージョンの自動アーカイブ・削除ポリシーは未実装でも良い
+- ドキュメント間の diff 表示は未実装でも良い
+
+---
+
 ## フェーズ5: ライセンス・マネタイズ・デプロイ
 
 **目標:** プロジェクト数制限を本番で機能させ、Cloudflare + Supabase 本番環境にデプロイ
@@ -525,6 +637,8 @@ lead-ace/                           ← git repo root
 フェーズ5-3（Cloudflare 本番デプロイ）→ フェーズ5 レビュー
     ↓
 フェーズ4（フロントエンド）→ フェーズ4 レビュー
+    ↓
+フェーズ4.5（ナレッジDB集約）→ フェーズ4.5 レビュー
     ↓
 フェーズ6（リリース・移行）→ フェーズ6 レビュー
 ```
