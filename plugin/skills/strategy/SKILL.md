@@ -12,6 +12,7 @@ allowed-tools:
   - mcp__plugin_lead-ace_api__get_document
   - mcp__plugin_lead-ace_api__save_document
   - mcp__plugin_lead-ace_api__list_documents
+  - mcp__plugin_lead-ace_api__get_master_document
 ---
 
 # Strategy - Sales & Marketing Strategy Development
@@ -100,7 +101,7 @@ Based on results, classify each section into the following 3 categories:
 
 If there is no evaluate improvement history (0 evaluations), treat all sections as "not set" or "static settings".
 
-**Template update detection:** Compare section headings in `references/strategy-template.md` with the existing file. If a section exists in the template but not in the existing file, report it as "a section possibly added by a plugin update".
+**Template update detection:** Compare section headings in the `tpl_sales_strategy` master document with the existing file. If a section exists in the template but not in the existing file, report it as "a section possibly added by an update".
 
 #### Report to User and Confirm Policy
 
@@ -210,20 +211,20 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_url.py --url "<URL>" --prompt "<info
 
 ### 6. Generate/Update BUSINESS.md
 
-- **Initial mode**: Generate the document following the template in `references/business-template.md`
+- **Initial mode**: Retrieve the template via `mcp__plugin_lead-ace_api__get_master_document` with `slug: "tpl_business"` and generate the document following its structure
 - **Update mode**: Use the existing content from `get_document` and reflect only changed or added information. Keep sections without changes as-is
 
 Save via `mcp__plugin_lead-ace_api__save_document` with `projectId: "$0"`, `slug: "business"`, and the full markdown content.
 
 ### 7. Generate/Update SALES_STRATEGY.md
 
-- **Initial mode**: Generate the document following the template in `references/strategy-template.md`
+- **Initial mode**: Retrieve the template via `mcp__plugin_lead-ace_api__get_master_document` with `slug: "tpl_sales_strategy"` and generate the document following its structure
 - **Update mode**: Use the existing content from `get_document` and update only changed or added sections. Keep sections without changes as-is. Do not erase existing content unless the user explicitly instructs deletion. **Evaluate-managed sections (messaging, targeting, channels, KPI, search keywords) are only rewritten when the user explicitly instructs an update**
 
-Also refer to the following references when generating/updating to improve quality:
+Also retrieve the following master documents via `mcp__plugin_lead-ace_api__get_master_document` to improve quality:
 
-- **`references/targeting-guide.md`**: Target persona refinement, competitive analysis perspectives, USP articulation, channel selection criteria, KPI reverse calculation tree, search keyword design patterns
-- **`references/industry-email-templates.md`**: Email template selection based on target industry. Auto-select the optimal pattern based on user's industry information and customize to business info (USP, track record, pricing). Do not use templates as-is -- always add flesh based on user-specific information
+- **`tpl_targeting_guide`**: Target persona refinement, competitive analysis perspectives, USP articulation, channel selection criteria, KPI reverse calculation tree, search keyword design patterns
+- **`tpl_email_templates`**: Email template selection based on target industry. Auto-select the optimal pattern based on user's industry information and customize to business info (USP, track record, pricing). Do not use templates as-is -- always add flesh based on user-specific information
 
 **Reflect environment information:** Record the environment check results from step 2 in the "Environment & Tool Status" section. If any tools are unavailable, also reflect in the "Sales Channels" section (e.g., if gog unavailable, exclude email auto-sending; if Chrome unavailable, exclude forms and SNS)
 

@@ -17,6 +17,7 @@ allowed-tools:
   - mcp__plugin_lead-ace_api__record_outreach
   - mcp__plugin_lead-ace_api__update_prospect_status
   - mcp__plugin_lead-ace_api__get_document
+  - mcp__plugin_lead-ace_api__get_master_document
 ---
 
 # Outbound - Outbound Sales Execution
@@ -74,7 +75,7 @@ No need to approach a single prospect via all available channels. One channel is
 
 ### 3. Email Sending
 
-Write emails following the guidelines in `references/email-guidelines.md`. Get the sender email address and signature from the "Sender Information" section of SALES_STRATEGY.md.
+Retrieve email guidelines via `mcp__plugin_lead-ace_api__get_master_document` with `slug: "tpl_email_guidelines"` and follow them. Get the sender email address and signature from the "Sender Information" section of SALES_STRATEGY.md.
 
 **Subject line variation:** If SALES_STRATEGY.md defines multiple subject line patterns, use different patterns for each prospect. Never use the same subject for all outreach. Distribute evenly if A/B test instructions exist.
 
@@ -110,7 +111,7 @@ Write emails following the guidelines in `references/email-guidelines.md`. Get t
 
 ### 4. Contact Form Submission
 
-Load `references/playwright-guide.md` and `references/form-filling.md` and follow their procedures.
+Read `${CLAUDE_PLUGIN_ROOT}/skills/outbound/references/playwright-guide.md` and `${CLAUDE_PLUGIN_ROOT}/skills/outbound/references/form-filling.md` and follow their procedures.
 
 Branch processing based on the `formType` field:
 

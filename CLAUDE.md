@@ -36,7 +36,7 @@ The plugin prioritizes **stability, reliability, controllability, and versatilit
 
 Clearly separate what the LLM should handle from what MCP tools handle.
 
-- **MCP Tools (deterministic logic)**: DB operations (prospect registration, outreach logging, status updates, evaluation recording, document storage), data queries (prospect identifiers, outbound targets, evaluation stats, document retrieval) — operations where rules are clear and behavior should be consistent every time
+- **MCP Tools (deterministic logic)**: DB operations (prospect registration, outreach logging, status updates, evaluation recording, document storage), data queries (prospect identifiers, outbound targets, evaluation stats, document retrieval), master document retrieval (templates, guidelines, frameworks via `get_master_document`) — operations where rules are clear and behavior should be consistent every time
 - **Local tools**: Email sending (`gog` CLI), form submission (`playwright-cli`), SNS DMs (`claude-in-chrome`), web page fetching (`fetch_url.py`) — operations requiring local environment access
 - **LLM (judgment & generation)**: Tasks requiring context-dependent judgment and natural language generation, such as drafting email bodies, evaluating prospects, analyzing/improving strategy, and merging/deduplicating candidate data
 

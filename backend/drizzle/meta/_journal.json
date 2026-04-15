@@ -15,6 +15,13 @@
       "when": 1776245047968,
       "tag": "0001_amusing_plazm",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776256321225,
+      "tag": "0002_lush_ted_forrester",
+      "breakpoints": true
     }
   ]
 }

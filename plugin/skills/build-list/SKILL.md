@@ -12,6 +12,7 @@ allowed-tools:
   - mcp__plugin_lead-ace_api__get_outbound_targets
   - mcp__plugin_lead-ace_api__get_document
   - mcp__plugin_lead-ace_api__save_document
+  - mcp__plugin_lead-ace_api__get_master_document
 ---
 
 # Build List - Prospect List Building
@@ -137,7 +138,7 @@ Split Phase 1 candidates into **batches of 5** and launch a sub-agent for each b
 
 Include the following in each sub-agent's prompt:
 - List of assigned candidates (name, organization_name, website_url, overview, industry, department, country, match_reason, priority)
-- Read `${CLAUDE_PLUGIN_ROOT}/skills/build-list/references/enrich-contacts.md` and follow its procedure
+- Retrieve the contact enrichment procedure via `mcp__plugin_lead-ace_api__get_master_document` with `slug: "tpl_enrich_contacts"` and follow its procedure
 - Explore each candidate's official site to retrieve email addresses and contact form URLs
 - Use `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_url.py --url <URL> --prompt <instructions>` for page retrieval (do not use WebFetch)
 - After completion, return the results as a JSON array

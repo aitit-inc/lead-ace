@@ -21,6 +21,7 @@ allowed-tools:
   - mcp__plugin_lead-ace_api__delete_project
   - mcp__plugin_lead-ace_api__get_document
   - mcp__plugin_lead-ace_api__save_document
+  - mcp__plugin_lead-ace_api__get_master_document
 ---
 
 # Daily Cycle - Daily Sales Cycle Execution
@@ -152,8 +153,8 @@ You are an outbound sales agent. Please reach out to each company on the prospec
 2. Next, read `${CLAUDE_PLUGIN_ROOT}/skills/outbound/SKILL.md` and follow its procedure
 
 3. Also read these based on the channel:
-   - For email: `${CLAUDE_PLUGIN_ROOT}/skills/outbound/references/email-guidelines.md`
-   - For forms: `${CLAUDE_PLUGIN_ROOT}/skills/outbound/references/form-filling.md` and `${CLAUDE_PLUGIN_ROOT}/skills/outbound/references/playwright-guide.md`
+   - For email: retrieve via mcp__plugin_lead-ace_api__get_master_document with slug "tpl_email_guidelines"
+   - For forms: read `${CLAUDE_PLUGIN_ROOT}/skills/outbound/references/form-filling.md` and `${CLAUDE_PLUGIN_ROOT}/skills/outbound/references/playwright-guide.md`
 
 ## Required Rules for Sales Policy
 
@@ -231,7 +232,7 @@ Split the filtered new candidates from 8b into **batches of 10** and launch a su
 
 Include the following in each sub-agent's prompt:
 - List of assigned candidates (pass the relevant portion from 8a output)
-- Read `${CLAUDE_PLUGIN_ROOT}/skills/build-list/references/enrich-contacts.md` and follow its procedure
+- Retrieve the contact enrichment procedure via `mcp__plugin_lead-ace_api__get_master_document` with `slug: "tpl_enrich_contacts"` and follow its procedure
 - Explore each candidate's official site to retrieve email addresses, contact form URLs, and SNS accounts
 - After completion, return results as a JSON array
 

@@ -610,32 +610,32 @@ master_documents:
 
 実装前に、現状のスキル・リファレンスを全て精査し、以下を確定する：
 
-- [ ] 全 reference ファイルの内容を確認し、上記分類が正しいか検証
-- [ ] SKILL.md 内にインラインで埋め込まれているドメイン知識（テンプレート断片、判断基準等）を洗い出す
-- [ ] 移行対象の最終リストを確定し、ユーザーと合意
-- [ ] `master_documents` vs `project_documents` の使い分けルールを文書化
+- [x] 全 reference ファイルの内容を確認し、上記分類が正しいか検証
+- [x] SKILL.md 内にインラインで埋め込まれているドメイン知識（テンプレート断片、判断基準等）を洗い出す
+- [x] 移行対象の最終リストを確定し、ユーザーと合意
+- [x] `master_documents` vs `project_documents` の使い分けルールを文書化
 
 ### 4.7-1. バックエンド（DB + API + MCP）
 
-- [ ] `master_documents` テーブルを `backend/src/db/schema.ts` に追加
-- [ ] マイグレーション生成・適用
-- [ ] `GET /api/master-documents/:slug` — マスタードキュメント取得（認証不要 or 読み取り専用）
-- [ ] `GET /api/master-documents` — マスタードキュメント一覧
-- [ ] `get_master_document(slug)` MCP ツール追加
-- [ ] `list_master_documents` MCP ツール追加
-- [ ] 初期データ投入（seed）: 現在の reference ファイルの内容を DB に登録
+- [x] `master_documents` テーブルを `backend/src/db/schema.ts` に追加
+- [x] マイグレーション生成・適用
+- [x] `GET /api/master-documents/:slug` — マスタードキュメント取得
+- [x] `GET /api/master-documents` — マスタードキュメント一覧
+- [x] `get_master_document(slug)` MCP ツール追加
+- [x] `list_master_documents` MCP ツール追加
+- [x] 初期データ投入（seed）: 現在の reference ファイルの内容を DB に登録（`backend/scripts/seed-master-documents.ts`）
 
 ### 4.7-2. スキル書き換え
 
-- [ ] 各スキルの `Read references/...` を `get_master_document` MCP ツール呼び出しに置換
-- [ ] SKILL.md 内のインラインドメイン知識があれば、マスタードキュメントに抽出
-- [ ] プラグインから移行済みの reference ファイルを削除
+- [x] 各スキルの `Read references/...` を `get_master_document` MCP ツール呼び出しに置換
+- [x] SKILL.md 内のインラインドメイン知識があれば、マスタードキュメントに抽出（抽出不要と確認済み）
+- [x] プラグインから移行済みの reference ファイルを削除（7ファイル削除、空ディレクトリも削除）
 
 ### 4.7-3. 整理・レビュー
 
-- [ ] プラグインに残るファイル一覧を確認（SKILL.md + ローカル操作系 reference + scripts + workspace-conventions のみ）
-- [ ] CLAUDE.md 更新（マスタードキュメントの説明追加）
-- [ ] workspace-conventions.md 更新（マスタードキュメント参照方法）
+- [x] プラグインに残るファイル一覧を確認（SKILL.md + ローカル操作系 reference + scripts + workspace-conventions のみ）
+- [x] CLAUDE.md 更新（マスタードキュメントの説明追加）
+- [x] workspace-conventions.md 更新（マスタードキュメント参照方法）
 - [ ] 全スキルの動作確認
 
 ### レビュー

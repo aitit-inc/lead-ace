@@ -470,6 +470,53 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
     },
   )
 
+  // --- get_master_document ---
+  server.tool(
+    'get_master_document',
+    'Get a master document (shared templates, guidelines, frameworks) by slug.',
+    {
+      slug: z.string().describe('Master document slug (e.g. "tpl_business", "tpl_email_guidelines")'),
+    },
+    async ({ slug }) => {
+      const { ok, status, data } = await callApi('GET', `/master-documents/${slug}`, null, apiUrl, authHeader)
+      if (!ok) {
+        if (status === 404) {
+          return { content: [{ type: 'text' as const, text: `Master document "${slug}" not found.` }] }
+        }
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      const doc = data as { id: number; slug: string; content: string; version: number; updatedAt: string }
+      return {
+        content: [{ type: 'text' as const, text: doc.content }],
+      }
+    },
+  )
+
+  // --- list_master_documents ---
+  server.tool(
+    'list_master_documents',
+    'List all available master documents (templates, guidelines, frameworks).',
+    {},
+    async () => {
+      const { ok, data } = await callApi('GET', '/master-documents', null, apiUrl, authHeader)
+      if (!ok) {
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      const { documents } = data as { documents: Array<{ slug: string; version: number; updatedAt: string }> }
+      if (documents.length === 0) {
+        return { content: [{ type: 'text' as const, text: 'No master documents found.' }] }
+      }
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `${documents.length} master document(s).\n${JSON.stringify(documents, null, 2)}`,
+        }],
+      }
+    },
+  )
+
   return server
 }
 

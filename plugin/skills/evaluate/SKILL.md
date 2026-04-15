@@ -11,6 +11,7 @@ allowed-tools:
   - mcp__plugin_lead-ace_api__record_evaluation
   - mcp__plugin_lead-ace_api__get_document
   - mcp__plugin_lead-ace_api__save_document
+  - mcp__plugin_lead-ace_api__get_master_document
 ---
 
 # Evaluate - PDCA Evaluation & Improvement
@@ -46,7 +47,7 @@ If past evaluations exist, organize each record's `evaluationDate`, `findings`, 
 
 ### 3. Multi-angle Analysis
 
-Refer to `${CLAUDE_PLUGIN_ROOT}/skills/evaluate/references/analysis-frameworks.md` and analyze from the following perspectives:
+Retrieve analysis frameworks via `mcp__plugin_lead-ace_api__get_master_document` with `slug: "tpl_analysis_frameworks"` and analyze from the following perspectives:
 
 **Response Rate Analysis:**
 - Overall response rate
