@@ -8,6 +8,13 @@
       "when": 1776123287853,
       "tag": "0000_empty_white_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1776245047968,
+      "tag": "0001_amusing_plazm",
+      "breakpoints": true
     }
   ]
 }

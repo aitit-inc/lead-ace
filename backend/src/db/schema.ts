@@ -199,6 +199,18 @@ export const responses = pgTable('responses', {
   index('idx_responses_outreach').on(table.outreachLogId),
 ])
 
+export const projectDocuments = pgTable('project_documents', {
+  id: integer('id').generatedAlwaysAsIdentity().primaryKey(),
+  projectId: text('project_id')
+    .notNull()
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  slug: text('slug').notNull(), // "business", "sales_strategy", "search_notes"
+  content: text('content').notNull(), // full markdown content
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('idx_doc_latest').on(table.projectId, table.slug, table.createdAt),
+])
+
 export const evaluations = pgTable('evaluations', {
   id: integer('id').generatedAlwaysAsIdentity().primaryKey(),
   projectId: text('project_id')

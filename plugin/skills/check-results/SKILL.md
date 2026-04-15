@@ -1,11 +1,10 @@
 ---
 name: check-results
 description: "This skill should be used when the user asks to \"check replies\", \"check responses\", \"see results\", \"check if there are email replies\", or wants to check outbound outreach responses. Automatically checks email replies and SNS responses and records them in the DB."
-argument-hint: "<project-directory-name>"
+argument-hint: "<project-id>"
 allowed-tools:
   - Bash
   - Read
-  - Write
   - mcp__claude_ai_Gmail__search_threads
   - mcp__claude_ai_Gmail__get_thread
   - mcp__claude_in_chrome__tabs_context_mcp
@@ -17,6 +16,7 @@ allowed-tools:
   - mcp__plugin_lead-ace_api__get_recent_outreach
   - mcp__plugin_lead-ace_api__record_response
   - mcp__plugin_lead-ace_api__update_prospect_status
+  - mcp__plugin_lead-ace_api__get_document
 ---
 
 # Check Results - Response Collection
@@ -27,9 +27,9 @@ A skill that automatically checks outbound sales responses and records them in t
 
 ### 1. Setup
 
-- Project directory name: `$0` (required)
+- Project ID: `$0` (required)
 
-Load `$0/SALES_STRATEGY.md` and understand the following from the "Response Definition" section:
+Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "sales_strategy"`. Understand the following from the "Response Definition" section:
 - What counts as a "response"
 - Scheduling service in use and its notification sender email address
 - Other response signals
@@ -152,14 +152,4 @@ Report the following:
 - Summary of notable replies
 - Guide the user to run `/evaluate` as the next step
 
-Save the report to the project directory as `RESULTS_REPORT.md` (append mode).
-
-**Append format:** Separate each run's results with `---` separator and date header:
-
-```markdown
----
-## YYYY-MM-DD HH:MM
-(report content above)
-```
-
-**Rotation:** Before appending, check the file's line count. If it exceeds 500 lines, delete the older half before appending.
+Report directly to the user (no file output needed -- response data is stored in the DB).

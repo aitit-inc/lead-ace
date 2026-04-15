@@ -1,11 +1,10 @@
 ---
 name: outbound
 description: "This skill should be used when the user asks to \"send emails\", \"do outreach\", \"contact prospects\", \"run outbound sales\", or wants to execute outbound sales. Automatically sends emails, fills in contact forms, and sends SNS DMs to prospects on the list. Count can be specified."
-argument-hint: "<project-directory-name> [count]"
+argument-hint: "<project-id> [count]"
 allowed-tools:
   - Bash
   - Read
-  - Write
   # For SNS DMs (claude-in-chrome is used because login session is required)
   - mcp__claude_in_chrome__tabs_context_mcp
   - mcp__claude_in_chrome__tabs_create_mcp
@@ -17,6 +16,7 @@ allowed-tools:
   - mcp__plugin_lead-ace_api__get_outbound_targets
   - mcp__plugin_lead-ace_api__record_outreach
   - mcp__plugin_lead-ace_api__update_prospect_status
+  - mcp__plugin_lead-ace_api__get_document
 ---
 
 # Outbound - Outbound Sales Execution
@@ -29,10 +29,15 @@ For each prospect, sends a message via an available channel and records the resu
 
 ### 1. Setup
 
-- Project directory name: `$0` (required)
+- Project ID: `$0` (required)
 - Approach count: `$1` (default: 30)
 
-Load `$0/BUSINESS.md` and `$0/SALES_STRATEGY.md` and pay particular attention to these sections:
+Load documents via MCP:
+
+Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "business"`.
+Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "sales_strategy"`.
+
+Pay particular attention to these sections in the sales_strategy document:
 - **Outreach mode**: `precision` (deep personalization) or `volume` (template-based semi-personalization). Default to `precision` if not set
 - **Sales channels**: Channel priority and which channels not to use
 - **Messaging**: Subject line patterns, body structure, and A/B test instructions if any -- follow them

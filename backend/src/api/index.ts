@@ -6,6 +6,7 @@ import { prospectsRouter } from './routes/prospects'
 import { outreachRouter } from './routes/outreach'
 import { responsesRouter } from './routes/responses'
 import { evaluationsRouter } from './routes/evaluations'
+import { documentsRouter } from './routes/documents'
 import type { Env, Variables } from './types'
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>()
@@ -22,6 +23,7 @@ app.route('/api', prospectsRouter)
 app.route('/api', outreachRouter)
 app.route('/api', responsesRouter)
 app.route('/api', evaluationsRouter)
+app.route('/api', documentsRouter)
 
 app.onError((err, c) => {
   console.error(err)

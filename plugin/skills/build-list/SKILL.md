@@ -1,16 +1,17 @@
 ---
 name: build-list
 description: "This skill should be used when the user asks to \"build a prospect list\", \"find prospects\", \"gather leads\", \"explore targets\", or wants to build a prospect list. Collects prospect candidates via web search based on BUSINESS.md and SALES_STRATEGY.md and registers them in the DB."
-argument-hint: "<project-directory-name> [target-count=30]"
+argument-hint: "<project-id> [target-count=30]"
 allowed-tools:
   - Bash
   - Read
-  - Write
   - Agent
   - WebSearch
   - mcp__plugin_lead-ace_api__get_prospect_identifiers
   - mcp__plugin_lead-ace_api__add_prospects
   - mcp__plugin_lead-ace_api__get_outbound_targets
+  - mcp__plugin_lead-ace_api__get_document
+  - mcp__plugin_lead-ace_api__save_document
 ---
 
 # Build List - Prospect List Building
@@ -25,14 +26,15 @@ A skill that collects prospect candidates via web search based on the informatio
 
 ### 1. Setup
 
-- Project directory name: `$0` (required)
+- Project ID: `$0` (required)
 - Target count: `$1` (default: 30. Approximate is fine -- "around N" is sufficient)
 
-Load the following:
-- `$0/BUSINESS.md`
-- `$0/SALES_STRATEGY.md`
+Load the following documents via MCP:
 
-If either does not exist, guide the user to run `/strategy`.
+Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "business"`.
+Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "sales_strategy"`.
+
+If either document is not found, guide the user to run `/strategy`.
 
 ### 2. Review Existing List and Search Notes
 
@@ -48,7 +50,7 @@ Keep this result (list of name + websiteUrl + email + organizationId). During Ph
 
 **2b. Search notes:**
 
-If `$0/SEARCH_NOTES.md` exists, read it. It contains knowledge from previous explorations:
+Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "search_notes"`. If found, use its content. It contains knowledge from previous explorations:
 - Useful information source sites (not yet fully explored)
 - Keywords and angles used in previous searches
 - Directions to try next time
@@ -213,7 +215,7 @@ Report the following:
 
 ### 9. Update Search Notes
 
-Overwrite `$0/SEARCH_NOTES.md`. Record information useful for the next exploration in the following structure:
+Save search notes via `mcp__plugin_lead-ace_api__save_document` with `projectId: "$0"`, `slug: "search_notes"`. Record information useful for the next exploration in the following structure:
 
 ```markdown
 # Search Notes
@@ -232,4 +234,4 @@ Last updated: YYYY-MM-DD
 - (Areas with many duplicates, areas where prospects were found unexpectedly, insights for next time)
 ```
 
-Overwrite, but if a `## Hints from evaluate` section already exists, preserve its content and carry it over to the end of the new SEARCH_NOTES.md (to preserve response pattern info added by evaluate).
+If the previous version (from step 2b) has a `## Hints from evaluate` section, preserve its content and carry it over to the end of the new document (to preserve response pattern info added by evaluate).

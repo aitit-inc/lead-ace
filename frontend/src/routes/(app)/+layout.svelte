@@ -13,6 +13,7 @@
     { href: '/outreach', label: 'Outreach' },
     { href: '/responses', label: 'Responses' },
     { href: '/evaluations', label: 'Evaluations' },
+    { href: '/documents', label: 'Documents' },
     { href: '/settings', label: 'Settings' },
   ];
 

@@ -29,14 +29,14 @@ plugin/
 
 The plugin prioritizes **stability, reliability, controllability, and versatility**.
 - Do not hard-code values that depend on specific businesses or use cases (target numbers, success rates, etc.) into skills or templates
-- Defer business-specific decisions to project configuration (BUSINESS.md / SALES_STRATEGY.md, etc.); the plugin provides control mechanisms and visibility
+- Defer business-specific decisions to project configuration (stored as documents in the DB: business, sales_strategy, etc.); the plugin provides control mechanisms and visibility
 - Improve skills by increasing user control, not by enforcing specific behavior
 
 ### Separation of Responsibilities: LLM vs MCP Tools
 
 Clearly separate what the LLM should handle from what MCP tools handle.
 
-- **MCP Tools (deterministic logic)**: DB operations (prospect registration, outreach logging, status updates, evaluation recording), data queries (prospect identifiers, outbound targets, evaluation stats) — operations where rules are clear and behavior should be consistent every time
+- **MCP Tools (deterministic logic)**: DB operations (prospect registration, outreach logging, status updates, evaluation recording, document storage), data queries (prospect identifiers, outbound targets, evaluation stats, document retrieval) — operations where rules are clear and behavior should be consistent every time
 - **Local tools**: Email sending (`gog` CLI), form submission (`playwright-cli`), SNS DMs (`claude-in-chrome`), web page fetching (`fetch_url.py`) — operations requiring local environment access
 - **LLM (judgment & generation)**: Tasks requiring context-dependent judgment and natural language generation, such as drafting email bodies, evaluating prospects, analyzing/improving strategy, and merging/deduplicating candidate data
 

@@ -1,15 +1,17 @@
 ---
 name: strategy
 description: "This skill should be used when the user asks to \"formulate a strategy\", \"create a sales plan\", \"summarize business info\", \"generate SALES_STRATEGY.md\", \"review strategy\", \"update strategy\", or wants to create/update sales and marketing strategy. Interactively collects business information and auto-generates or updates BUSINESS.md and SALES_STRATEGY.md."
-argument-hint: "<project-directory-name>"
+argument-hint: "<project-id>"
 allowed-tools:
   - Bash
   - Read
-  - Write
   - WebSearch
   - AskUserQuestion
   - mcp__plugin_lead-ace_api__list_projects
   - mcp__plugin_lead-ace_api__get_evaluation_history
+  - mcp__plugin_lead-ace_api__get_document
+  - mcp__plugin_lead-ace_api__save_document
+  - mcp__plugin_lead-ace_api__list_documents
 ---
 
 # Strategy - Sales & Marketing Strategy Development
@@ -20,27 +22,26 @@ A skill that collects business and service information from the user and generat
 
 ### 1. Verify Project
 
-- Project directory name: `$0` (required)
+- Project ID: `$0` (required)
 
-Verify that the `$0` directory exists. If not, guide the user to run `/setup`.
+Call `mcp__plugin_lead-ace_api__list_projects` and verify that `$0` exists. If not, guide the user to run `/setup`.
 
 ### 2. Environment Check
 
 Run the following command to check available tools:
 
 ```bash
-git --version 2>&1 && git remote -v 2>&1; echo "---"; which gog 2>&1 && gog version 2>&1; echo "---"; playwright-cli --version 2>&1
+which gog 2>&1 && gog version 2>&1; echo "---"; playwright-cli --version 2>&1
 ```
 
 Report results to the user and reflect in the "Environment & Tool Status" section of SALES_STRATEGY.md (when generating in step 7):
 
 - **gog**: Available / unavailable -> if unavailable, affects channel options (email auto-sending not possible, only draft creation)
-- **git + remote**: Available / unavailable -> if unavailable, daily-cycle automatic backup is disabled
 - **Gmail MCP**: Cannot verify via bash. Ask user "Have you configured Gmail MCP in Claude Code?"
 - **playwright-cli**: Check with `playwright-cli --version`. Required for form submission
 - **Claude in Chrome**: Cannot verify via bash. Ask user "Are you using the Claude in Chrome extension?" Required for SNS DMs
 
-**In update mode:** If the "Environment & Tool Status" section already exists in SALES_STRATEGY.md, only re-check tools verifiable via bash (git, gog, playwright-cli), and skip re-asking about Gmail MCP / Claude in Chrome (users can report changes themselves if any).
+**In update mode:** If the "Environment & Tool Status" section already exists in SALES_STRATEGY.md, only re-check tools verifiable via bash (gog, playwright-cli), and skip re-asking about Gmail MCP / Claude in Chrome (users can report changes themselves if any).
 
 **Impact of results on channel selection:**
 - No gog + Gmail MCP available -> Email is draft-only (manual sending)
@@ -49,23 +50,22 @@ Report results to the user and reflect in the "Environment & Tool Status" sectio
 - No Claude in Chrome -> SNS DMs not possible. Email and forms only
 - No tools at all -> Outbound is effectively unusable -- make constraints clear when setting up channels in steps 3-6
 
-### 3. Check Existing Files & Determine Mode
+### 3. Check Existing Documents & Determine Mode
 
-Check existence and content of `$0/BUSINESS.md` and `$0/SALES_STRATEGY.md`.
+Retrieve existing documents via MCP:
 
-Retrieve the list of user's projects:
+Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "business"`.
+Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "sales_strategy"`.
 
-Call `mcp__plugin_lead-ace_api__list_projects`.
-
-If the tool returns a project-not-found or authentication error, instruct the user to run `/setup` first and **abort**.
+If the tool returns a "Project not found" error, instruct the user to run `/setup` first and **abort**.
 
 **Mode determination:**
-- **Initial mode**: Neither file exists -> Execute all steps in step 4 in sequence
-- **Update mode**: Either file exists -> Perform the following gap analysis
+- **Initial mode**: Neither document exists (both return "not found") -> Execute all steps in step 4 in sequence
+- **Update mode**: Either document exists -> Perform the following gap analysis
 
 #### Gap Analysis in Update Mode
 
-Load existing files and check the completeness of each section in SALES_STRATEGY.md:
+Check the completeness of each section in the existing SALES_STRATEGY.md document:
 
 | Section | Completeness Criteria |
 |---|---|
@@ -115,7 +115,7 @@ Confirm policy with user:
 - **"Update specific sections"**: Only collect information for user-specified sections. If evaluate-managed sections are specified, warn "Accumulated improvements will be reset" and confirm
 - **"Business pivot"**: For fundamental changes to business, product, or target. Reconstruct all sections including evaluate-managed ones (accumulated improvements will be reset)
 
-**Reference other projects (initial mode only):** If projects other than `$0` exist (shown by list_projects), read their `BUSINESS.md` / `SALES_STRATEGY.md`. For second and subsequent project creation, existing project strategies can be referenced (target persona, channel selection, messaging structure, etc.). However, pay close attention to differences when the service or product differs -- don't copy carelessly. Inform the user of existing projects and confirm whether to reference them. (Not needed in update mode -- own project strategy is already established.)
+**Reference other projects (initial mode only):** If projects other than `$0` exist (shown by list_projects), use `get_document` to read their `business` / `sales_strategy` documents. For second and subsequent project creation, existing project strategies can be referenced (target persona, channel selection, messaging structure, etc.). However, pay close attention to differences when the service or product differs -- don't copy carelessly. Inform the user of existing projects and confirm whether to reference them. (Not needed in update mode -- own project strategy is already established.)
 
 ### 4. Information Collection (Interactive, step by step)
 
@@ -210,13 +210,15 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_url.py --url "<URL>" --prompt "<info
 
 ### 6. Generate/Update BUSINESS.md
 
-- **Initial mode**: Generate `$0/BUSINESS.md` following the template in `references/business-template.md`
-- **Update mode**: Load existing `$0/BUSINESS.md` and reflect only changed or added information. Keep sections without changes as-is
+- **Initial mode**: Generate the document following the template in `references/business-template.md`
+- **Update mode**: Use the existing content from `get_document` and reflect only changed or added information. Keep sections without changes as-is
+
+Save via `mcp__plugin_lead-ace_api__save_document` with `projectId: "$0"`, `slug: "business"`, and the full markdown content.
 
 ### 7. Generate/Update SALES_STRATEGY.md
 
-- **Initial mode**: Generate `$0/SALES_STRATEGY.md` following the template in `references/strategy-template.md`
-- **Update mode**: Load existing `$0/SALES_STRATEGY.md` and update only changed or added sections. Keep sections without changes as-is. Do not erase existing content unless the user explicitly instructs deletion. **Evaluate-managed sections (messaging, targeting, channels, KPI, search keywords) are only rewritten when the user explicitly instructs an update**
+- **Initial mode**: Generate the document following the template in `references/strategy-template.md`
+- **Update mode**: Use the existing content from `get_document` and update only changed or added sections. Keep sections without changes as-is. Do not erase existing content unless the user explicitly instructs deletion. **Evaluate-managed sections (messaging, targeting, channels, KPI, search keywords) are only rewritten when the user explicitly instructs an update**
 
 Also refer to the following references when generating/updating to improve quality:
 
@@ -225,7 +227,9 @@ Also refer to the following references when generating/updating to improve quali
 
 **Reflect environment information:** Record the environment check results from step 2 in the "Environment & Tool Status" section. If any tools are unavailable, also reflect in the "Sales Channels" section (e.g., if gog unavailable, exclude email auto-sending; if Chrome unavailable, exclude forms and SNS)
 
+Save via `mcp__plugin_lead-ace_api__save_document` with `projectId: "$0"`, `slug: "sales_strategy"`, and the full markdown content.
+
 ### 8. Completion Report
 
-- **Initial mode**: Report an overview of the 2 generated files and guide the user to run `/build-list` as the next step
+- **Initial mode**: Report an overview of the 2 generated documents and guide the user to run `/build-list` as the next step
 - **Update mode**: Report a summary of what was updated. List updated and added sections in bullets

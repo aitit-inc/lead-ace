@@ -21,7 +21,7 @@ Return an error if `$0` is empty.
 
 ### 2. Confirm Deletion
 
-Use AskUserQuestion to ask: "Are you sure you want to delete project '$0' and ALL its data (prospects, outreach logs, responses, evaluations)? This cannot be undone."
+Use AskUserQuestion to ask: "Are you sure you want to delete project '$0' and ALL its data (prospects, outreach logs, responses, evaluations, documents)? This cannot be undone."
 
 If the user declines, abort.
 
@@ -34,4 +34,3 @@ If the tool returns a "Project not found" error, report that the project does no
 ### 4. Completion Report
 
 - Confirm project "$0" and all its data have been deleted
-- Note that the local project directory still remains (user can delete it manually if desired)

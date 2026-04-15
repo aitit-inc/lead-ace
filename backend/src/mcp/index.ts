@@ -400,6 +400,76 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
     },
   )
 
+  // --- get_document ---
+  server.tool(
+    'get_document',
+    'Get the latest version of a project document (business, sales_strategy, search_notes).',
+    {
+      projectId: z.string().describe('Project ID'),
+      slug: z.string().describe('Document slug: "business", "sales_strategy", or "search_notes"'),
+    },
+    async ({ projectId, slug }) => {
+      const { ok, status, data } = await callApi('GET', `/projects/${projectId}/documents/${slug}`, null, apiUrl, authHeader)
+      if (!ok) {
+        if (status === 404) {
+          return { content: [{ type: 'text' as const, text: `Document "${slug}" not found for project "${projectId}".` }] }
+        }
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      const doc = data as { id: number; slug: string; content: string; createdAt: string }
+      return {
+        content: [{ type: 'text' as const, text: doc.content }],
+      }
+    },
+  )
+
+  // --- save_document ---
+  server.tool(
+    'save_document',
+    'Save a new version of a project document. Appends a new version (immutable); previous versions are preserved.',
+    {
+      projectId: z.string().describe('Project ID'),
+      slug: z.string().describe('Document slug: "business", "sales_strategy", or "search_notes"'),
+      content: z.string().describe('Full markdown content of the document'),
+    },
+    async ({ projectId, slug, content }) => {
+      const { ok, data } = await callApi('PUT', `/projects/${projectId}/documents/${slug}`, { content }, apiUrl, authHeader)
+      if (!ok) {
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      const result = data as { id: number; slug: string; createdAt: string }
+      return { content: [{ type: 'text' as const, text: `Document "${slug}" saved (version id: ${result.id}).` }] }
+    },
+  )
+
+  // --- list_documents ---
+  server.tool(
+    'list_documents',
+    'List all documents for a project with their last updated timestamps.',
+    {
+      projectId: z.string().describe('Project ID'),
+    },
+    async ({ projectId }) => {
+      const { ok, data } = await callApi('GET', `/projects/${projectId}/documents`, null, apiUrl, authHeader)
+      if (!ok) {
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      const { documents } = data as { documents: Array<{ slug: string; updatedAt: string }> }
+      if (documents.length === 0) {
+        return { content: [{ type: 'text' as const, text: 'No documents found.' }] }
+      }
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `${documents.length} document(s).\n${JSON.stringify(documents, null, 2)}`,
+        }],
+      }
+    },
+  )
+
   return server
 }
 
@@ -471,9 +541,21 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     }))
   }
 
+  // Reject GET/DELETE on MCP path — stateless mode does not support SSE streams,
+  // and Workers cannot keep long-lived connections. Only POST is needed.
+  if (request.method !== 'POST') {
+    return withCors(Response.json(
+      { error: 'Method not allowed. Use POST for MCP requests.' },
+      { status: 405 },
+    ))
+  }
+
   const authHeader = request.headers.get('Authorization') ?? ''
   const server = createMcpServer(env.WEB_API_URL, authHeader)
-  const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined })
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true, // Return JSON instead of SSE streams (Workers compat)
+  })
 
   await server.connect(transport)
   return withCors(await transport.handleRequest(request))

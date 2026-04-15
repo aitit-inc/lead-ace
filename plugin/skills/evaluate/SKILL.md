@@ -1,15 +1,16 @@
 ---
 name: evaluate
 description: "This skill should be used when the user asks to \"analyze results\", \"improve strategy\", \"run PDCA\", \"evaluate effectiveness\", \"check response rates\", or wants to evaluate sales performance and improve strategy. Automatically analyzes and improves strategy, targeting, and messaging based on response rate data."
-argument-hint: "<project-directory-name>"
+argument-hint: "<project-id>"
 allowed-tools:
   - Bash
   - Read
-  - Write
   - WebSearch
   - mcp__plugin_lead-ace_api__get_eval_data
   - mcp__plugin_lead-ace_api__get_evaluation_history
   - mcp__plugin_lead-ace_api__record_evaluation
+  - mcp__plugin_lead-ace_api__get_document
+  - mcp__plugin_lead-ace_api__save_document
 ---
 
 # Evaluate - PDCA Evaluation & Improvement
@@ -20,7 +21,7 @@ A skill that analyzes sales activity result data and automatically evaluates and
 
 ### 1. Data Collection
 
-- Project directory name: `$0` (required)
+- Project ID: `$0` (required)
 
 Call `mcp__plugin_lead-ace_api__get_eval_data` with `projectId: "$0"`.
 
@@ -34,10 +35,10 @@ The response includes:
 
 ### 2. Load Existing Strategy
 
-Load the following:
-- `$0/BUSINESS.md`
-- `$0/SALES_STRATEGY.md`
-- `$0/RESULTS_REPORT.md` (if it exists)
+Load documents via MCP:
+
+Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "business"`.
+Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "sales_strategy"`.
 
 Call `mcp__plugin_lead-ace_api__get_evaluation_history` with `projectId: "$0"` to retrieve past evaluation records.
 
@@ -104,19 +105,21 @@ Before deciding on improvement actions, review the past evaluations history orga
 - Revise channel priority
 - Update KPI goals
 
+Save the updated document via `mcp__plugin_lead-ace_api__save_document` with `projectId: "$0"`, `slug: "sales_strategy"`, and the full markdown content.
+
 **Update search keywords:**
 - Add keywords related to high-response segments
 - Remove ineffective keywords
 
 **Reflect response patterns in SEARCH_NOTES.md:**
-If `$0/SEARCH_NOTES.md` exists, overwrite the `## Hints from evaluate` section (add it at the end if not present). build-list will preserve this section during the next run and adjust its search policy.
+Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "search_notes"`. If found, update the `## Hints from evaluate` section (add it at the end if not present) and save via `save_document`. build-list will preserve this section during the next run and adjust its search policy.
 
 Content to add:
 - Industries / segments with response rates above overall average -> "XX industry has X% response rate (vs overall average Y%). Explore more of this industry"
 - Characteristics similar to companies that responded (scale, business content, pain points) -> "Companies like XX respond well. Search for similar companies and competitors"
 - Segments with poor responses -> "XX industry has low response rate (X%). Lower priority"
 
-Skip if SEARCH_NOTES.md does not exist (build-list hasn't been run yet).
+Skip if the document is not found (build-list hasn't been run yet).
 
 **Recalculate priorities:**
 - Update prospect priorities based on response patterns (bulk execution in step 5)
@@ -132,11 +135,9 @@ Call `mcp__plugin_lead-ace_api__record_evaluation` with:
 
 ### 6. Results Report
 
-Report the following:
+Report the following directly to the user (no file output needed -- evaluation data is stored in the DB):
 - Key KPIs (response rate, positive rate, etc.)
 - Changes from previous evaluation (if any)
 - Important findings from the analysis
 - List of improvements applied
 - Next actions to take (`/build-list` for additional exploration, `/outbound` for re-approach, etc.)
-
-Save the report to the project directory as `EVALUATION_REPORT.md` (overwrite; history is saved in DB).

@@ -79,6 +79,18 @@ export interface Evaluation {
   improvements: string;
 }
 
+export interface DocumentSummary {
+  slug: string;
+  updatedAt: string;
+}
+
+export interface DocumentVersion {
+  id: number;
+  slug?: string;
+  content: string;
+  createdAt: string;
+}
+
 export interface ProjectStats {
   metrics: EvaluationMetrics;
   respondedMessages: Array<Record<string, unknown>>;
