@@ -685,28 +685,52 @@ master_documents:
 - `add_prospects`: Free プランのみ 30 件 lifetime 上限チェック
 - プロジェクト作成: プラン別のプロジェクト数上限チェック（現行の `FREE_PLAN_PROJECT_LIMIT = 1` を拡張）
 
-### 5-1. サブスクリプション管理
+### 5-1a. テナント分離 ✅ 完了
 
-#### DB
-- [ ] `user_plans` テーブル追加（userId, plan, stripeCustomerId, stripeSubscriptionId, currentPeriodStart, currentPeriodEnd）
-- [ ] マイグレーション生成・適用
+マルチテナント対応のスキーマリファクタリング。全データテーブルに `tenant_id` を追加し、テナント単位でデータを隔離。
 
-#### API
-- [ ] `POST /api/stripe/webhook` — Stripe イベント処理（署名検証 + DB 更新）
-- [ ] `GET /api/me/plan` — 現在のプラン情報取得（フロントエンド用）
-- [ ] `POST /api/me/checkout` — Stripe Checkout Session 作成（price_id + userId）
-- [ ] `POST /api/me/portal` — Stripe Customer Portal Session 作成
-- [ ] プロジェクト作成のプラン別制限（現行ハードコードを user_plans 参照に変更）
-- [ ] `get_outbound_targets` にクォータチェック追加（Free: lifetime sent ≤ 10、有料: 当月 sent ≤ プラン上限）
-- [ ] `record_outreach` にクォータガード追加
-- [ ] `add_prospects` に Free プラン 30 件上限チェック追加
+- [x] `tenants` + `tenant_members` テーブル追加
+- [x] `tenant_plans` テーブル追加（旧 `user_plans` を tenantId ベースに変更）
+- [x] 全データテーブルに `tenant_id` カラム追加
+- [x] `organizations` PK を `domain (text)` → `id (auto-int)` に変更、`UNIQUE(tenant_id, domain)`
+- [x] ユニーク制約（email, form URL）をテナントスコープに変更
+- [x] Auth ミドルウェアで userId → tenantId 自動解決（初回アクセス時にテナント自動生成）
+- [x] 全 API ルートを tenantId フィルタリングに更新
+- [x] クォータ計算を tenantId ベースに更新（JOIN 不要で高速）
+- [x] マイグレーションをクリーンに再生成
 
-#### MCP
-- [ ] `get_outbound_targets` レスポンスに `remainingQuota` フィールド追加
+### 5-1b. サブスクリプション管理 ✅ バックエンド完了
 
-#### フロントエンド
+#### DB + API + MCP（完了）
+- [x] `tenant_plans` テーブル（plan enum, Stripe ID, billing period）
+- [x] `POST /api/stripe/webhook` — Stripe イベント処理（署名検証 + DB 更新）
+- [x] `GET /api/me/plan` — 現在のプラン + クォータ情報取得
+- [x] `POST /api/me/checkout` — Stripe Checkout Session 作成
+- [x] `POST /api/me/portal` — Stripe Customer Portal Session 作成
+- [x] プロジェクト作成のプラン別制限（tenant_plans 参照）
+- [x] `get_outbound_targets` にクォータチェック + `remainingQuota` フィールド追加
+- [x] `record_outreach` にクォータガード追加
+- [x] `add_prospects` に Free プラン 30 件上限チェック追加
+
+#### フロントエンド（未着手）
 - [ ] Settings ページにプラン表示 + "Upgrade" ボタン（→ Checkout）+ "Manage subscription" ボタン（→ Customer Portal）
 - [ ] クォータ残量表示（ダッシュボードまたはサイドバー）
+
+### 5-1c. RLS ポリシー追加
+
+テナント分離の defense-in-depth。スキーマは対応済み（全テーブルに tenant_id あり）、ポリシー追加のみ。
+
+- [ ] API ミドルウェアでリクエストをトランザクションで包み、`SET LOCAL app.tenant_id = X` を注入
+- [ ] 全テナント依存テーブルに RLS ポリシー追加: `USING (tenant_id = current_setting('app.tenant_id', true))`
+- [ ] RLS が有効な状態で全 API エンドポイントの動作確認
+
+### 5-1 レビュー（本番デプロイ前に必須）
+
+- [ ] **テナント分離テスト**: 2つのテストユーザーで、一方のデータが他方に見えないことを確認（全エンドポイント）
+- [ ] **クォータテスト**: Free トライアルフロー完走（/strategy → /build-list 30件 → /outbound 10件 → 枠切れメッセージ）
+- [ ] **organizations PK 変更の影響確認**: MCP `get_prospect_identifiers` のレスポンスが `organizationDomain` (text) を返していること（build-list スキルが参照する）
+- [ ] **全 MCP ツール動作確認**: ローカル MCP Server 起動 → Claude Code から各ツールを呼び出し
+- [ ] **Stripe 連携テスト**: Checkout → webhook → tenant_plans 更新 → プラン反映（Stripe テストモードで）
 
 ### 5-2. セルフデプロイ対応
 
@@ -764,27 +788,25 @@ master_documents:
 ## 推奨実装順序
 
 ```
-フェーズ1（リポジトリ移行）
+フェーズ1〜4.7 ✅ 完了
     ↓
-フェーズ2-1〜2-2（backend セットアップ + スキーマ定義）
+フェーズ5-1a（テナント分離）✅ 完了
     ↓
-フェーズ2-3（Web API Server の全エンドポイント）
+フェーズ5-1b（サブスクリプション管理バックエンド）✅ 完了
     ↓
-フェーズ2-4（MCP Server の全 Tool）
+★ 現在地 ★
     ↓
-フェーズ2-5（Docker Compose ローカル環境）→ フェーズ2 レビュー
+フェーズ5-1c（RLS ポリシー追加）
     ↓
-フェーズ3（プラグイン全スキルの MCP 移行・Python廃止）→ フェーズ3 レビュー
+フェーズ5-1 フロントエンド（Settings プラン表示 + クォータ表示）
     ↓
-フェーズ5-1（ライセンス管理）← 有料化前に必須
+フェーズ5-1 レビュー（テナント分離・クォータ・MCP 動作確認）
     ↓
-フェーズ5-3（Cloudflare 本番デプロイ）→ フェーズ5 レビュー
+フェーズ5-3（Stripe セットアップ + Cloudflare 本番デプロイ）
     ↓
-フェーズ4（フロントエンド）→ フェーズ4 レビュー
+フェーズ5 レビュー（本番環境での全体動作確認）
     ↓
-フェーズ4.5（ナレッジDB集約）→ フェーズ4.5 レビュー
-    ↓
-フェーズ4.7（プラグイン側ナレッジのクラウド移行）→ フェーズ4.7 レビュー
+フェーズ5-2（セルフデプロイ対応・ドキュメント）
     ↓
 フェーズ6（リリース・移行）→ フェーズ6 レビュー
 ```
@@ -807,3 +829,5 @@ master_documents:
 | MCP Server の認証方式 | Supabase Auth JWT（フェーズ2-4で実装済み）|
 | フロントエンドのフレームワーク | SvelteKit（フェーズ4で実装済み）|
 | `lead-ace-doctor` の移行方針 | 廃止（Drizzle Studio で代替、フェーズ3で実施済み）|
+| マルチテナンシー方式 | テナント分離（shared tables + tenant_id）。アプリレベル隔離 + RLS defense-in-depth。将来のチーム利用拡張に対応 |
+| 決済方式 | Stripe Checkout + Customer Portal。アプリ内に決済UIは作らない |
