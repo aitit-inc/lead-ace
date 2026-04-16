@@ -34,7 +34,7 @@ export interface Prospect {
   matchReason: string;
   priority: number;
   status: ProspectStatus;
-  organizationId: string;
+  organizationId: number;
   organizationName: string;
   createdAt: string;
 }

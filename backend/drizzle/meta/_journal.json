@@ -5,29 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1776123287853,
-      "tag": "0000_empty_white_tiger",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1776245047968,
-      "tag": "0001_amusing_plazm",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1776256321225,
-      "tag": "0002_lush_ted_forrester",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1776339764349,
-      "tag": "0003_strong_tag",
+      "when": 1776347356472,
+      "tag": "0000_fat_beast",
       "breakpoints": true
     }
   ]

@@ -1,5 +1,5 @@
-import { eq, and, sql, count } from 'drizzle-orm'
-import { userPlans, outreachLogs, projectProspects } from '../db/schema'
+import { eq, and, sql } from 'drizzle-orm'
+import { tenantPlans, outreachLogs, projectProspects } from '../db/schema'
 import type { createDb } from '../db/connection'
 
 // ---------------------------------------------------------------------------
@@ -27,24 +27,24 @@ export function getPlanLimits(plan: PlanTier): PlanLimits {
 }
 
 // ---------------------------------------------------------------------------
-// Get user plan from DB (defaults to free if no record)
+// Get tenant plan from DB (defaults to free if no record)
 // ---------------------------------------------------------------------------
 
 type Db = ReturnType<typeof createDb>
 
-export async function getUserPlan(db: Db, userId: string): Promise<{
+export async function getTenantPlan(db: Db, tenantId: string): Promise<{
   plan: PlanTier
   currentPeriodStart: Date | null
   currentPeriodEnd: Date | null
 }> {
   const [row] = await db
     .select({
-      plan: userPlans.plan,
-      currentPeriodStart: userPlans.currentPeriodStart,
-      currentPeriodEnd: userPlans.currentPeriodEnd,
+      plan: tenantPlans.plan,
+      currentPeriodStart: tenantPlans.currentPeriodStart,
+      currentPeriodEnd: tenantPlans.currentPeriodEnd,
     })
-    .from(userPlans)
-    .where(eq(userPlans.userId, userId))
+    .from(tenantPlans)
+    .where(eq(tenantPlans.tenantId, tenantId))
     .limit(1)
 
   if (!row) {
@@ -64,41 +64,38 @@ export async function getUserPlan(db: Db, userId: string): Promise<{
 
 export async function countSentOutreach(
   db: Db,
-  userId: string,
+  tenantId: string,
   plan: PlanTier,
   currentPeriodStart: Date | null,
 ): Promise<number> {
-  // Free plan: lifetime count (all sent ever, across all user's projects)
+  // Free plan: lifetime count (all sent ever)
   // Paid plans: current billing period count
-  const periodFilter = plan === 'free' || !currentPeriodStart
-    ? sql`1=1` // no time filter for free (lifetime)
-    : sql`${outreachLogs.sentAt} >= ${currentPeriodStart}`
+  const conditions = [
+    eq(outreachLogs.tenantId, tenantId),
+    eq(outreachLogs.status, 'sent'),
+  ]
+
+  if (plan !== 'free' && currentPeriodStart) {
+    conditions.push(sql`${outreachLogs.sentAt} >= ${currentPeriodStart}`)
+  }
 
   const [result] = await db
     .select({ total: sql<number>`COUNT(*)::int` })
     .from(outreachLogs)
-    .innerJoin(
-      // Join through projects to filter by userId
-      sql`projects ON projects.id = ${outreachLogs.projectId}`,
-      sql`projects.user_id = ${userId}`,
-    )
-    .where(and(eq(outreachLogs.status, 'sent'), periodFilter))
+    .where(and(...conditions))
 
   return result?.total ?? 0
 }
 
 // ---------------------------------------------------------------------------
-// Count total prospects registered by user (for free plan lifetime limit)
+// Count total prospects registered by tenant (for free plan lifetime limit)
 // ---------------------------------------------------------------------------
 
-export async function countUserProspects(db: Db, userId: string): Promise<number> {
+export async function countTenantProspects(db: Db, tenantId: string): Promise<number> {
   const [result] = await db
     .select({ total: sql<number>`COUNT(*)::int` })
     .from(projectProspects)
-    .innerJoin(
-      sql`projects ON projects.id = ${projectProspects.projectId}`,
-      sql`projects.user_id = ${userId}`,
-    )
+    .where(eq(projectProspects.tenantId, tenantId))
 
   return result?.total ?? 0
 }
@@ -109,22 +106,22 @@ export async function countUserProspects(db: Db, userId: string): Promise<number
 
 export async function getRemainingOutreachQuota(
   db: Db,
-  userId: string,
+  tenantId: string,
 ): Promise<{ remaining: number | null; limit: number | null; used: number; plan: PlanTier }> {
-  const userPlan = await getUserPlan(db, userId)
-  const limits = getPlanLimits(userPlan.plan)
+  const tp = await getTenantPlan(db, tenantId)
+  const limits = getPlanLimits(tp.plan)
 
   if (limits.maxOutreachPerMonth === null) {
-    return { remaining: null, limit: null, used: 0, plan: userPlan.plan }
+    return { remaining: null, limit: null, used: 0, plan: tp.plan }
   }
 
-  const used = await countSentOutreach(db, userId, userPlan.plan, userPlan.currentPeriodStart)
+  const used = await countSentOutreach(db, tenantId, tp.plan, tp.currentPeriodStart)
   const remaining = Math.max(0, limits.maxOutreachPerMonth - used)
 
   return {
     remaining,
     limit: limits.maxOutreachPerMonth,
     used,
-    plan: userPlan.plan,
+    plan: tp.plan,
   }
 }

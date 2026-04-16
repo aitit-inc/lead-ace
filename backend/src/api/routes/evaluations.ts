@@ -20,13 +20,13 @@ export const evaluationsRouter = new Hono<{ Bindings: Env; Variables: Variables 
 
 evaluationsRouter.get('/projects/:id/stats', async (c) => {
   const projectId = c.req.param('id')
-  const userId = c.get('userId')
+  const tenantId = c.get('tenantId')
   const db = createDb(c.env.DATABASE_URL)
 
   const [project] = await db
     .select({ id: projects.id })
     .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
+    .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
     .limit(1)
 
   if (!project) {
@@ -135,13 +135,13 @@ const recordEvaluationSchema = z.object({
 
 evaluationsRouter.post('/evaluations', zValidator('json', recordEvaluationSchema), async (c) => {
   const input = c.req.valid('json')
-  const userId = c.get('userId')
+  const tenantId = c.get('tenantId')
   const db = createDb(c.env.DATABASE_URL)
 
   const [project] = await db
     .select({ id: projects.id })
     .from(projects)
-    .where(and(eq(projects.id, input.projectId), eq(projects.userId, userId)))
+    .where(and(eq(projects.id, input.projectId), eq(projects.tenantId, tenantId)))
     .limit(1)
 
   if (!project) {
@@ -153,6 +153,7 @@ evaluationsRouter.post('/evaluations', zValidator('json', recordEvaluationSchema
   const [evaluation] = await db
     .insert(evaluations)
     .values({
+      tenantId,
       projectId: input.projectId,
       evaluationDate: now,
       metrics: input.metrics as EvaluationMetrics,
@@ -190,13 +191,13 @@ evaluationsRouter.post('/evaluations', zValidator('json', recordEvaluationSchema
 
 evaluationsRouter.get('/projects/:id/evaluations', async (c) => {
   const projectId = c.req.param('id')
-  const userId = c.get('userId')
+  const tenantId = c.get('tenantId')
   const db = createDb(c.env.DATABASE_URL)
 
   const [project] = await db
     .select({ id: projects.id })
     .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
+    .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
     .limit(1)
 
   if (!project) {

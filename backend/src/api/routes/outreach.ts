@@ -23,14 +23,14 @@ export const outreachRouter = new Hono<{ Bindings: Env; Variables: Variables }>(
 // POST /outreach — record outreach log and update prospect status to 'contacted'
 outreachRouter.post('/outreach', zValidator('json', recordOutreachSchema), async (c) => {
   const input = c.req.valid('json')
-  const userId = c.get('userId')
+  const tenantId = c.get('tenantId')
   const db = createDb(c.env.DATABASE_URL)
 
   // Verify project ownership
   const [project] = await db
     .select({ id: projects.id })
     .from(projects)
-    .where(and(eq(projects.id, input.projectId), eq(projects.userId, userId)))
+    .where(and(eq(projects.id, input.projectId), eq(projects.tenantId, tenantId)))
     .limit(1)
 
   if (!project) {
@@ -39,7 +39,7 @@ outreachRouter.post('/outreach', zValidator('json', recordOutreachSchema), async
 
   // Quota guard: reject if outreach limit exceeded (only for successful sends)
   if (input.status === 'sent') {
-    const quota = await getRemainingOutreachQuota(db, userId)
+    const quota = await getRemainingOutreachQuota(db, tenantId)
     if (quota.remaining !== null && quota.remaining <= 0) {
       return c.json({
         error: 'Outreach limit reached',
@@ -53,6 +53,7 @@ outreachRouter.post('/outreach', zValidator('json', recordOutreachSchema), async
   const [log] = await db
     .insert(outreachLogs)
     .values({
+      tenantId,
       projectId: input.projectId,
       prospectId: input.prospectId,
       channel: input.channel,
@@ -84,7 +85,7 @@ outreachRouter.post('/outreach', zValidator('json', recordOutreachSchema), async
 // GET /projects/:id/outreach/recent — recent outreach logs for check-results
 outreachRouter.get('/projects/:id/outreach/recent', async (c) => {
   const projectId = c.req.param('id')
-  const userId = c.get('userId')
+  const tenantId = c.get('tenantId')
   const limitParam = c.req.query('limit')
   const limit = limitParam ? Math.min(parseInt(limitParam, 10), 200) : 100
   const db = createDb(c.env.DATABASE_URL)
@@ -92,7 +93,7 @@ outreachRouter.get('/projects/:id/outreach/recent', async (c) => {
   const [project] = await db
     .select({ id: projects.id })
     .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
+    .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
     .limit(1)
 
   if (!project) {

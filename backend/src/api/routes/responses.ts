@@ -31,7 +31,7 @@ export const responsesRouter = new Hono<{ Bindings: Env; Variables: Variables }>
 // POST /responses — record a response and update prospect status
 responsesRouter.post('/responses', zValidator('json', recordResponseSchema), async (c) => {
   const input = c.req.valid('json')
-  const userId = c.get('userId')
+  const tenantId = c.get('tenantId')
   const db = createDb(c.env.DATABASE_URL)
 
   // Fetch the outreach log to verify project ownership and get prospect info
@@ -53,7 +53,7 @@ responsesRouter.post('/responses', zValidator('json', recordResponseSchema), asy
   const [project] = await db
     .select({ id: projects.id })
     .from(projects)
-    .where(and(eq(projects.id, log.projectId), eq(projects.userId, userId)))
+    .where(and(eq(projects.id, log.projectId), eq(projects.tenantId, tenantId)))
     .limit(1)
 
   if (!project) {
@@ -65,6 +65,7 @@ responsesRouter.post('/responses', zValidator('json', recordResponseSchema), asy
   const [newResponse] = await db
     .insert(responses)
     .values({
+      tenantId,
       outreachLogId: input.outreachLogId,
       channel: input.channel,
       content: input.content,
@@ -120,14 +121,14 @@ responsesRouter.post('/responses', zValidator('json', recordResponseSchema), asy
 // GET /projects/:id/responses — list responses for a project
 responsesRouter.get('/projects/:id/responses', async (c) => {
   const projectId = c.req.param('id')
-  const userId = c.get('userId')
+  const tenantId = c.get('tenantId')
   const db = createDb(c.env.DATABASE_URL)
 
   // Verify project ownership
   const [project] = await db
     .select({ id: projects.id })
     .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
+    .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
     .limit(1)
 
   if (!project) {

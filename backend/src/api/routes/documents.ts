@@ -9,11 +9,11 @@ import type { Env, Variables } from '../types'
 export const documentsRouter = new Hono<{ Bindings: Env; Variables: Variables }>()
 
 // Helper: verify project ownership
-async function verifyProject(db: ReturnType<typeof createDb>, projectId: string, userId: string) {
+async function verifyProject(db: ReturnType<typeof createDb>, projectId: string, tenantId: string) {
   const [project] = await db
     .select({ id: projects.id })
     .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
+    .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
     .limit(1)
   return project
 }
@@ -24,10 +24,10 @@ async function verifyProject(db: ReturnType<typeof createDb>, projectId: string,
 
 documentsRouter.get('/projects/:id/documents', async (c) => {
   const projectId = c.req.param('id')
-  const userId = c.get('userId')
+  const tenantId = c.get('tenantId')
   const db = createDb(c.env.DATABASE_URL)
 
-  if (!await verifyProject(db, projectId, userId)) {
+  if (!await verifyProject(db, projectId, tenantId)) {
     return c.json({ error: 'Project not found' }, 404)
   }
 
@@ -51,10 +51,10 @@ documentsRouter.get('/projects/:id/documents', async (c) => {
 documentsRouter.get('/projects/:id/documents/:slug', async (c) => {
   const projectId = c.req.param('id')
   const slug = c.req.param('slug')
-  const userId = c.get('userId')
+  const tenantId = c.get('tenantId')
   const db = createDb(c.env.DATABASE_URL)
 
-  if (!await verifyProject(db, projectId, userId)) {
+  if (!await verifyProject(db, projectId, tenantId)) {
     return c.json({ error: 'Project not found' }, 404)
   }
 
@@ -89,10 +89,10 @@ documentsRouter.get('/projects/:id/documents/:slug/history', async (c) => {
   const slug = c.req.param('slug')
   const limitParam = c.req.query('limit')
   const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 10, 1), 50) : 10
-  const userId = c.get('userId')
+  const tenantId = c.get('tenantId')
   const db = createDb(c.env.DATABASE_URL)
 
-  if (!await verifyProject(db, projectId, userId)) {
+  if (!await verifyProject(db, projectId, tenantId)) {
     return c.json({ error: 'Project not found' }, 404)
   }
 
@@ -128,16 +128,16 @@ documentsRouter.put(
     const projectId = c.req.param('id')
     const slug = c.req.param('slug')
     const { content } = c.req.valid('json')
-    const userId = c.get('userId')
+    const tenantId = c.get('tenantId')
     const db = createDb(c.env.DATABASE_URL)
 
-    if (!await verifyProject(db, projectId, userId)) {
+    if (!await verifyProject(db, projectId, tenantId)) {
       return c.json({ error: 'Project not found' }, 404)
     }
 
     const [doc] = await db
       .insert(projectDocuments)
-      .values({ projectId, slug, content })
+      .values({ tenantId, projectId, slug, content })
       .returning({
         id: projectDocuments.id,
         createdAt: projectDocuments.createdAt,

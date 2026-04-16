@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { eq, and, count } from 'drizzle-orm'
 import { createDb } from '../../db/connection'
 import { projects } from '../../db/schema'
-import { getUserPlan, getPlanLimits } from '../plan-limits'
+import { getTenantPlan, getPlanLimits } from '../plan-limits'
 import type { Env, Variables } from '../types'
 
 const createProjectSchema = z.object({
@@ -13,9 +13,9 @@ const createProjectSchema = z.object({
 
 export const projectsRouter = new Hono<{ Bindings: Env; Variables: Variables }>()
 
-// GET /projects — list projects for the current user
+// GET /projects — list projects for the current tenant
 projectsRouter.get('/', async (c) => {
-  const userId = c.get('userId')
+  const tenantId = c.get('tenantId')
   const db = createDb(c.env.DATABASE_URL)
 
   const rows = await db
@@ -25,15 +25,15 @@ projectsRouter.get('/', async (c) => {
       updatedAt: projects.updatedAt,
     })
     .from(projects)
-    .where(eq(projects.userId, userId))
+    .where(eq(projects.tenantId, tenantId))
 
   return c.json({ projects: rows })
 })
 
-// POST /projects — create a project (with free plan limit)
+// POST /projects — create a project (with plan limit)
 projectsRouter.post('/', zValidator('json', createProjectSchema), async (c) => {
   const { id } = c.req.valid('json')
-  const userId = c.get('userId')
+  const tenantId = c.get('tenantId')
   const db = createDb(c.env.DATABASE_URL)
 
   // Check if project ID is already taken (by anyone)
@@ -47,21 +47,21 @@ projectsRouter.post('/', zValidator('json', createProjectSchema), async (c) => {
     return c.json({ error: 'Project ID already exists' }, 409)
   }
 
-  // Check project limit based on user plan
-  const userPlan = await getUserPlan(db, userId)
-  const limits = getPlanLimits(userPlan.plan)
+  // Check project limit based on tenant plan
+  const tp = await getTenantPlan(db, tenantId)
+  const limits = getPlanLimits(tp.plan)
 
   if (limits.maxProjects !== null) {
-    const [userProjectCount] = await db
+    const [projectCount] = await db
       .select({ count: count() })
       .from(projects)
-      .where(eq(projects.userId, userId))
+      .where(eq(projects.tenantId, tenantId))
 
-    if ((userProjectCount?.count ?? 0) >= limits.maxProjects) {
+    if ((projectCount?.count ?? 0) >= limits.maxProjects) {
       return c.json(
         {
           error: 'Project limit reached',
-          detail: `Your ${userPlan.plan} plan allows ${limits.maxProjects} project(s). Delete an existing project or upgrade your plan.`,
+          detail: `Your ${tp.plan} plan allows ${limits.maxProjects} project(s). Delete an existing project or upgrade your plan.`,
         },
         403,
       )
@@ -69,21 +69,21 @@ projectsRouter.post('/', zValidator('json', createProjectSchema), async (c) => {
   }
 
   const now = new Date()
-  await db.insert(projects).values({ id, userId, createdAt: now, updatedAt: now })
+  await db.insert(projects).values({ id, tenantId, createdAt: now, updatedAt: now })
 
-  return c.json({ id, userId, createdAt: now, updatedAt: now }, 201)
+  return c.json({ id, tenantId, createdAt: now, updatedAt: now }, 201)
 })
 
 // DELETE /projects/:id — delete a project (and cascade to all related data)
 projectsRouter.delete('/:id', async (c) => {
   const id = c.req.param('id')
-  const userId = c.get('userId')
+  const tenantId = c.get('tenantId')
   const db = createDb(c.env.DATABASE_URL)
 
   const [project] = await db
     .select({ id: projects.id })
     .from(projects)
-    .where(and(eq(projects.id, id), eq(projects.userId, userId)))
+    .where(and(eq(projects.id, id), eq(projects.tenantId, tenantId)))
     .limit(1)
 
   if (!project) {

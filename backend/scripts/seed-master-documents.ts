@@ -40,9 +40,9 @@ function readContent(relPath: string): string {
   if (existsSync(absPath)) {
     return readFileSync(absPath, 'utf-8')
   }
-  // Fallback: read from git history (files deleted in Phase 4.7)
+  // Fallback: read from git history (files deleted in Phase 4.7 commit ce37c7a)
   const gitPath = `plugin/${relPath}`
-  return execSync(`git show HEAD~1:${gitPath}`, { encoding: 'utf-8', cwd: resolve(__dirname, '../..') })
+  return execSync(`git show ce37c7a~1:${gitPath}`, { encoding: 'utf-8', cwd: resolve(__dirname, '../..') })
 }
 
 async function main() {

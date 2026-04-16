@@ -10,9 +10,8 @@ import {
   projectProspects,
   formTypeEnum,
   prospectStatusEnum,
-  channelEnum,
 } from '../../db/schema'
-import { getRemainingOutreachQuota, getUserPlan, getPlanLimits, countUserProspects } from '../plan-limits'
+import { getRemainingOutreachQuota, getTenantPlan, getPlanLimits, countTenantProspects } from '../plan-limits'
 import type { Env, Variables } from '../types'
 import type { SnsAccounts } from '../../db/schema'
 
@@ -57,35 +56,38 @@ const batchSchema = z.object({
 
 export const prospectsRouter = new Hono<{ Bindings: Env; Variables: Variables }>()
 
-// POST /prospects/batch — batch register prospects with deduplication
-prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async (c) => {
-  const { projectId, prospects: inputs } = c.req.valid('json')
-  const userId = c.get('userId')
-  const db = createDb(c.env.DATABASE_URL)
-
-  // Verify project ownership
+// Helper: verify project belongs to tenant
+async function verifyProject(db: ReturnType<typeof createDb>, projectId: string, tenantId: string) {
   const [project] = await db
     .select({ id: projects.id })
     .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
+    .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
     .limit(1)
+  return project
+}
 
-  if (!project) {
+// POST /prospects/batch — batch register prospects with deduplication
+prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async (c) => {
+  const { projectId, prospects: inputs } = c.req.valid('json')
+  const tenantId = c.get('tenantId')
+  const db = createDb(c.env.DATABASE_URL)
+
+  if (!await verifyProject(db, projectId, tenantId)) {
     return c.json({ error: 'Project not found' }, 404)
   }
 
   // Free plan: lifetime prospect limit
-  const userPlan = await getUserPlan(db, userId)
-  const limits = getPlanLimits(userPlan.plan)
+  const tp = await getTenantPlan(db, tenantId)
+  const limits = getPlanLimits(tp.plan)
 
-  let prospectBudget: number | null = null // null = unlimited
+  let prospectBudget: number | null = null
   if (limits.maxProspects !== null) {
-    const currentCount = await countUserProspects(db, userId)
+    const currentCount = await countTenantProspects(db, tenantId)
     prospectBudget = Math.max(0, limits.maxProspects - currentCount)
     if (prospectBudget === 0) {
       return c.json({
         error: 'Prospect registration limit reached',
-        detail: `Your ${userPlan.plan} plan allows ${limits.maxProspects} prospects. Upgrade your plan to register more.`,
+        detail: `Your ${tp.plan} plan allows ${limits.maxProspects} prospects. Upgrade your plan to register more.`,
         inserted: 0,
         skipped: inputs.length,
         insertedIds: [],
@@ -103,12 +105,13 @@ prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async 
       skipped.push({ name: input.name, reason: 'plan_limit' })
       continue
     }
-    // Check do_not_contact globally
+
+    // Check do_not_contact (scoped to tenant)
     const existingByEmail = input.email
       ? await db
           .select({ id: prospects.id, doNotContact: prospects.doNotContact })
           .from(prospects)
-          .where(eq(prospects.email, input.email))
+          .where(and(eq(prospects.tenantId, tenantId), eq(prospects.email, input.email)))
           .limit(1)
       : []
 
@@ -117,18 +120,18 @@ prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async 
       continue
     }
 
-    // Check email duplicate
+    // Check email duplicate (scoped to tenant)
     if (existingByEmail.length > 0) {
       skipped.push({ name: input.name, reason: 'email_duplicate' })
       continue
     }
 
-    // Check contact_form_url duplicate
+    // Check contact_form_url duplicate (scoped to tenant)
     if (input.contactFormUrl) {
       const existingByForm = await db
         .select({ id: prospects.id })
         .from(prospects)
-        .where(eq(prospects.contactFormUrl, input.contactFormUrl))
+        .where(and(eq(prospects.tenantId, tenantId), eq(prospects.contactFormUrl, input.contactFormUrl)))
         .limit(1)
 
       if (existingByForm.length > 0) {
@@ -142,10 +145,12 @@ prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async 
       .select({ pp: projectProspects.id })
       .from(projectProspects)
       .innerJoin(prospects, eq(prospects.id, projectProspects.prospectId))
+      .innerJoin(organizations, eq(organizations.id, prospects.organizationId))
       .where(
         and(
           eq(projectProspects.projectId, projectId),
-          eq(prospects.organizationId, input.organizationDomain),
+          eq(organizations.tenantId, tenantId),
+          eq(organizations.domain, input.organizationDomain),
         ),
       )
       .limit(1)
@@ -155,11 +160,12 @@ prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async 
       continue
     }
 
-    // Upsert organization
+    // Upsert organization (scoped to tenant)
     const now = new Date()
-    await db
+    const [org] = await db
       .insert(organizations)
       .values({
+        tenantId,
         domain: input.organizationDomain,
         name: input.organizationName,
         normalizedName: input.organizationNormalizedName,
@@ -172,7 +178,7 @@ prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async 
         updatedAt: now,
       })
       .onConflictDoUpdate({
-        target: organizations.domain,
+        target: [organizations.tenantId, organizations.domain],
         set: {
           name: sql`excluded.name`,
           normalizedName: sql`excluded.normalized_name`,
@@ -184,14 +190,18 @@ prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async 
           updatedAt: now,
         },
       })
+      .returning({ id: organizations.id })
+
+    if (!org) continue
 
     // Insert prospect
     const [newProspect] = await db
       .insert(prospects)
       .values({
+        tenantId,
         name: input.name,
         contactName: input.contactName ?? null,
-        organizationId: input.organizationDomain,
+        organizationId: org.id,
         department: input.department ?? null,
         overview: input.overview,
         industry: input.industry ?? null,
@@ -211,6 +221,7 @@ prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async 
 
     // Link to project
     await db.insert(projectProspects).values({
+      tenantId,
       projectId,
       prospectId: newProspect.id,
       matchReason: input.matchReason,
@@ -234,24 +245,17 @@ prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async 
 // GET /projects/:id/prospects/reachable — unreached prospects ordered by priority
 prospectsRouter.get('/projects/:id/prospects/reachable', async (c) => {
   const projectId = c.req.param('id')
-  const userId = c.get('userId')
+  const tenantId = c.get('tenantId')
   const limitParam = c.req.query('limit')
   const limit = limitParam ? Math.min(parseInt(limitParam, 10), 200) : 50
   const db = createDb(c.env.DATABASE_URL)
 
-  // Verify project ownership
-  const [project] = await db
-    .select({ id: projects.id })
-    .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
-    .limit(1)
-
-  if (!project) {
+  if (!await verifyProject(db, projectId, tenantId)) {
     return c.json({ error: 'Project not found' }, 404)
   }
 
   // Check outreach quota
-  const quota = await getRemainingOutreachQuota(db, userId)
+  const quota = await getRemainingOutreachQuota(db, tenantId)
 
   if (quota.remaining !== null && quota.remaining === 0) {
     return c.json({
@@ -263,12 +267,11 @@ prospectsRouter.get('/projects/:id/prospects/reachable', async (c) => {
     })
   }
 
-  // Cap the query limit to remaining quota
   const effectiveLimit = quota.remaining !== null ? Math.min(limit, quota.remaining) : limit
 
-  // Run prospect query and summary counts in parallel
   const reachableCondition = and(
     eq(projectProspects.projectId, projectId),
+    eq(projectProspects.tenantId, tenantId),
     eq(projectProspects.status, 'new'),
     eq(prospects.doNotContact, false),
   )
@@ -332,16 +335,10 @@ prospectsRouter.get('/projects/:id/prospects/reachable', async (c) => {
 // GET /projects/:id/prospects/identifiers — all registered prospect identifiers (for dedup)
 prospectsRouter.get('/projects/:id/prospects/identifiers', async (c) => {
   const projectId = c.req.param('id')
-  const userId = c.get('userId')
+  const tenantId = c.get('tenantId')
   const db = createDb(c.env.DATABASE_URL)
 
-  const [project] = await db
-    .select({ id: projects.id })
-    .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
-    .limit(1)
-
-  if (!project) {
+  if (!await verifyProject(db, projectId, tenantId)) {
     return c.json({ error: 'Project not found' }, 404)
   }
 
@@ -350,10 +347,11 @@ prospectsRouter.get('/projects/:id/prospects/identifiers', async (c) => {
       name: prospects.name,
       websiteUrl: prospects.websiteUrl,
       email: prospects.email,
-      organizationId: prospects.organizationId,
+      organizationDomain: organizations.domain,
     })
     .from(projectProspects)
     .innerJoin(prospects, eq(prospects.id, projectProspects.prospectId))
+    .innerJoin(organizations, eq(organizations.id, prospects.organizationId))
     .where(eq(projectProspects.projectId, projectId))
 
   return c.json({ identifiers: rows })
@@ -362,7 +360,7 @@ prospectsRouter.get('/projects/:id/prospects/identifiers', async (c) => {
 // PATCH /prospects/:id/status — update prospect status in a project
 prospectsRouter.patch('/prospects/:id/status', async (c) => {
   const prospectId = parseInt(c.req.param('id'), 10)
-  const userId = c.get('userId')
+  const tenantId = c.get('tenantId')
   const db = createDb(c.env.DATABASE_URL)
 
   let body: { projectId: string; status: string }
@@ -377,19 +375,12 @@ prospectsRouter.patch('/prospects/:id/status', async (c) => {
     return c.json({ error: 'projectId and status are required' }, 400)
   }
 
-  const validStatuses = ['new', 'contacted', 'responded', 'converted', 'rejected', 'inactive', 'unreachable']
-  if (!validStatuses.includes(status)) {
+  const validStatuses = prospectStatusEnum.enumValues
+  if (!validStatuses.includes(status as typeof validStatuses[number])) {
     return c.json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` }, 400)
   }
 
-  // Verify project ownership
-  const [project] = await db
-    .select({ id: projects.id })
-    .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
-    .limit(1)
-
-  if (!project) {
+  if (!await verifyProject(db, projectId, tenantId)) {
     return c.json({ error: 'Project not found' }, 404)
   }
 
@@ -400,6 +391,7 @@ prospectsRouter.patch('/prospects/:id/status', async (c) => {
       and(
         eq(projectProspects.projectId, projectId),
         eq(projectProspects.prospectId, prospectId),
+        eq(projectProspects.tenantId, tenantId),
       ),
     )
     .returning({ id: projectProspects.id })
@@ -414,28 +406,22 @@ prospectsRouter.patch('/prospects/:id/status', async (c) => {
 // GET /projects/:id/prospects — all prospects in a project with optional filters
 prospectsRouter.get('/projects/:id/prospects', async (c) => {
   const projectId = c.req.param('id')
-  const userId = c.get('userId')
+  const tenantId = c.get('tenantId')
   const db = createDb(c.env.DATABASE_URL)
 
-  // Verify project ownership
-  const [project] = await db
-    .select({ id: projects.id })
-    .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
-    .limit(1)
-
-  if (!project) {
+  if (!await verifyProject(db, projectId, tenantId)) {
     return c.json({ error: 'Project not found' }, 404)
   }
 
-  // Parse query params
   const limitParam = c.req.query('limit')
   const limit = limitParam ? Math.min(parseInt(limitParam, 10), 500) : 100
   const statusFilter = c.req.query('status')
   const priorityFilter = c.req.query('priority')
 
-  // Build conditions
-  const conditions = [eq(projectProspects.projectId, projectId)]
+  const conditions = [
+    eq(projectProspects.projectId, projectId),
+    eq(projectProspects.tenantId, tenantId),
+  ]
 
   if (statusFilter && prospectStatusEnum.enumValues.includes(statusFilter as typeof prospectStatusEnum.enumValues[number])) {
     conditions.push(eq(projectProspects.status, statusFilter as typeof prospectStatusEnum.enumValues[number]))
@@ -475,7 +461,7 @@ prospectsRouter.get('/projects/:id/prospects', async (c) => {
       })
       .from(projectProspects)
       .innerJoin(prospects, eq(prospects.id, projectProspects.prospectId))
-      .innerJoin(organizations, eq(organizations.domain, prospects.organizationId))
+      .innerJoin(organizations, eq(organizations.id, prospects.organizationId))
       .where(where)
       .orderBy(projectProspects.priority, desc(projectProspects.createdAt))
       .limit(limit),
@@ -495,7 +481,7 @@ prospectsRouter.get('/projects/:id/prospects', async (c) => {
 // PATCH /prospects/:id/do-not-contact — toggle do_not_contact flag
 prospectsRouter.patch('/prospects/:id/do-not-contact', async (c) => {
   const prospectId = parseInt(c.req.param('id'), 10)
-  const userId = c.get('userId')
+  const tenantId = c.get('tenantId')
   const db = createDb(c.env.DATABASE_URL)
 
   let body: { doNotContact: boolean }
@@ -509,17 +495,11 @@ prospectsRouter.patch('/prospects/:id/do-not-contact', async (c) => {
     return c.json({ error: 'doNotContact (boolean) is required' }, 400)
   }
 
-  // Verify the prospect belongs to at least one of the user's projects
+  // Verify the prospect belongs to this tenant
   const [owned] = await db
-    .select({ id: projectProspects.id })
-    .from(projectProspects)
-    .innerJoin(projects, eq(projects.id, projectProspects.projectId))
-    .where(
-      and(
-        eq(projectProspects.prospectId, prospectId),
-        eq(projects.userId, userId),
-      ),
-    )
+    .select({ id: prospects.id })
+    .from(prospects)
+    .where(and(eq(prospects.id, prospectId), eq(prospects.tenantId, tenantId)))
     .limit(1)
 
   if (!owned) {

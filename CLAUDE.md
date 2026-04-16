@@ -58,6 +58,18 @@ Subscription is managed via Stripe. The API enforces limits based on user plan.
 - **Billing**: Stripe Checkout for new subscriptions, Stripe Customer Portal for upgrades/downgrades/cancellation. No billing UI in our app.
 - **Self-host**: Free on GitHub, 1 project, no cloud features (user runs their own backend via docker-compose).
 
+## Multi-Tenancy
+
+All data is isolated by tenant. Each user auto-gets a tenant on first API access.
+
+- **`tenants`** table: auto-created per user (1 user = 1 tenant for now, expandable to teams later)
+- **`tenant_members`**: links users to tenants (currently 1:1, future: many-to-1)
+- **All data tables** have `tenant_id` column — queries always filter by tenant
+- **Auth middleware** resolves `userId → tenantId` via `tenant_members` on every request
+- **`organizations`** PK is auto-increment `id` (not domain). `UNIQUE(tenant_id, domain)` ensures per-tenant dedup
+- **Unique constraints** (email, form URL) are scoped to tenant
+- **Future**: RLS policies via `SET LOCAL app.tenant_id` for defense-in-depth
+
 ## Development Rules
 
 - Use `${CLAUDE_PLUGIN_ROOT}` for path references; do not hard-code paths (`${CLAUDE_PLUGIN_ROOT}` points to `plugin/`)

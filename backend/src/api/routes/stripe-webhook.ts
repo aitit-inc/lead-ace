@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { eq } from 'drizzle-orm'
 import { createDb } from '../../db/connection'
-import { userPlans } from '../../db/schema'
+import { tenantPlans, tenantMembers } from '../../db/schema'
 import type { Env } from '../types'
 
 // ---------------------------------------------------------------------------
@@ -96,6 +96,20 @@ stripeWebhookRouter.post('/stripe/webhook', async (c) => {
         break
       }
 
+      // Look up tenantId from userId via tenant_members
+      const [member] = await db
+        .select({ tenantId: tenantMembers.tenantId })
+        .from(tenantMembers)
+        .where(eq(tenantMembers.userId, userId))
+        .limit(1)
+
+      if (!member) {
+        console.error('checkout.session.completed: no tenant found for user', userId)
+        break
+      }
+
+      const tenantId = member.tenantId
+
       // Retrieve subscription to get plan from price metadata
       const subRes = await fetch(`https://api.stripe.com/v1/subscriptions/${subscriptionId}`, {
         headers: { Authorization: `Bearer ${c.env.STRIPE_SECRET_KEY}` },
@@ -110,9 +124,9 @@ stripeWebhookRouter.post('/stripe/webhook', async (c) => {
 
       const now = new Date()
       await db
-        .insert(userPlans)
+        .insert(tenantPlans)
         .values({
-          userId,
+          tenantId,
           plan,
           stripeCustomerId: customerId,
           stripeSubscriptionId: subscriptionId,
@@ -122,7 +136,7 @@ stripeWebhookRouter.post('/stripe/webhook', async (c) => {
           updatedAt: now,
         })
         .onConflictDoUpdate({
-          target: userPlans.userId,
+          target: tenantPlans.tenantId,
           set: {
             plan,
             stripeCustomerId: customerId,
@@ -133,7 +147,7 @@ stripeWebhookRouter.post('/stripe/webhook', async (c) => {
           },
         })
 
-      console.log(`User ${userId} subscribed to ${plan} plan`)
+      console.log(`Tenant ${tenantId} (user ${userId}) subscribed to ${plan} plan`)
       break
     }
 
@@ -141,15 +155,15 @@ stripeWebhookRouter.post('/stripe/webhook', async (c) => {
       const sub = event.data.object
       const subscriptionId = sub['id'] as string
 
-      // Find user by subscription ID
+      // Find tenant by subscription ID
       const [row] = await db
-        .select({ userId: userPlans.userId })
-        .from(userPlans)
-        .where(eq(userPlans.stripeSubscriptionId, subscriptionId))
+        .select({ tenantId: tenantPlans.tenantId })
+        .from(tenantPlans)
+        .where(eq(tenantPlans.stripeSubscriptionId, subscriptionId))
         .limit(1)
 
       if (!row) {
-        console.error('subscription.updated: no user found for subscription', subscriptionId)
+        console.error('subscription.updated: no tenant found for subscription', subscriptionId)
         break
       }
 
@@ -164,16 +178,16 @@ stripeWebhookRouter.post('/stripe/webhook', async (c) => {
       const activePlan = (status === 'active' || status === 'trialing') && plan ? plan : 'free'
 
       await db
-        .update(userPlans)
+        .update(tenantPlans)
         .set({
           plan: activePlan,
           currentPeriodStart: periodStart ? new Date(periodStart * 1000) : undefined,
           currentPeriodEnd: periodEnd ? new Date(periodEnd * 1000) : undefined,
           updatedAt: new Date(),
         })
-        .where(eq(userPlans.userId, row.userId))
+        .where(eq(tenantPlans.tenantId, row.tenantId))
 
-      console.log(`User ${row.userId} plan updated to ${activePlan}`)
+      console.log(`Tenant ${row.tenantId} plan updated to ${activePlan}`)
       break
     }
 
@@ -182,9 +196,9 @@ stripeWebhookRouter.post('/stripe/webhook', async (c) => {
       const subscriptionId = sub['id'] as string
 
       await db
-        .update(userPlans)
+        .update(tenantPlans)
         .set({ plan: 'free', updatedAt: new Date() })
-        .where(eq(userPlans.stripeSubscriptionId, subscriptionId))
+        .where(eq(tenantPlans.stripeSubscriptionId, subscriptionId))
 
       console.log(`Subscription ${subscriptionId} deleted, downgraded to free`)
       break

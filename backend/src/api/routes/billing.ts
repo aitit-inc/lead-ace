@@ -1,8 +1,8 @@
 import { Hono } from 'hono'
 import { eq } from 'drizzle-orm'
 import { createDb } from '../../db/connection'
-import { userPlans } from '../../db/schema'
-import { getUserPlan, getPlanLimits, getRemainingOutreachQuota, countUserProspects } from '../plan-limits'
+import { tenantPlans } from '../../db/schema'
+import { getTenantPlan, getPlanLimits, getRemainingOutreachQuota, countTenantProspects } from '../plan-limits'
 import type { Env, Variables } from '../types'
 
 // ---------------------------------------------------------------------------
@@ -45,15 +45,15 @@ export const billingRouter = new Hono<{ Bindings: Env; Variables: Variables }>()
 // ---------------------------------------------------------------------------
 
 billingRouter.get('/me/plan', async (c) => {
-  const userId = c.get('userId')
+  const tenantId = c.get('tenantId')
   const db = createDb(c.env.DATABASE_URL)
 
-  const userPlan = await getUserPlan(db, userId)
-  const limits = getPlanLimits(userPlan.plan)
-  const quota = await getRemainingOutreachQuota(db, userId)
+  const tenantPlan = await getTenantPlan(db, tenantId)
+  const limits = getPlanLimits(tenantPlan.plan)
+  const quota = await getRemainingOutreachQuota(db, tenantId)
 
   const result: Record<string, unknown> = {
-    plan: userPlan.plan,
+    plan: tenantPlan.plan,
     limits: {
       maxProjects: limits.maxProjects,
       maxOutreachPerMonth: limits.maxOutreachPerMonth,
@@ -68,7 +68,7 @@ billingRouter.get('/me/plan', async (c) => {
   }
 
   if (limits.maxProspects !== null) {
-    const prospectCount = await countUserProspects(db, userId)
+    const prospectCount = await countTenantProspects(db, tenantId)
     result['prospects'] = {
       used: prospectCount,
       remaining: Math.max(0, limits.maxProspects - prospectCount),
@@ -84,7 +84,7 @@ billingRouter.get('/me/plan', async (c) => {
 // ---------------------------------------------------------------------------
 
 billingRouter.post('/me/checkout', async (c) => {
-  const userId = c.get('userId')
+  const userId = c.get('userId') // userId for Stripe client_reference_id (user identity)
   let body: { priceId: string; successUrl?: string; cancelUrl?: string }
   try {
     body = await c.req.json()
@@ -117,7 +117,7 @@ billingRouter.post('/me/checkout', async (c) => {
 // ---------------------------------------------------------------------------
 
 billingRouter.post('/me/portal', async (c) => {
-  const userId = c.get('userId')
+  const tenantId = c.get('tenantId')
   const db = createDb(c.env.DATABASE_URL)
   let body: { returnUrl?: string }
   try {
@@ -126,11 +126,10 @@ billingRouter.post('/me/portal', async (c) => {
     body = {}
   }
 
-  const userPlan = await getUserPlan(db, userId)
   const [row] = await db
-    .select({ stripeCustomerId: userPlans.stripeCustomerId })
-    .from(userPlans)
-    .where(eq(userPlans.userId, userId))
+    .select({ stripeCustomerId: tenantPlans.stripeCustomerId })
+    .from(tenantPlans)
+    .where(eq(tenantPlans.tenantId, tenantId))
     .limit(1)
 
   if (!row?.stripeCustomerId) {
