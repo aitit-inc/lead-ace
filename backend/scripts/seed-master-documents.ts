@@ -1,11 +1,14 @@
 /**
  * Seed master_documents table with content from plugin reference files.
+ * Files were moved to DB in Phase 4.7 and deleted from the repo.
+ * This script reads them from git history (HEAD~1) as a fallback if not on disk.
  *
  * Usage:
  *   DATABASE_URL="postgresql://..." npx tsx scripts/seed-master-documents.ts
  */
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
+import { execSync } from 'node:child_process'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import postgres from 'postgres'
@@ -32,12 +35,22 @@ const documents = [
   { slug: 'tpl_analysis_frameworks', file: 'skills/evaluate/references/analysis-frameworks.md' },
 ]
 
+function readContent(relPath: string): string {
+  const absPath = resolve(PLUGIN_ROOT, relPath)
+  if (existsSync(absPath)) {
+    return readFileSync(absPath, 'utf-8')
+  }
+  // Fallback: read from git history (files deleted in Phase 4.7)
+  const gitPath = `plugin/${relPath}`
+  return execSync(`git show HEAD~1:${gitPath}`, { encoding: 'utf-8', cwd: resolve(__dirname, '../..') })
+}
+
 async function main() {
   const sql = postgres(DATABASE_URL!)
 
   try {
     for (const doc of documents) {
-      const content = readFileSync(resolve(PLUGIN_ROOT, doc.file), 'utf-8')
+      const content = readContent(doc.file)
       await sql`
         INSERT INTO master_documents (slug, content, version, updated_at)
         VALUES (${doc.slug}, ${content}, 1, NOW())

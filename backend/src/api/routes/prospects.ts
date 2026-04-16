@@ -12,6 +12,7 @@ import {
   prospectStatusEnum,
   channelEnum,
 } from '../../db/schema'
+import { getRemainingOutreachQuota, getUserPlan, getPlanLimits, countUserProspects } from '../plan-limits'
 import type { Env, Variables } from '../types'
 import type { SnsAccounts } from '../../db/schema'
 
@@ -73,10 +74,35 @@ prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async 
     return c.json({ error: 'Project not found' }, 404)
   }
 
+  // Free plan: lifetime prospect limit
+  const userPlan = await getUserPlan(db, userId)
+  const limits = getPlanLimits(userPlan.plan)
+
+  let prospectBudget: number | null = null // null = unlimited
+  if (limits.maxProspects !== null) {
+    const currentCount = await countUserProspects(db, userId)
+    prospectBudget = Math.max(0, limits.maxProspects - currentCount)
+    if (prospectBudget === 0) {
+      return c.json({
+        error: 'Prospect registration limit reached',
+        detail: `Your ${userPlan.plan} plan allows ${limits.maxProspects} prospects. Upgrade your plan to register more.`,
+        inserted: 0,
+        skipped: inputs.length,
+        insertedIds: [],
+        skippedDetails: inputs.map((i) => ({ name: i.name, reason: 'plan_limit' })),
+      }, 403)
+    }
+  }
+
   const inserted: number[] = []
   const skipped: Array<{ name: string; reason: string }> = []
 
   for (const input of inputs) {
+    // Check prospect budget (free plan)
+    if (prospectBudget !== null && inserted.length >= prospectBudget) {
+      skipped.push({ name: input.name, reason: 'plan_limit' })
+      continue
+    }
     // Check do_not_contact globally
     const existingByEmail = input.email
       ? await db
@@ -224,6 +250,22 @@ prospectsRouter.get('/projects/:id/prospects/reachable', async (c) => {
     return c.json({ error: 'Project not found' }, 404)
   }
 
+  // Check outreach quota
+  const quota = await getRemainingOutreachQuota(db, userId)
+
+  if (quota.remaining !== null && quota.remaining === 0) {
+    return c.json({
+      prospects: [],
+      total: 0,
+      byChannel: { email: 0, formOnly: 0, snsOnly: 0 },
+      quota: { remaining: 0, limit: quota.limit, used: quota.used, plan: quota.plan },
+      message: `Outreach limit reached (${quota.used}/${quota.limit}). Upgrade your plan to continue.`,
+    })
+  }
+
+  // Cap the query limit to remaining quota
+  const effectiveLimit = quota.remaining !== null ? Math.min(limit, quota.remaining) : limit
+
   // Run prospect query and summary counts in parallel
   const reachableCondition = and(
     eq(projectProspects.projectId, projectId),
@@ -255,7 +297,7 @@ prospectsRouter.get('/projects/:id/prospects/reachable', async (c) => {
       .innerJoin(prospects, eq(prospects.id, projectProspects.prospectId))
       .where(reachableCondition)
       .orderBy(projectProspects.priority, projectProspects.createdAt)
-      .limit(limit),
+      .limit(effectiveLimit),
     db
       .select({
         total: sql<number>`COUNT(*)::int`,
@@ -277,6 +319,12 @@ prospectsRouter.get('/projects/:id/prospects/reachable', async (c) => {
       email: summary.email,
       formOnly: summary.formOnly,
       snsOnly: summary.snsOnly,
+    },
+    quota: {
+      remaining: quota.remaining,
+      limit: quota.limit,
+      used: quota.used,
+      plan: quota.plan,
     },
   })
 })

@@ -3,6 +3,8 @@ export type Env = {
   SUPABASE_JWT_SECRET: string
   SUPABASE_URL: string
   ENVIRONMENT: string
+  STRIPE_SECRET_KEY: string
+  STRIPE_WEBHOOK_SECRET: string
 }
 
 export type Variables = {

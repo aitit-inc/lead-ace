@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { eq, and, desc } from 'drizzle-orm'
 import { createDb } from '../../db/connection'
 import { projects, outreachLogs, projectProspects, channelEnum } from '../../db/schema'
+import { getRemainingOutreachQuota } from '../plan-limits'
 import type { Env, Variables } from '../types'
 
 const recordOutreachSchema = z.object({
@@ -34,6 +35,17 @@ outreachRouter.post('/outreach', zValidator('json', recordOutreachSchema), async
 
   if (!project) {
     return c.json({ error: 'Project not found' }, 404)
+  }
+
+  // Quota guard: reject if outreach limit exceeded (only for successful sends)
+  if (input.status === 'sent') {
+    const quota = await getRemainingOutreachQuota(db, userId)
+    if (quota.remaining !== null && quota.remaining <= 0) {
+      return c.json({
+        error: 'Outreach limit reached',
+        detail: `Your ${quota.plan} plan allows ${quota.limit} outreach actions. Upgrade your plan to continue.`,
+      }, 403)
+    }
   }
 
   const sentAt = input.sentAt ? new Date(input.sentAt) : new Date()

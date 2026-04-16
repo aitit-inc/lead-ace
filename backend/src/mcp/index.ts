@@ -222,11 +222,23 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
         const err = data as { error: string }
         return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
       }
-      const result = data as { prospects: unknown[]; total: number; byChannel: { email: number; formOnly: number; snsOnly: number } }
+      const result = data as {
+        prospects: unknown[]
+        total: number
+        byChannel: { email: number; formOnly: number; snsOnly: number }
+        quota?: { remaining: number | null; limit: number | null; used: number; plan: string }
+        message?: string
+      }
+
+      const quotaLine = result.quota
+        ? `\nOutreach quota: ${result.quota.remaining === null ? 'unlimited' : `${result.quota.remaining} remaining`} (used ${result.quota.used}${result.quota.limit ? `/${result.quota.limit}` : ''}, plan: ${result.quota.plan})`
+        : ''
+      const msgLine = result.message ? `\n⚠️ ${result.message}` : ''
+
       return {
         content: [{
           type: 'text' as const,
-          text: `Total reachable: ${result.total} (email: ${result.byChannel.email}, formOnly: ${result.byChannel.formOnly}, snsOnly: ${result.byChannel.snsOnly})\nReturned: ${result.prospects.length}\n${JSON.stringify(result.prospects, null, 2)}`,
+          text: `Total reachable: ${result.total} (email: ${result.byChannel.email}, formOnly: ${result.byChannel.formOnly}, snsOnly: ${result.byChannel.snsOnly})${quotaLine}${msgLine}\nReturned: ${result.prospects.length}\n${JSON.stringify(result.prospects, null, 2)}`,
         }],
       }
     },

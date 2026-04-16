@@ -654,16 +654,59 @@ master_documents:
 
 ---
 
-## フェーズ5: ライセンス・マネタイズ・デプロイ
+## フェーズ5: サブスクリプション・デプロイ
 
-**目標:** プロジェクト数制限を本番で機能させ、Cloudflare + Supabase 本番環境にデプロイ
+**目標:** Stripe 連携によるプラン管理と、Cloudflare + Supabase 本番環境へのデプロイ
 
-### 5-1. ライセンス管理
+### プラン設計（確定済み）
 
-- [ ] ライセンスキーの発行・検証ロジック（Supabase テーブルで管理）
-- [ ] 無料: 1プロジェクト制限（Web API Server 側で制御）
-- [ ] 有料: プロジェクト数無制限
-- [ ] ソース改変による制限回避への対策方針を決める（ライセンスサーバーによる認証か）
+| | Free (trial) | Starter $29/mo | Pro $79/mo | Scale $199/mo |
+|---|---|---|---|---|
+| プロジェクト数 | 1 | 1 | 5 | Unlimited |
+| Outreach actions | 10 (lifetime) | 1,500/mo | 10,000/mo | Unlimited |
+| Prospect 登録 | 30 (lifetime) | — | — | — |
+| 年額 | — | $290 (17%割引) | $790 | $1,990 |
+
+- Free 制限は lifetime（使い切り）。有料は月間リセット
+- Outreach action = `record_outreach` with `status: "sent"`
+- Self-host: GitHub で無料公開。1プロジェクト、クラウド機能なし（ユーザーが自分で docker-compose で全スタック起動）
+
+### 決済設計（確定済み）
+
+- **Stripe Checkout**: 新規サブスク加入（フロントエンドからリダイレクト、`client_reference_id` に Supabase userId を付与）
+- **Stripe Customer Portal**: アップグレード・ダウングレード・キャンセル（フロントエンドから外部リンク）
+- **Stripe Webhook**: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted` を受信して DB 更新
+- アプリ内に決済 UI は作らない
+
+### クォータ制御（確定済み）
+
+- `get_outbound_targets`: `min(requested, remainingQuota, availableTargets)` を返す。呼び出しのたびに残り枠を再計算（今月の sent 数をカウント）。枠 0 → ターゲット 0 件 + アップグレードメッセージ
+- `record_outreach`: 二重安全ガード（枠超過時は拒否）
+- `add_prospects`: Free プランのみ 30 件 lifetime 上限チェック
+- プロジェクト作成: プラン別のプロジェクト数上限チェック（現行の `FREE_PLAN_PROJECT_LIMIT = 1` を拡張）
+
+### 5-1. サブスクリプション管理
+
+#### DB
+- [ ] `user_plans` テーブル追加（userId, plan, stripeCustomerId, stripeSubscriptionId, currentPeriodStart, currentPeriodEnd）
+- [ ] マイグレーション生成・適用
+
+#### API
+- [ ] `POST /api/stripe/webhook` — Stripe イベント処理（署名検証 + DB 更新）
+- [ ] `GET /api/me/plan` — 現在のプラン情報取得（フロントエンド用）
+- [ ] `POST /api/me/checkout` — Stripe Checkout Session 作成（price_id + userId）
+- [ ] `POST /api/me/portal` — Stripe Customer Portal Session 作成
+- [ ] プロジェクト作成のプラン別制限（現行ハードコードを user_plans 参照に変更）
+- [ ] `get_outbound_targets` にクォータチェック追加（Free: lifetime sent ≤ 10、有料: 当月 sent ≤ プラン上限）
+- [ ] `record_outreach` にクォータガード追加
+- [ ] `add_prospects` に Free プラン 30 件上限チェック追加
+
+#### MCP
+- [ ] `get_outbound_targets` レスポンスに `remainingQuota` フィールド追加
+
+#### フロントエンド
+- [ ] Settings ページにプラン表示 + "Upgrade" ボタン（→ Checkout）+ "Manage subscription" ボタン（→ Customer Portal）
+- [ ] クォータ残量表示（ダッシュボードまたはサイドバー）
 
 ### 5-2. セルフデプロイ対応
 
@@ -673,20 +716,24 @@ master_documents:
 
 ### 5-3. Cloudflare 本番デプロイ
 
+- [ ] Stripe アカウントセットアップ（Products × 3、Prices × 6 (月額+年額)、Customer Portal 設定、Webhook Endpoint 登録）
 - [ ] `wrangler deploy` で Web API / MCP Server を Cloudflare にデプロイ
 - [ ] Cloudflare Pages でフロントエンドをデプロイ
-- [ ] Supabase 本番プロジェクトのセットアップ（Auth, RLS設定）
+- [ ] Supabase 本番プロジェクトのセットアップ（Auth, RLS 設定）
 - [ ] カスタムドメイン設定（`api.leadace.surpassone.com`, `mcp.leadace.surpassone.com`）
+- [ ] Stripe Webhook URL を本番 API に設定
 
 ### レビュー
 
 **できていること（確認必須）:**
-- [ ] 本番 URL（Cloudflare Workers）で Web API が動作する
-- [ ] 本番 URL（Cloudflare Workers）で MCP Server が動作する
+- [ ] 本番 URL で Web API / MCP Server が動作する
 - [ ] Claude Code から本番 MCP Server に接続してスキルが動作する
-- [ ] 無料プランで2プロジェクト作成しようとするとエラーになる
-- [ ] 有料ライセンスキーで2プロジェクト以上作成できる
-- [ ] `docker compose up` でローカル全スタックが起動し、ローカル MCP に繋いだスキルが全て動作する
+- [ ] Free ユーザーが /strategy → /build-list(30件) → /outbound(10件sent) のトライアルフローを完走できる
+- [ ] Free ユーザーが outreach 10 件超過時に `get_outbound_targets` がアップグレードメッセージを返す
+- [ ] Stripe Checkout → webhook → DB 更新 → プラン反映が動作する
+- [ ] Starter/Pro/Scale で正しいプロジェクト数・outreach 上限が適用される
+- [ ] Stripe Customer Portal からアップグレード・ダウングレード・キャンセルが動作する
+- [ ] `docker compose up` でセルフホスト版が起動する
 
 **まだできていなくて良いこと:**
 - Cloudflare Queues 経由の非同期ジョブ（build-list の完全非同期化）は後回しでも良い
@@ -748,10 +795,15 @@ master_documents:
 
 | 事項 | 状況 |
 |---|---|
-| 有料ライセンスの価格・プラン設計 | 未決 |
-| セルフデプロイユーザーへのライセンス管理方法 | 未決（ライセンスサーバー認証 vs ソース改変禁止のみ） |
-| MCP Server の認証方式 | APIキー vs Supabase Auth JWT |
-| フロントエンドのフレームワーク | **SvelteKit** に決定（フェーズ4で実装済み）|
-| `lead-ace-doctor` の移行方針 | Python `query_db.py` 維持 vs 管理用 API エンドポイント化 |
 | Cloud Scheduled Tasks（Claude Code Web版）との統合タイミング | フェーズ3以降 |
 | build-list の Cloudflare Queues 非同期化 | フェーズ5以降（Web探索は重い処理なので将来的には非同期化したい）|
+
+### 解決済み
+
+| 事項 | 決定 |
+|---|---|
+| 有料ライセンスの価格・プラン設計 | Starter $29/mo, Pro $79/mo, Scale $199/mo（フェーズ5で確定）|
+| セルフデプロイユーザーへのライセンス管理方法 | API サーバー側制御のみ。セルフホストは無料（1プロジェクト、クラウド機能なし）|
+| MCP Server の認証方式 | Supabase Auth JWT（フェーズ2-4で実装済み）|
+| フロントエンドのフレームワーク | SvelteKit（フェーズ4で実装済み）|
+| `lead-ace-doctor` の移行方針 | 廃止（Drizzle Studio で代替、フェーズ3で実施済み）|

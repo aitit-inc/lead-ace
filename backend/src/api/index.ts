@@ -8,6 +8,8 @@ import { responsesRouter } from './routes/responses'
 import { evaluationsRouter } from './routes/evaluations'
 import { documentsRouter } from './routes/documents'
 import { masterDocumentsRouter } from './routes/master-documents'
+import { billingRouter } from './routes/billing'
+import { stripeWebhookRouter } from './routes/stripe-webhook'
 import type { Env, Variables } from './types'
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>()
@@ -15,6 +17,9 @@ const app = new Hono<{ Bindings: Env; Variables: Variables }>()
 app.use('*', cors())
 
 app.get('/health', (c) => c.json({ ok: true }))
+
+// Stripe webhook — no auth middleware (uses Stripe signature verification)
+app.route('/api', stripeWebhookRouter)
 
 // All routes below require authentication
 app.use('/api/*', authMiddleware)
@@ -26,6 +31,7 @@ app.route('/api', responsesRouter)
 app.route('/api', evaluationsRouter)
 app.route('/api', documentsRouter)
 app.route('/api', masterDocumentsRouter)
+app.route('/api', billingRouter)
 
 app.onError((err, c) => {
   console.error(err)

@@ -42,6 +42,22 @@ Clearly separate what the LLM should handle from what MCP tools handle.
 
 **Principle:** Data operations go through MCP tools (the server handles validation, deduplication, and status management). Local actions stay local. The LLM focuses on judgment and generation.
 
+## Plan Tiers & Limits
+
+Subscription is managed via Stripe. The API enforces limits based on user plan.
+
+| | Free (trial) | Starter $29/mo | Pro $79/mo | Scale $199/mo |
+|---|---|---|---|---|
+| Projects | 1 | 1 | 5 | Unlimited |
+| Outreach actions | 10 (lifetime) | 1,500/mo | 10,000/mo | Unlimited |
+| Prospect registration | 30 (lifetime) | — | — | — |
+
+- **Free limits are lifetime** (one-time trial, not monthly reset). Paid limits reset monthly.
+- **Outreach actions** = `record_outreach` with `status: "sent"`. Failed attempts do not count.
+- **Quota enforcement**: `get_outbound_targets` returns `min(requested, remainingQuota, availableTargets)`. When quota is 0, returns empty list with upgrade message. `record_outreach` also guards as a safety net.
+- **Billing**: Stripe Checkout for new subscriptions, Stripe Customer Portal for upgrades/downgrades/cancellation. No billing UI in our app.
+- **Self-host**: Free on GitHub, 1 project, no cloud features (user runs their own backend via docker-compose).
+
 ## Development Rules
 
 - Use `${CLAUDE_PLUGIN_ROOT}` for path references; do not hard-code paths (`${CLAUDE_PLUGIN_ROOT}` points to `plugin/`)

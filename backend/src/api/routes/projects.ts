@@ -4,9 +4,8 @@ import { z } from 'zod'
 import { eq, and, count } from 'drizzle-orm'
 import { createDb } from '../../db/connection'
 import { projects } from '../../db/schema'
+import { getUserPlan, getPlanLimits } from '../plan-limits'
 import type { Env, Variables } from '../types'
-
-const FREE_PLAN_PROJECT_LIMIT = 1
 
 const createProjectSchema = z.object({
   id: z.string().min(1).max(100).regex(/^[a-zA-Z0-9_-]+$/, 'ID must be alphanumeric with _ or -'),
@@ -48,20 +47,25 @@ projectsRouter.post('/', zValidator('json', createProjectSchema), async (c) => {
     return c.json({ error: 'Project ID already exists' }, 409)
   }
 
-  // Free plan: limit to 1 project per user
-  const [userProjectCount] = await db
-    .select({ count: count() })
-    .from(projects)
-    .where(eq(projects.userId, userId))
+  // Check project limit based on user plan
+  const userPlan = await getUserPlan(db, userId)
+  const limits = getPlanLimits(userPlan.plan)
 
-  if ((userProjectCount?.count ?? 0) >= FREE_PLAN_PROJECT_LIMIT) {
-    return c.json(
-      {
-        error: 'Project limit reached',
-        detail: `Free plan allows ${FREE_PLAN_PROJECT_LIMIT} project. Delete the existing project or upgrade your plan.`,
-      },
-      403,
-    )
+  if (limits.maxProjects !== null) {
+    const [userProjectCount] = await db
+      .select({ count: count() })
+      .from(projects)
+      .where(eq(projects.userId, userId))
+
+    if ((userProjectCount?.count ?? 0) >= limits.maxProjects) {
+      return c.json(
+        {
+          error: 'Project limit reached',
+          detail: `Your ${userPlan.plan} plan allows ${limits.maxProjects} project(s). Delete an existing project or upgrade your plan.`,
+        },
+        403,
+      )
+    }
   }
 
   const now = new Date()

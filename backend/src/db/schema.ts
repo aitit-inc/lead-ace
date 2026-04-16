@@ -211,6 +211,19 @@ export const projectDocuments = pgTable('project_documents', {
   index('idx_doc_latest').on(table.projectId, table.slug, table.createdAt),
 ])
 
+export const planEnum = pgEnum('plan', ['free', 'starter', 'pro', 'scale'])
+
+export const userPlans = pgTable('user_plans', {
+  userId: text('user_id').primaryKey(), // Supabase auth.users.id
+  plan: planEnum('plan').notNull().default('free'),
+  stripeCustomerId: text('stripe_customer_id'),
+  stripeSubscriptionId: text('stripe_subscription_id'),
+  currentPeriodStart: timestamp('current_period_start', { withTimezone: true }),
+  currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
 export const masterDocuments = pgTable('master_documents', {
   id: integer('id').generatedAlwaysAsIdentity().primaryKey(),
   slug: text('slug').notNull().unique(), // "tpl_business", "tpl_email_guidelines", etc.
