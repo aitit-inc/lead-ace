@@ -2,50 +2,41 @@
 
 アーキテクチャ設計: [large_update_infra_arch.md](./large_update_infra_arch.md)
 
-## 現状整理（2026-04-17 セッション終了時点）
+## 現状整理（2026-04-18 セッション終了時点）
 
-### 直近状況
+### 本番稼働状況
 
-- **コード完了 / 未 push**: 15 コミットがローカル main にあり、`origin/main` には未反映。
-  最新: `3dca556 docs: mark Phase 5-2/5-4a/5-4c/5-4d as complete in task list`
-- **本番 `app.leadace.ai` は古いスナップショット**: 初回手動デプロイ以降更新されていないため、
-  5-1c〜5-4d で追加した UI/API 変更（Sign-up トグル / RLS / KV OAuth 等）は反映されていない
-- **GitHub Actions は構築済みだが稼働していない**: ワークフロー YAML 自体が未 push の
-  コミットに入っており、default branch に存在しない。Secrets / Variables も空
-- **検証タスクは本番反映後に実施**: ブラウザでのスモークテスト手順は整理済み（§5-3 §8）
+| エンドポイント | 状態 |
+|---|---|
+| `https://app.leadace.ai` | ✓ フロント（SPA: Sign-up / Login / Settings / Prospects …） |
+| `https://api.leadace.ai` | ✓ Web API Worker |
+| `https://mcp.leadace.ai` | ✓ MCP Worker（OAuth 2.1 + KV バック） |
+| `https://leadace.ai` (apex) | ❌ Cloudflare 404（5-4e で対応予定） |
 
-### 次にやること（再開時チェックリスト）
+- **CI/CD**: `main` への push 毎に `check.yml` + `deploy.yml` が走り、API / MCP Worker と Pages を自動デプロイ
+- **Stripe**: test mode で Products × 3 / Prices × 6 / Customer Portal / Webhook endpoint 稼働。Checkout → webhook → tenant_plans 更新 → UI 反映まで通しで動作確認済み
+- **Supabase 本番**（`chaxrcdtxngoyqvtoyem`）: migration + master_documents seed 適用済み。RLS 稼働
 
-1. [x] **Cloudflare API Token 発行**（2026-04-18）
-2. [x] **GitHub Secrets / Variables 登録**（9 Variables + 2 Secrets、2026-04-18）
-3. [x] **`git push origin main`** → 初回 CI で 3 つの問題が出たが修正済み:
-       - `1e752fe` macOS lockfile に optional dep 補完 / `8d9ca01` Docker で Linux 版 lockfile 再生成
-       - `1f98ea5` Pages wrangler から未サポート `account_id` を除去
-4. [x] デプロイ完了後、§8 ブラウザ検証実施（Stripe test-mode Checkout / webhook / Portal）
-       - 検証中に見つかった本番バグ 2 件を `dfaa256` で修正（`success_url` パースが `api.leadace.ai` で壊れる / `sql` template に Date を直渡しして driver が拒否）
-       - UX 改善 `3fc760e`（bfcache 復帰時のボタン固着 / checkout 成功後の plan ポーリング / paid プランの文言）
-5. [ ] 次の外部作業: 5-4f（Stripe live 移行）・5-4g（認証メールドメイン）・5-4e（apex LP）
+### 2026-04-18 セッションでやったこと
 
-### 今セッションで完了済み（コード）
+1. **CI/CD 有効化** — Cloudflare API Token 発行・GitHub Secrets × 2 + Variables × 9 登録・main に push して自動デプロイ稼働
+2. **CI の初期問題を解消**
+   - `1e752fe` / `8d9ca01`: `frontend/package-lock.json` が macOS 生成だと Linux CI の `npm ci` が通らない問題を Docker (node:22-slim) でロック生成し直して解消。運用手順は `frontend/README.md` に追記（`1c4079f`）
+   - `1f98ea5`: Pages の wrangler 設定に `account_id` を書くと Pages deploy が弾くため削除（env var 経由で渡す）
+3. **本番動作検証中に発覚した 2 つのバグ修正** — `dfaa256`
+   - Stripe Checkout の `success_url` フォールバックが `c.req.url.split('/api')[0]` を使っており、`api.leadace.ai` 自体が "/api" を含むため `https:/` に退化 → 結果 `https://settings/?checkout=success` にリダイレクトされて死ぬ。`Origin` ヘッダから組み立てるよう修正（frontend からも明示的に渡す）
+   - `/api/me/plan` が 500（postgres.js が Date を bind param として拒否）。`drizzle` の `sql` 直渡しを `gte(outreachLogs.sentAt, currentPeriodStart)` に置換
+4. **Settings UX 改善** — `3fc760e`
+   - bfcache 復帰時に `portalLoading` / `checkoutLoading` が true のまま残りボタン固着 → `pageshow` でリセット
+   - Checkout 成功後、webhook 到達前に plan store が読み込まれるため、`/settings?checkout=success` 到達時は plan が変化するまで最大 12 秒ポーリング
+   - Paid ユーザーに「Change plan, update payment, view invoices, or cancel via the Stripe Customer Portal」と明示
 
-| フェーズ | 内容 | コミット |
-|---|---|---|
-| 5-1c | RLS ポリシー + `app_rls` ロール + rlsMiddleware + 全ルートを `c.get('db')` 化 | `75a025c` |
-| 5-1d | schema review: projects.name / prospects 連絡先必須 / unreachable 削除 / orgs カラム整理 | `75a025c` |
-| 5-1e | MCP resolveProjectId（name/id 双方対応）+ プラグイン SKILL の整合性修正 | `75a025c` |
-| 5-1 FE | Settings プラン表示 + サイドバークォータ + Upgrade/Portal ボタン | `1cc5a37` |
-| 5-3 コード | wrangler env.production / GitHub workflows / setup-stripe.ts / create-test-users.ts / deploy.md | `ac9f9d9` |
-| 5-4a | Sign-up トグル + `/auth/callback` + `/forgot-password` + `/reset-password` + onboarding 空状態 | `1463c43` |
-| 5-4b | MCP OAuth を Cloudflare KV に移行（namespace `78e184bebfde4e35a2261b2957067586`） | `2060272` |
-| 5-4c | Plugin README に MCP 接続手順 + `.mcp.json` を `${LEADACE_MCP_URL}` 化 | `ea5c384` |
-| 5-4d | `/terms` + `/privacy` + サイドバーフッターリンク | `ea3dd31` |
-| 5-2 | Self-host ガイド + 環境変数マトリクス | `b6b261f` |
-| 付随 | Project.name 反映 / ProjectCreateDialog / stale `unreachable` 掃除 | `0cfe127` |
+### 次セッション開始時にやること
 
-### 最後に判明した課題
-
-ブラウザで "Create an account" トグルが出ない → 本番デプロイが未更新。CI 未稼働が原因。
-B パス（CI/CD 有効化）を先に完了させてから push する方針に決定。
+1. **5-4e: apex `leadace.ai` へ既存 LP を移設** — 下記参照
+2. **5-4g: 認証メールのカスタム送信ドメイン** — Supabase デフォ `noreply@mail.supabase.io` を `noreply@leadace.ai` 系に
+3. **5-4f: Stripe test → live 移行** — 実カード収集に必須
+4. その他の UX 改善（5-4i〜5-4l は順序自由）
 
 ---
 
@@ -939,12 +930,38 @@ Stripe live 申請に必須。Customer Portal にも URL 登録必要。
 - [ ] 特定商取引法に基づく表示（日本向け必要なら）— 法務判断
 - [ ] Stripe Dashboard → Customer Portal → Business information にこれらの URL を設定 — 手動
 
-### 5-4e. apex `leadace.ai` の LP or redirect
+### 5-4e. apex `leadace.ai` に既存 LP を移設
 
-現状 Cloudflare の 404 ページ。最低限のブランド表示 or `app.leadace.ai` への redirect を用意。
+既存 LP 実体: `/Users/leo/work/so/business-autopilot/projects/small-business/leadace/site/`
+（リポジトリ `aitit-inc/business-autopilot` 内 / 静的 HTML + CSS + 画像）
+現状公開先: `https://leadace.surpassone.com`
+ファイル構成: `index.html` / `legal.html` / `privacy.html` / `setup-guide.html` / `templates.html` / `tutorial.html` / `thanks.html` / `X_profile_banner.png`
 
-- [ ] 最小実装: Cloudflare の Bulk Redirect で `leadace.ai` → `https://app.leadace.ai` に 302（数分で完了）
-- [ ] 本格的に LP を作る場合: Cloudflare Pages で landing プロジェクト作成、アクセント `#D06A57` + Inter フォントで統一感
+#### リポジトリ戦略の判断
+
+LP をどこから配信するか決める:
+
+| 案 | 内容 | メリット | デメリット |
+|---|---|---|---|
+| A | `aitit-inc/business-autopilot` のまま Pages に接続 | 既存 Git 履歴を保つ / 引っ越し不要 | レポジトリが複数サービスの雑居（将来的に整理が必要） |
+| B | `aitit-inc/lead-ace` の新ディレクトリ（例: `landing/`）に移設 | LP と app を一緒に扱える / CI/CD 同一 | 既存コミット履歴は残らない |
+
+推奨: **B**（将来 `leadace.ai` = Lead Ace 専用リポで完結させる）。LP の更新頻度は低いので、Pages の別プロジェクトとして `landing/` をビルド出力ディレクトリに指定するだけで済む。
+
+#### LP 側の修正（移設前に同時に）
+
+- [ ] `index.html` の CTA 3 箇所（`href="#"` で止まっている `Get Pro` / `Get Scale` / `Get started`）を `https://app.leadace.ai/login?signup=1` に差し替え（または `#pricing` セクションへの scroll-to → `app.leadace.ai` への外部遷移）
+- [ ] ヘッダー右上に **Login** ボタン追加 → `https://app.leadace.ai/login`
+- [ ] `nav-cta` の `Get LeadAce` や `from $29/mo` リンクも `app.leadace.ai/login?signup=1` に統一
+- [ ] `privacy.html` / `legal.html` が app 側の `/privacy` / `/terms` と内容乖離していないか確認・統合 or 片寄せ
+
+#### Cloudflare Pages 設定
+
+- [ ] 新 Pages プロジェクト作成（root or `landing/` ディレクトリを `pages_build_output_dir` に指定、ビルドコマンドなし・静的ファイルのみ）
+- [ ] カスタムドメイン `leadace.ai`（apex）を割り当て
+- [ ] DNS: apex → CNAME flattening（Cloudflare は自動対応）
+- [ ] `www.leadace.ai` → `leadace.ai` に 301（任意）
+- [ ] 既存の `leadace.surpassone.com` は retired 案内を出すか、`leadace.ai` へ 301 で移す
 
 ### 5-4f. Stripe live 移行チェックリスト
 
@@ -959,13 +976,79 @@ test mode での動作確認完了後：
 - [ ] 実カードで Checkout → 直後に refund、webhook でプラン反映とロールバック確認
 - [ ] test mode のリソースは参考保持 or 削除
 
-### 5-4g. メール送信ドメイン設定
+### 5-4g. 認証メールの送信ドメイン + 本文改善
 
-Supabase のデフォルト送信元だとスパム判定されやすく、Sign-up / Password reset メールが届かない可能性。
+現状: Supabase Auth のデフォルト送信元 `noreply@mail.supabase.io` で、かつ Supabase テンプレート英語のまま。
+目標: 自前ドメイン + Lead Ace のトーン・内容に合わせたメール文面。
 
-- [ ] カスタム SMTP 設定（Resend / SendGrid 等）
-- [ ] `auth@leadace.ai` 等の送信元アドレスで SPF / DKIM / DMARC 設定
-- [ ] Supabase Auth → Email Templates を送信元ドメインに合わせて更新
+#### 送信ドメイン移行
+
+- [ ] メール送信サービス選定（候補: Resend / SendGrid / Amazon SES。Resend が Developer DX 良好・無料枠あり）
+- [ ] Cloudflare DNS に SPF / DKIM / DMARC レコード追加
+- [ ] 送信元アドレス確定: `noreply@leadace.ai` or `auth@leadace.ai`（返信不要なら `noreply`、返信受け付けなら `hello@` など別途用意）
+- [ ] Supabase → Project Settings → Auth → SMTP Settings にカスタム SMTP 情報を入力
+- [ ] 実際に Sign-up して届くか、スパム判定されないかを Gmail / Outlook で確認
+
+#### メール本文改善（Supabase Auth → Email Templates）
+
+Supabase が送る以下のテンプレートを日本語 or 丁寧な英語で Lead Ace のブランドに合わせる:
+
+- [ ] Confirm signup（サインアップ確認）
+- [ ] Magic Link（使う場合のみ）
+- [ ] Change Email（メールアドレス変更）
+- [ ] Reset Password（パスワード再設定）
+- [ ] Invite User（現状は使わない想定なら skip）
+
+ポイント:
+- 件名を短く・意図が分かる文言に（"Confirm your Lead Ace account" など）
+- 本文は 2〜3 段落程度。リンククリック前に「何をしようとしているか」が分かる
+- フッターに会社名（SurpassOne Inc.）・サポート連絡先・ unsubscribe 相当の案内（確認メール類では不要だがブランド方針次第）
+- テンプレートに使える変数: `{{ .ConfirmationURL }}` / `{{ .Email }}` / `{{ .SiteURL }}` 等（Supabase docs 参照）
+
+### 5-4i. 最低限のレスポンシブ対応
+
+現状 `app.leadace.ai` は完全デスクトップ前提（サイドバー固定幅 `w-48` / flex row / table レイアウト多め）。タブレット以下で破綻。
+
+- [ ] サイドバーをモバイルでドロワー化（ハンバーガーボタン + オーバーレイ）
+- [ ] Settings / Prospects / Outreach / Responses のテーブルを狭幅でカード表示 or 横スクロール許容
+- [ ] タッチターゲットの最低 44px 確保（buttons / links）
+- [ ] `/login` / `/signup` / `/auth/callback` / `/forgot-password` / `/reset-password` を mobile-first で整える（最優先 — 初回接触がモバイル率高い）
+- [ ] `/terms` / `/privacy` のリーダブル幅調整
+
+観測範囲: 少なくとも 375px（iPhone SE 相当）で全ページ機能する。
+
+### 5-4j. ライト / ダークモード対応
+
+現状は暖色ベースのライトテーマ単一（`bg: #F6EEE6` / `text: #333` / `accent: #D06A57`）。システム prefers-color-scheme に追従 + 手動トグルを入れる。
+
+- [ ] Tailwind v4 の CSS variable ベーステーマに移行（`@theme` + `.dark` セレクタ）
+- [ ] 全コンポーネントで `bg-white` / `text-gray-*` 等の固定色を semantic token（`bg-surface` / `text-text` 等）に置換
+- [ ] ダークパレット設計: 背景 `#1A1A1A` 系、テキスト `#E8E8E8`、アクセントは同じ `#D06A57` を濃度調整
+- [ ] ナビ下部 or Settings にテーマトグル（`system / light / dark` の 3 択）
+- [ ] localStorage に選択を保存 / 初期値は system
+
+### 5-4k. デザイン刷新（色 / タイポ / 全体トーン）
+
+現行パレット（`#D06A57` / `#333` / `#F6EEE6`）はウォーム系で柔らかいが、「自律営業 AI」というプロダクトの Positioning とやや乖離（業務ツール感が薄い）。デザイン系統の見直し。
+
+- [ ] ブランドムードボード作成（参考: Linear / Vercel / Raycast / Attio 等 — 競合でも近接でもない "モダン SaaS" の質感）
+- [ ] カラーパレット刷新の試作（現行と並行で見比べられる形で）。候補:
+  - ニュートラル + 単色アクセント（例: 黒白グレー + 1 色の強アクセント）
+  - 低彩度寒色ベース（信頼感・業務ツール感）
+- [ ] タイポ再考: 現行 Inter + JetBrains Mono。もう一段階個性の出る serif 見出しや、geometric sans も選択肢
+- [ ] 主要 5 ページ（Login / Prospects / Outreach / Responses / Settings）の Before/After 比較
+- [ ] 決定した方針で全ページ反映（5-4j のテーマトークンと連動）
+
+### 5-4l. Google Sign-in 追加
+
+現状は Email + Password のみ。オンボーディング摩擦を減らすために Google を追加。
+
+- [ ] Supabase Dashboard → Authentication → Providers → Google を有効化
+- [ ] Google Cloud Console で OAuth client 作成（Authorized redirect URI: `https://<project-ref>.supabase.co/auth/v1/callback`）
+- [ ] `/login` ページに "Continue with Google" ボタン追加（Supabase SDK `signInWithOAuth`）
+- [ ] `/auth/callback` ルート既存ロジックが OAuth return にも対応しているか確認（PKCE フロー）
+- [ ] Sign-up トグルとの並び順設計（Google を最上部に置くのが一般的）
+- [ ] 既存 Email アカウントと同メアド Google ログインが来たときの account linking 挙動を確認（Supabase のデフォルト動作 or 明示設定）
 
 ### 5-4h. エラー監視・オブザーバビリティ
 
@@ -1032,30 +1115,41 @@ Supabase のデフォルト送信元だとスパム判定されやすく、Sign-
     ↓
 フェーズ5-1 レビュー（テナント分離・クォータ・MCP 動作確認）✅ 完了
     ↓
-フェーズ5-3（Cloudflare 本番デプロイ）⏳ 進行中
+フェーズ5-3（Cloudflare 本番デプロイ + CI/CD）✅ 完了
     - コード側準備 ✅
     - Supabase prod + Stripe test + Cloudflare zone + secrets + 初回デプロイ ✅
-    - 残: 本番動作検証、CI/CD 有効化
+    - CI/CD 有効化（Cloudflare Token + GitHub Secrets/Variables + push）✅
+    - §8 本番動作検証（Stripe test-mode Checkout / webhook / Portal）✅
     ↓
 フェーズ5-4（MVP 公開前の仕上げ）
-    - 5-4a Sign-up / Password reset / Email callback ✅ コード完了
-    - 5-4b MCP OAuth の KV 移行 ✅ コード完了（本番疎通確認は残）
+    - 5-4a Sign-up / Password reset / Email callback ✅
+    - 5-4b MCP OAuth の KV 移行 ✅
     - 5-4c MCP 接続ユーザードキュメント ✅
     - 5-4d 法的ドキュメント（ToS / Privacy） ✅ コード完了（Stripe Portal 登録は手動）
-    - 5-4e apex leadace.ai LP or redirect ⏳ 手動（Bulk Redirect or Pages 新規プロジェクト）
+    - 5-4e apex leadace.ai に既存 LP 移設（B&A 判断 → LP 修正 → Pages 設定）⏳
     - 5-4f Stripe test → live 移行 ⏳ 手動
-    - 5-4g 認証メールのカスタムドメイン ⏳ 手動（Resend/SendGrid + DNS）
+    - 5-4g 認証メールの送信ドメイン + 本文改善 ⏳ 手動（Resend/SendGrid + DNS + テンプレ書き直し）
     - 5-4h エラー監視 ⏳ 任意
+    - 5-4i 最低限のレスポンシブ対応 ⏳ コード
+    - 5-4j ライト/ダークモード対応 ⏳ コード
+    - 5-4k デザイン刷新（色・タイポ） ⏳ デザイン判断 + 実装
+    - 5-4l Google Sign-in 追加 ⏳ コード + Google Cloud Console
     ↓
 フェーズ5-2（セルフデプロイ対応・ドキュメント）✅ コード完了
     - self-host.md + env vars matrix ✅
     ↓
-★ 現在地 ★ = CI/CD 有効化 → push → 本番デプロイ → §8 検証
-    ↓ （5-3 の "CI/CD 有効化手順" を参照）
-手動検証 + 外部サービス手作業（5-4e / 5-4f / 5-4g / 5-4h）
+★ 現在地 ★ = Phase 5-4 残タスク群（優先度推奨: 5-4e → 5-4g → 5-4f → 5-4i → 5-4l → 5-4j → 5-4k → 5-4h）
     ↓
 フェーズ6（リリース・移行）→ フェーズ6 レビュー
 ```
+
+**優先度の考え方:**
+- 対外的に恥ずかしい（`leadace.ai` 404・スパム箱行きメール）は先に潰す → 5-4e / 5-4g
+- 決済を live にしないと収益が立たない → 5-4f
+- 外部流入の初回接触はモバイル率が高い → 5-4i を早めに
+- Google Sign-in は摩擦削減効果が大きく実装コスト小 → 5-4l
+- ダーク・デザイン刷新は大きな手戻りを避けて 5-4j 先、5-4k 後
+- エラー監視は外部公開規模が見えてから → 5-4h
 
 ---
 
