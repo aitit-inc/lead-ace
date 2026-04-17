@@ -937,31 +937,29 @@ Stripe live 申請に必須。Customer Portal にも URL 登録必要。
 現状公開先: `https://leadace.surpassone.com`
 ファイル構成: `index.html` / `legal.html` / `privacy.html` / `setup-guide.html` / `templates.html` / `tutorial.html` / `thanks.html` / `X_profile_banner.png`
 
-#### リポジトリ戦略の判断
+#### リポジトリ戦略
 
-LP をどこから配信するか決める:
+採用: **B** — `lead-ace/landing/public/` に index.html を配置、別 Pages プロジェクト `lead-ace-landing` として配信。旧 `aitit-inc/business-autopilot/projects/small-business/leadace/site/` は今回の commit をもって役目を終える（必要なら後日 archive）。
 
-| 案 | 内容 | メリット | デメリット |
-|---|---|---|---|
-| A | `aitit-inc/business-autopilot` のまま Pages に接続 | 既存 Git 履歴を保つ / 引っ越し不要 | レポジトリが複数サービスの雑居（将来的に整理が必要） |
-| B | `aitit-inc/lead-ace` の新ディレクトリ（例: `landing/`）に移設 | LP と app を一緒に扱える / CI/CD 同一 | 既存コミット履歴は残らない |
+#### 移設 / LP 側の修正 ✅ 完了（コード側）
 
-推奨: **B**（将来 `leadace.ai` = Lead Ace 専用リポで完結させる）。LP の更新頻度は低いので、Pages の別プロジェクトとして `landing/` をビルド出力ディレクトリに指定するだけで済む。
+- [x] `index.html` のみ `landing/public/index.html` にコピー。`legal.html`（旧商品モデル: ワークショップ 14.8 万円等）、`privacy.html`（app 側より情報量不足）、`setup-guide.html` / `tutorial.html` / `thanks.html` / `templates.html`（全て旧販売フロー・index からリンクされていない孤児）、`X_profile_banner.png`（未参照）は破棄
+- [x] `index.html` の CTA 3 箇所（`Get started` / `Get Pro` / `Get Scale`）を `https://app.leadace.ai/login?signup=1` に差し替え
+- [x] ヘッダー右上に **Login** リンク追加 → `https://app.leadace.ai/login`
+- [x] `nav-cta` の `Get LeadAce` / hero の `from $29/mo` も `app.leadace.ai/login?signup=1` に統一
+- [x] footer に **Terms** リンク追加 + **Privacy** を `/privacy.html` → `https://app.leadace.ai/privacy` に差し替え（app 側が authoritative。LP に privacy.html は残さない）
+- [x] OG URL を `leadace.surpassone.com` → `leadace.ai` に変更
+- 特定商取引法に基づく表記は別タスク（5-4d 残）として保留。現 LP の `legal.html` は旧商品ベースで内容が commit に値しないため破棄
 
-#### LP 側の修正（移設前に同時に）
+#### Cloudflare Pages 設定 — コード側完了・Dashboard 作業残り
 
-- [ ] `index.html` の CTA 3 箇所（`href="#"` で止まっている `Get Pro` / `Get Scale` / `Get started`）を `https://app.leadace.ai/login?signup=1` に差し替え（または `#pricing` セクションへの scroll-to → `app.leadace.ai` への外部遷移）
-- [ ] ヘッダー右上に **Login** ボタン追加 → `https://app.leadace.ai/login`
-- [ ] `nav-cta` の `Get LeadAce` や `from $29/mo` リンクも `app.leadace.ai/login?signup=1` に統一
-- [ ] `privacy.html` / `legal.html` が app 側の `/privacy` / `/terms` と内容乖離していないか確認・統合 or 片寄せ
-
-#### Cloudflare Pages 設定
-
-- [ ] 新 Pages プロジェクト作成（root or `landing/` ディレクトリを `pages_build_output_dir` に指定、ビルドコマンドなし・静的ファイルのみ）
-- [ ] カスタムドメイン `leadace.ai`（apex）を割り当て
-- [ ] DNS: apex → CNAME flattening（Cloudflare は自動対応）
-- [ ] `www.leadace.ai` → `leadace.ai` に 301（任意）
-- [ ] 既存の `leadace.surpassone.com` は retired 案内を出すか、`leadace.ai` へ 301 で移す
+- [x] `landing/wrangler.jsonc` (`name: lead-ace-landing`, `pages_build_output_dir: public`) + `landing/README.md` 追加
+- [x] `.github/workflows/deploy.yml` に `deploy-landing` ジョブ追加（build なし、`wrangler pages deploy --branch main`）
+- [x] `plugin/docs/deploy.md` §5-3 に Landing Page セクション追加
+- [ ] Cloudflare Dashboard → Pages で `lead-ace-landing` プロジェクト作成（初回 `wrangler pages deploy` 実行時に自動作成される可能性あり。空プロジェクトを先に作っておいても良い）
+- [ ] 同プロジェクトに Custom domain `leadace.ai`（apex）を割り当て（Cloudflare が CNAME flattening で自動対応）
+- [ ] `www.leadace.ai` → `leadace.ai` の 301（任意）を Page Rule or Bulk Redirect で設定
+- [ ] 既存 `leadace.surpassone.com` を retire（公開停止 or `https://leadace.ai` へ 301）
 
 ### 5-4f. Stripe live 移行チェックリスト
 
@@ -1126,7 +1124,7 @@ Supabase が送る以下のテンプレートを日本語 or 丁寧な英語で 
     - 5-4b MCP OAuth の KV 移行 ✅
     - 5-4c MCP 接続ユーザードキュメント ✅
     - 5-4d 法的ドキュメント（ToS / Privacy） ✅ コード完了（Stripe Portal 登録は手動）
-    - 5-4e apex leadace.ai に既存 LP 移設（B&A 判断 → LP 修正 → Pages 設定）⏳
+    - 5-4e apex leadace.ai に既存 LP 移設: 戦略B採用・landing/public/index.html 配置・CTA/Login 修正・deploy.yml ジョブ追加完了 ⏳ Cloudflare Dashboard 作業 + surpassone 旧 LP retire 残り
     - 5-4f Stripe test → live 移行 ⏳ 手動
     - 5-4g 認証メールの送信ドメイン + 本文改善 ⏳ 手動（Resend/SendGrid + DNS + テンプレ書き直し）
     - 5-4h エラー監視 ⏳ 任意

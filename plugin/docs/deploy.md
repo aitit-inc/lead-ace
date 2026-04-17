@@ -8,7 +8,7 @@
 |---|---|
 | Cloudflare アカウント | `Leo.uno@surpassone.com's Account`（ID: `0633d5a3f3b6d8d4cb5b2c7fcf453494`） |
 | Supabase プロジェクト | `lead-ace-prod`（Tokyo region） |
-| カスタムドメイン | `api.leadace.ai` / `mcp.leadace.ai` / `app.leadace.ai`（apex `leadace.ai` は将来の LP 用に予約） |
+| カスタムドメイン | apex `leadace.ai`（LP）/ `app.leadace.ai`（フロント）/ `api.leadace.ai` / `mcp.leadace.ai` |
 | Stripe アカウント | SurpassOne（test/live 共通） |
 | GitHub リポジトリ | `aitit-inc/lead-ace` |
 
@@ -114,7 +114,7 @@ Webhook ハンドラは各 Price の `metadata.plan` を読んで `tenant_plans.
 3. [お名前.com Navi](https://www.onamae.com/domain/navi/) → 該当ドメイン → ネームサーバー設定 → その他のネームサーバーを使う → Cloudflare の NS を入力
 4. Cloudflare 側で **"Check nameservers"** → Active まで待機（通常30分以内）
 
-`api` / `mcp` / `app` サブドメインは Workers/Pages のデプロイ時に自動で DNS レコードが作成される（`wrangler.*.jsonc` の `routes.zone_name` / Pages Custom domain 指定による）。apex `leadace.ai` はデプロイ完了までは Cloudflare デフォルト 404。
+`api` / `mcp` / `app` サブドメインは Workers/Pages のデプロイ時に自動で DNS レコードが作成される（`wrangler.*.jsonc` の `routes.zone_name` / Pages Custom domain 指定による）。apex `leadace.ai` は §5-3 の Landing Pages プロジェクトに Custom domain として割り当てる。
 
 ### 4-2. Secrets 設定
 
@@ -229,6 +229,24 @@ npx wrangler pages deploy .svelte-kit/cloudflare --project-name lead-ace --branc
 ```
 
 Dashboard から `app.leadace.ai` を Pages プロジェクトの **Custom domain** として追加。
+
+### 5-3. Landing Page (Cloudflare Pages, apex `leadace.ai`)
+
+`landing/` 配下の静的サイト。ビルド不要で `landing/public/` をそのままアップロードする。
+
+1. [Cloudflare Dashboard → Pages](https://dash.cloudflare.com/?to=/:account/pages) → **Create a project**
+   - プロジェクト名: `lead-ace-landing`
+   - production branch: `main`
+   - Direct upload でも Connect to Git でも可。CI で自動デプロイするなら空プロジェクトを作っておくだけで十分（`npx wrangler pages deploy` が同名プロジェクトに upload する）
+2. もしくは、ローカルから初回アップロード:
+   ```bash
+   cd landing
+   npx wrangler pages deploy --branch main
+   ```
+3. Dashboard → `lead-ace-landing` → **Custom domains** に以下を追加:
+   - `leadace.ai`（apex。Cloudflare が CNAME flattening で自動対応）
+   - `www.leadace.ai`（任意。apex へ 301 を Page Rule or Bulk Redirect で設定）
+4. 既存の `leadace.surpassone.com` は公開を停止するか、Worker 経由で `https://leadace.ai` へ 301 させる。
 
 ---
 
