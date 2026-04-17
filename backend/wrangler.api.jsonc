@@ -3,13 +3,33 @@
   "main": "src/api/index.ts",
   "compatibility_date": "2026-04-01",
   "compatibility_flags": ["nodejs_compat"],
+  "account_id": "0633d5a3f3b6d8d4cb5b2c7fcf453494", // Leo.uno@surpassone.com's Account
   "vars": {
     "ENVIRONMENT": "development"
-  }
+  },
   // Secrets (set via wrangler secret or .dev.vars):
-  // DATABASE_URL
-  // SUPABASE_JWT_SECRET
-  // SUPABASE_URL
-  // STRIPE_SECRET_KEY
-  // STRIPE_WEBHOOK_SECRET
+  //   DATABASE_URL
+  //   SUPABASE_JWT_SECRET   (optional — JWKS used when SUPABASE_URL is set)
+  //   SUPABASE_URL
+  //   STRIPE_SECRET_KEY
+  //   STRIPE_WEBHOOK_SECRET
+  "env": {
+    "production": {
+      "name": "lead-ace-api",
+      "vars": {
+        "ENVIRONMENT": "production"
+      },
+      // Custom Domain — wrangler creates the DNS record and SSL cert automatically.
+      // The zone must live in the same Cloudflare account (`account_id` above).
+      "routes": [
+        {
+          "pattern": "api.leadace.ai",
+          "custom_domain": true
+        }
+      ],
+      "observability": {
+        "enabled": true
+      }
+    }
+  }
 }

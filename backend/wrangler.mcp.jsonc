@@ -3,12 +3,30 @@
   "main": "src/mcp/index.ts",
   "compatibility_date": "2026-04-01",
   "compatibility_flags": ["nodejs_compat"],
+  "account_id": "0633d5a3f3b6d8d4cb5b2c7fcf453494", // Leo.uno@surpassone.com's Account
   "vars": {
     "ENVIRONMENT": "development"
-  }
+  },
   // Secrets (set via wrangler secret or .dev.vars.mcp):
-  // WEB_API_URL         (e.g. http://localhost:8787 for local dev)
-  // SUPABASE_JWT_SECRET (JWT verification)
-  // SUPABASE_URL        (e.g. http://127.0.0.1:54321 for local dev)
-  // SUPABASE_ANON_KEY   (Supabase publishable/anon key)
+  //   WEB_API_URL         (e.g. http://localhost:8787 for local dev, https://api.leadace.ai for prod)
+  //   SUPABASE_JWT_SECRET (optional — JWKS used when SUPABASE_URL is set)
+  //   SUPABASE_URL
+  //   SUPABASE_ANON_KEY
+  "env": {
+    "production": {
+      "name": "lead-ace-mcp",
+      "vars": {
+        "ENVIRONMENT": "production"
+      },
+      "routes": [
+        {
+          "pattern": "mcp.leadace.ai",
+          "custom_domain": true
+        }
+      ],
+      "observability": {
+        "enabled": true
+      }
+    }
+  }
 }

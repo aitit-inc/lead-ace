@@ -72,7 +72,7 @@ After initial setup, use `/daily-cycle` to automate daily sales activities:
 This plugin is provided under a proprietary license by SurpassOne Inc.
 
 - **Free tier:** Up to 1 project
-- **Paid tier:** Unlimited projects. License keys available at https://leadace.surpassone.com
+- **Paid tier:** Unlimited projects. License keys available at https://leadace.ai
 
 You will be prompted for a license key when running `/setup`. Skip it for the free tier.
 
