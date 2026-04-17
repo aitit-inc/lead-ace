@@ -16,11 +16,15 @@
 
 ### 次にやること（再開時チェックリスト）
 
-1. [ ] **Cloudflare API Token 発行** — 下記 5-3 参照
-2. [ ] **GitHub Secrets / Variables 登録** — 下記 5-3 参照
-3. [ ] **`git push origin main`** → Actions が自動で API / MCP / Pages をデプロイ
-4. [ ] デプロイ完了後、§5-3 §8 のブラウザ検証手順を実行
-5. [ ] 問題なければ 5-4f（Stripe live 移行）・5-4g（認証メールドメイン）・5-4e（apex LP）へ
+1. [x] **Cloudflare API Token 発行**（2026-04-18）
+2. [x] **GitHub Secrets / Variables 登録**（9 Variables + 2 Secrets、2026-04-18）
+3. [x] **`git push origin main`** → 初回 CI で 3 つの問題が出たが修正済み:
+       - `1e752fe` macOS lockfile に optional dep 補完 / `8d9ca01` Docker で Linux 版 lockfile 再生成
+       - `1f98ea5` Pages wrangler から未サポート `account_id` を除去
+4. [x] デプロイ完了後、§8 ブラウザ検証実施（Stripe test-mode Checkout / webhook / Portal）
+       - 検証中に見つかった本番バグ 2 件を `dfaa256` で修正（`success_url` パースが `api.leadace.ai` で壊れる / `sql` template に Date を直渡しして driver が拒否）
+       - UX 改善 `3fc760e`（bfcache 復帰時のボタン固着 / checkout 成功後の plan ポーリング / paid プランの文言）
+5. [ ] 次の外部作業: 5-4f（Stripe live 移行）・5-4g（認証メールドメイン）・5-4e（apex LP）
 
 ### 今セッションで完了済み（コード）
 
