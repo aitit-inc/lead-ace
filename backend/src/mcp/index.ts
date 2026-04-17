@@ -17,6 +17,7 @@ type Env = {
   SUPABASE_URL: string
   SUPABASE_ANON_KEY: string
   ENVIRONMENT: string
+  MCP_OAUTH_STORE: KVNamespace
 }
 
 // ---------------------------------------------------------------------------
@@ -640,7 +641,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   }
 
   if (path === '/register' && request.method === 'POST') {
-    return withCors(await handleRegister(request))
+    return withCors(await handleRegister(request, env.MCP_OAUTH_STORE))
   }
 
   if (path === '/authorize') {
@@ -648,12 +649,12 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
       return handleAuthorizeGet(request, baseUrl)
     }
     if (request.method === 'POST') {
-      return withCors(await handleAuthorizePost(request, env.SUPABASE_URL, env.SUPABASE_ANON_KEY))
+      return withCors(await handleAuthorizePost(request, env.MCP_OAUTH_STORE, env.SUPABASE_URL, env.SUPABASE_ANON_KEY))
     }
   }
 
   if (path === '/token' && request.method === 'POST') {
-    return withCors(await handleToken(request, env.SUPABASE_URL, env.SUPABASE_ANON_KEY))
+    return withCors(await handleToken(request, env.MCP_OAUTH_STORE, env.SUPABASE_URL, env.SUPABASE_ANON_KEY))
   }
 
   // --- MCP endpoints (auth required) ---

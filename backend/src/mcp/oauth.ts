@@ -9,8 +9,9 @@
  * - /register   (POST: dynamic client registration)
  *
  * Delegates actual authentication to Supabase Auth.
- * Uses in-memory storage for auth codes and clients (sufficient for local dev;
- * production would use KV).
+ * Auth codes and registered clients live in Cloudflare KV so state survives
+ * across Worker isolates. KV's native TTL handles expiry; we still stamp an
+ * expiresAt for defense-in-depth on the read path.
  */
 
 // ---------------------------------------------------------------------------
@@ -36,23 +37,35 @@ interface RegisteredClient {
 }
 
 // ---------------------------------------------------------------------------
-// In-memory stores (OK for local dev; use KV for production)
+// KV storage helpers
 // ---------------------------------------------------------------------------
 
-const authCodes = new Map<string, AuthCode>()
-const registeredClients = new Map<string, RegisteredClient>()
+const AUTH_CODE_TTL_SECONDS = 600       // 10 minutes (KV minimum is 60)
+const CLIENT_TTL_SECONDS = 60 * 60 * 24 * 30 // 30 days
+
+const codeKey = (code: string) => `code:${code}`
+const clientKey = (id: string) => `client:${id}`
+
+async function getAuthCode(kv: KVNamespace, code: string): Promise<AuthCode | null> {
+  return await kv.get<AuthCode>(codeKey(code), 'json')
+}
+
+async function putAuthCode(kv: KVNamespace, code: string, data: AuthCode): Promise<void> {
+  await kv.put(codeKey(code), JSON.stringify(data), { expirationTtl: AUTH_CODE_TTL_SECONDS })
+}
+
+async function deleteAuthCode(kv: KVNamespace, code: string): Promise<void> {
+  await kv.delete(codeKey(code))
+}
+
+async function putRegisteredClient(kv: KVNamespace, id: string, client: RegisteredClient): Promise<void> {
+  await kv.put(clientKey(id), JSON.stringify(client), { expirationTtl: CLIENT_TTL_SECONDS })
+}
 
 function generateId(): string {
   const arr = new Uint8Array(32)
   crypto.getRandomValues(arr)
   return Array.from(arr, (b) => b.toString(16).padStart(2, '0')).join('')
-}
-
-function cleanExpiredCodes() {
-  const now = Date.now()
-  for (const [key, val] of authCodes) {
-    if (val.expiresAt < now) authCodes.delete(key)
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +118,7 @@ export function handleResourceMetadata(baseUrl: string): Response {
 // Dynamic Client Registration (RFC 7591)
 // ---------------------------------------------------------------------------
 
-export async function handleRegister(request: Request): Promise<Response> {
+export async function handleRegister(request: Request, kv: KVNamespace): Promise<Response> {
   let body: Record<string, unknown>
   try {
     body = await request.json() as Record<string, unknown>
@@ -123,7 +136,7 @@ export async function handleRegister(request: Request): Promise<Response> {
     token_endpoint_auth_method: (body['token_endpoint_auth_method'] as string) ?? 'none',
   }
 
-  registeredClients.set(clientId, client)
+  await putRegisteredClient(kv, clientId, client)
 
   return Response.json({
     ...client,
@@ -153,6 +166,7 @@ export function handleAuthorizeGet(request: Request, baseUrl: string): Response 
 
 export async function handleAuthorizePost(
   request: Request,
+  kv: KVNamespace,
   supabaseUrl: string,
   supabaseAnonKey: string,
 ): Promise<Response> {
@@ -209,15 +223,14 @@ export async function handleAuthorizePost(
   }
 
   // Generate authorization code
-  cleanExpiredCodes()
   const code = generateId()
-  authCodes.set(code, {
+  await putAuthCode(kv, code, {
     clientId: client_id ?? '',
     codeChallenge: code_challenge,
     redirectUri: redirect_uri,
     supabaseAccessToken: authData.access_token,
     supabaseRefreshToken: authData.refresh_token,
-    expiresAt: Date.now() + 120_000, // 2 minutes
+    expiresAt: Date.now() + AUTH_CODE_TTL_SECONDS * 1000,
   })
 
   // Return redirect URL as JSON (login page JS will navigate)
@@ -234,6 +247,7 @@ export async function handleAuthorizePost(
 
 export async function handleToken(
   request: Request,
+  kv: KVNamespace,
   supabaseUrl: string,
   supabaseAnonKey: string,
 ): Promise<Response> {
@@ -253,7 +267,7 @@ export async function handleToken(
   const grantType = body['grant_type']
 
   if (grantType === 'authorization_code') {
-    return handleAuthCodeGrant(body)
+    return handleAuthCodeGrant(body, kv)
   }
   if (grantType === 'refresh_token') {
     return handleRefreshGrant(body, supabaseUrl, supabaseAnonKey)
@@ -262,16 +276,15 @@ export async function handleToken(
   return Response.json({ error: 'unsupported_grant_type' }, { status: 400 })
 }
 
-async function handleAuthCodeGrant(body: Record<string, string>): Promise<Response> {
+async function handleAuthCodeGrant(body: Record<string, string>, kv: KVNamespace): Promise<Response> {
   const { code, code_verifier, redirect_uri } = body
 
   if (!code || !code_verifier) {
     return Response.json({ error: 'invalid_request', error_description: 'code and code_verifier required' }, { status: 400 })
   }
 
-  cleanExpiredCodes()
-  const stored = authCodes.get(code)
-  if (!stored) {
+  const stored = await getAuthCode(kv, code)
+  if (!stored || stored.expiresAt < Date.now()) {
     return Response.json({ error: 'invalid_grant', error_description: 'Invalid or expired authorization code' }, { status: 400 })
   }
 
@@ -287,7 +300,7 @@ async function handleAuthCodeGrant(body: Record<string, string>): Promise<Respon
   }
 
   // Consume the code (one-time use)
-  authCodes.delete(code)
+  await deleteAuthCode(kv, code)
 
   return Response.json({
     access_token: stored.supabaseAccessToken,

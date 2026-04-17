@@ -150,6 +150,13 @@ npx wrangler secret put SUPABASE_ANON_KEY --config wrangler.mcp.jsonc --env prod
 
 Supabase のキー命名は最近変更された。レガシー `anon public` JWT（`eyJ...`）も使えるが、新プロジェクトでは `sb_publishable_...` 形式。変数名は後方互換で `SUPABASE_ANON_KEY` のまま。
 
+MCP Worker の OAuth ストア (KV) は `wrangler.mcp.jsonc` で binding 済み（`MCP_OAUTH_STORE`、id: `78e184bebfde4e35a2261b2957067586`）。再作成が必要な場合：
+
+```bash
+npx wrangler kv namespace create MCP_OAUTH_STORE
+# 出力された id を wrangler.mcp.jsonc の (top-level + env.production の) kv_namespaces に貼り替える
+```
+
 secret の一覧確認:
 
 ```bash

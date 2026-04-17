@@ -12,6 +12,13 @@
   //   SUPABASE_JWT_SECRET (optional — JWKS used when SUPABASE_URL is set)
   //   SUPABASE_URL
   //   SUPABASE_ANON_KEY
+  // Local dev: wrangler simulates KV in-memory regardless of the id.
+  "kv_namespaces": [
+    {
+      "binding": "MCP_OAUTH_STORE",
+      "id": "78e184bebfde4e35a2261b2957067586"
+    }
+  ],
   "env": {
     "production": {
       "name": "lead-ace-mcp",
@@ -22,6 +29,12 @@
         {
           "pattern": "mcp.leadace.ai",
           "custom_domain": true
+        }
+      ],
+      "kv_namespaces": [
+        {
+          "binding": "MCP_OAUTH_STORE",
+          "id": "78e184bebfde4e35a2261b2957067586"
         }
       ],
       "observability": {

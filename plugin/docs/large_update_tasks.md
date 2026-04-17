@@ -827,12 +827,9 @@ master_documents:
 
 OAuth 2.1 フロー自体は実装済みだが、ストレージが in-memory で Cloudflare Workers の isolate 間で共有されない。
 
-- [ ] Cloudflare KV namespace 作成（`MCP_OAUTH_STORE`）+ wrangler.mcp.jsonc に binding 追加
-- [ ] `backend/src/mcp/oauth.ts` の `authCodes` / `registeredClients` を Map → KV に移行
-  - auth code: TTL 10 分
-  - registered client: TTL 30 日
-  - refresh token 用のストアも必要に応じて追加
-- [ ] 本番で OAuth フロー疎通確認（Claude Code で `/plugin marketplace add` → 初回起動時にブラウザ認証 → MCP ツール呼び出し）
+- [x] Cloudflare KV namespace 作成（`MCP_OAUTH_STORE`、id: `78e184bebfde4e35a2261b2957067586`）+ wrangler.mcp.jsonc に binding 追加
+- [x] `backend/src/mcp/oauth.ts` の `authCodes` / `registeredClients` を Map → KV に移行（auth code: TTL 600s / 10 分。registered client: TTL 30 日。refresh token は Supabase に直接転送するため独自ストア不要）
+- [ ] 本番で OAuth フロー疎通確認（Claude Code で `/plugin marketplace add` → 初回起動時にブラウザ認証 → MCP ツール呼び出し）— デプロイ後に検証
 
 ### 5-4c. MCP 接続ユーザードキュメント
 
