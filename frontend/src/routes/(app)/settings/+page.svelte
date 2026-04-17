@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { get as storeGet } from 'svelte/store';
   import { page } from '$app/state';
   import { del, get, post } from '$lib/api';
   import { activeProject } from '$lib/stores/project';
@@ -75,14 +76,36 @@
     },
   ];
 
+  // Reset transient loading state when the page is restored from bfcache
+  // (browser back after navigating away to Stripe).
+  function resetLoadingState() {
+    portalLoading = false;
+    checkoutLoading = null;
+  }
+
+  async function pollPlanUntilUpdated(fromPlan: string, maxAttempts = 8, intervalMs = 1500) {
+    for (let i = 0; i < maxAttempts; i++) {
+      await plan.load();
+      const planNow = storeGet(plan).data?.plan;
+      if (planNow && planNow !== fromPlan) return;
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+  }
+
   onMount(() => {
     plan.load();
     const status = page.url.searchParams.get('checkout');
     if (status === 'success') {
-      message = 'Subscription activated. It may take a moment to reflect — refresh if the plan has not updated.';
+      message = 'Subscription activated. Waiting for confirmation…';
+      const fromPlan = storeGet(plan).data?.plan ?? 'free';
+      pollPlanUntilUpdated(fromPlan).then(() => {
+        message = 'Subscription activated.';
+      });
     } else if (status === 'cancel') {
       message = 'Checkout cancelled.';
     }
+    window.addEventListener('pageshow', resetLoadingState);
+    return () => window.removeEventListener('pageshow', resetLoadingState);
   });
 
   async function handleDelete() {
@@ -177,6 +200,13 @@
           </button>
         {/if}
       </div>
+
+      {#if p.plan !== 'free'}
+        <p class="text-xs text-text-muted mb-5 -mt-2">
+          Change plan, update payment method, view invoices, or cancel via the
+          Stripe Customer Portal.
+        </p>
+      {/if}
 
       <div class="grid grid-cols-2 gap-6">
         <div>
