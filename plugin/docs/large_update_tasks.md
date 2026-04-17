@@ -712,25 +712,59 @@ master_documents:
 - [x] `record_outreach` にクォータガード追加
 - [x] `add_prospects` に Free プラン 30 件上限チェック追加
 
-#### フロントエンド（未着手）
-- [ ] Settings ページにプラン表示 + "Upgrade" ボタン（→ Checkout）+ "Manage subscription" ボタン（→ Customer Portal）
-- [ ] クォータ残量表示（ダッシュボードまたはサイドバー）
+#### フロントエンド ✅ 完了
+- [x] Settings ページにプラン表示 + "Upgrade" ボタン（→ Checkout）+ "Manage subscription" ボタン（→ Customer Portal）
+- [x] クォータ残量表示（サイドバー下部にコンパクト表示）
+- [x] `plan` store 追加（`GET /me/plan` を取得）、`.env.example` に `VITE_STRIPE_PRICE_*` 追加
 
-### 5-1c. RLS ポリシー追加
+### 5-1c. RLS ポリシー追加 ✅ 完了
 
 テナント分離の defense-in-depth。スキーマは対応済み（全テーブルに tenant_id あり）、ポリシー追加のみ。
 
-- [ ] API ミドルウェアでリクエストをトランザクションで包み、`SET LOCAL app.tenant_id = X` を注入
-- [ ] 全テナント依存テーブルに RLS ポリシー追加: `USING (tenant_id = current_setting('app.tenant_id', true))`
-- [ ] RLS が有効な状態で全 API エンドポイントの動作確認
+- [x] `app_rls` ロール作成 + 全テーブルへの権限付与（`0001_rls_policies.sql`）
+- [x] 全テナント依存テーブル（11テーブル）に RLS 有効化 + ポリシー追加: `USING (tenant_id = current_setting('app.tenant_id', true))`
+- [x] `rlsMiddleware` 追加: リクエストをトランザクションで包み `SET LOCAL ROLE app_rls` + `set_config('app.tenant_id', ...)` を注入
+- [x] 全ルートハンドラを `c.get('db')` 経由に変更（auth middleware が DB 接続を作成し context に格納 → RLS middleware がトランザクションで上書き）
+- [x] auth middleware / stripe webhook は `postgres` ロール（RLS バイパス）のまま動作
+- [x] `master_documents` テーブルは RLS なし（グローバルデータ）
+- [x] テナント分離テスト: 2ユーザーで cross-tenant アクセス不可を確認
+
+### 5-1d. スキーマレビュー改善 ✅ 完了
+
+- [x] `organizations` から未使用カラム削除: country, address, industry, overview, normalizedName + idx_org_normalized_name
+- [x] `prospect_status` enum から `unreachable` 削除（`inactive` に統一）
+- [x] `projects` に `name` カラム追加（`UNIQUE(tenant_id, name)`）、ID は自動生成 nanoid に変更
+- [x] prospect 登録に連絡先1つ以上を必須化（email / contactFormUrl / snsAccounts いずれか）
+- [x] tenant 自動作成時に `tenant_plans` free 行も INSERT（JOIN 安全性）
+- [x] MCP ツール: `setup_project` が `name` を受け取り `id` を返す形に変更
+- [x] MCP ツール: `add_prospects` から削除カラム除去、`update_prospect_status` から `unreachable` 除去
+
+### 5-1e. MCP name/id 解決 + プラグインスキル整合性 ✅ 完了
+
+- [x] MCP に `resolveProjectId(projectRef)` ヘルパー追加（name または id のどちらでも受け付ける）
+- [x] 13個の MCP ツール全て（delete_project, get_prospect_identifiers, add_prospects, get_outbound_targets, record_outreach, update_prospect_status, get_recent_outreach, get_eval_data, record_evaluation, get_evaluation_history, get_document, save_document, list_documents）に resolver 適用
+- [x] プラグインスキル側は変更不要（`$0` が name として機能、パラメータ名 `projectId` は維持）
+- [x] build-list / daily-cycle SKILL.md から削除済みフィールド（organizationNormalizedName, Country, Industry, Overview）参照を除去
+- [x] outbound / daily-cycle / form-filling の `unreachable` 記述を `inactive` に統一
 
 ### 5-1 レビュー（本番デプロイ前に必須）
 
-- [ ] **テナント分離テスト**: 2つのテストユーザーで、一方のデータが他方に見えないことを確認（全エンドポイント）
-- [ ] **クォータテスト**: Free トライアルフロー完走（/strategy → /build-list 30件 → /outbound 10件 → 枠切れメッセージ）
-- [ ] **organizations PK 変更の影響確認**: MCP `get_prospect_identifiers` のレスポンスが `organizationDomain` (text) を返していること（build-list スキルが参照する）
-- [ ] **全 MCP ツール動作確認**: ローカル MCP Server 起動 → Claude Code から各ツールを呼び出し
-- [ ] **Stripe 連携テスト**: Checkout → webhook → tenant_plans 更新 → プラン反映（Stripe テストモードで）
+#### 静的確認（完了）
+
+- [x] **organizations PK 変更の影響確認**: `GET /projects/:id/prospects/identifiers` が `organizationDomain` (text, `organizations.domain`) を返すこと確認。build-list / daily-cycle SKILL.md も `organizationDomain` を参照
+- [x] **RLS ポリシー確認**: 11 テナント依存テーブル全てに `tenant_isolation` ポリシー、`master_documents` はポリシーなし（グローバル）
+- [x] **ルートの DB 接続監査**: 全 9 ルートが `c.get('db')` 経由、`createDb()` 直叩きは auth middleware と stripe-webhook のみ
+- [x] **クォータ強制点の監査**: project creation / add_prospects / get_outbound_targets / record_outreach の4箇所で plan-limits の関数を呼んでおり、Free lifetime / 有料 monthly を正しく区別
+- [x] **ローカル起動確認**: `npm run dev:api` / `npm run dev:mcp` が起動、`/health` → `{ok:true}`、認証なしエンドポイント → 401
+
+#### ランタイム動作確認
+
+`backend/scripts/create-test-users.ts` で Supabase Auth に2ユーザー（tenant-a@test.local / tenant-b@test.local）を作成し、JWT を取得して curl で API / MCP を叩いて確認。
+
+- [x] **テナント分離テスト**: A が作成したプロジェクトは B の `GET /api/projects` に出ず、直接 ID 指定でも 404。MCP の `list_projects` / `delete_project` でも同様
+- [x] **クォータテスト**: Free ユーザーで prospect 30 件まで登録OK、31件目は 403。Outreach 10 件まで record_outreach 成功、11件目は 403。10 件到達後の `get_outbound_targets` は空配列 + "Outreach limit reached (10/10)" メッセージ
+- [x] **全 MCP ツール動作確認**: MCP Server に `tools/list` で全18ツール登録確認。`list_projects` / `list_master_documents` / `get_outbound_targets` / `get_prospect_identifiers` / `save_document` / `get_document` を実際に呼び出して動作確認
+- [ ] **Stripe 連携テスト**: Checkout → webhook → tenant_plans 更新 → プラン反映（Stripe テストモードで。5-3 デプロイ前に Stripe Dashboard セットアップが必要）
 
 ### 5-2. セルフデプロイ対応
 
@@ -740,27 +774,133 @@ master_documents:
 
 ### 5-3. Cloudflare 本番デプロイ
 
-- [ ] Stripe アカウントセットアップ（Products × 3、Prices × 6 (月額+年額)、Customer Portal 設定、Webhook Endpoint 登録）
-- [ ] `wrangler deploy` で Web API / MCP Server を Cloudflare にデプロイ
-- [ ] Cloudflare Pages でフロントエンドをデプロイ
-- [ ] Supabase 本番プロジェクトのセットアップ（Auth, RLS 設定）
-- [ ] カスタムドメイン設定（`api.leadace.surpassone.com`, `mcp.leadace.surpassone.com`）
-- [ ] Stripe Webhook URL を本番 API に設定
+**ランブック:** [plugin/docs/deploy.md](./deploy.md) に全手順を記載。
+
+#### コード側準備 ✅ 完了
+
+- [x] `backend/wrangler.api.jsonc` / `wrangler.mcp.jsonc` に `env.production` 追加、`account_id` 固定（`Leo.uno@surpassone.com's Account`）
+- [x] Custom Domain 対応（`routes` に `custom_domain: true` で DNS + SSL 自動化）
+- [x] `frontend/wrangler.jsonc` 追加（`pages_build_output_dir` + `nodejs_compat`）
+- [x] `.github/workflows/check.yml` / `deploy.yml` 作成
+- [x] `plugin/docs/deploy.md` ランブック整備
+- [x] `backend/scripts/setup-stripe.ts` で Products/Prices/Portal/Webhook を冪等に作成
+- [x] `backend/scripts/create-test-users.ts` で Supabase Admin API 経由のテストユーザー作成
+
+#### 外部リソース（手動作業で進行中）
+
+- [x] Supabase 本番プロジェクト作成（project ref: `chaxrcdtxngoyqvtoyem`）+ migration 適用 + master_documents シード
+- [x] Stripe test mode: Products × 3 / Prices × 6 / Customer Portal / Webhook endpoint
+- [x] Cloudflare: `leadace.ai` を Zone 追加、お名前.com NS 切替、Active
+- [x] wrangler secrets 投入（API + MCP worker 両方）
+- [x] 初回デプロイ: Workers (API + MCP) + Pages (フロントエンド)
+- [x] カスタムドメイン: `api.leadace.ai` / `mcp.leadace.ai` / `app.leadace.ai` 全て SSL 発行済み・疎通OK
+- [x] prod DB の RLS セットアップ完了（`GRANT app_rls TO postgres` を SQL Editor で手動適用 → migration 修正済みで次回以降は自動）
+- [ ] §8 本番動作検証（Stripe test mode での Checkout / webhook / Customer Portal）
+- [ ] Cloudflare API Token 発行（CI 用）
+- [ ] GitHub Actions 有効化: Secrets（`CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`）+ Variables（`VITE_*`）
+
+#### 本番デプロイで判明した問題と恒久対応
+
+| 問題 | 対応 |
+|---|---|
+| `db:migrate` を Transaction Pooler (6543) 経由で流したため `CREATE ROLE app_rls` が silent fail | deploy.md §2 を Session Pooler (5432) に書き換え、CLAUDE.md にも注記 |
+| `postgres` ユーザー（Supabase では非 superuser）が `SET ROLE app_rls` できず 500 | `0001_rls_policies.sql` に `GRANT app_rls TO current_user` を追加（将来の fresh 環境で自動適用） |
+| Workers の `routes` 指定だと DNS レコードが自動作成されず疎通不可 | `custom_domain: true` に切替。wrangler が DNS + SSL を自動管理 |
+| Pages で `node:async_hooks` の警告 | `frontend/wrangler.jsonc` に `compatibility_flags: ["nodejs_compat"]` 設定 |
+
+---
+
+## フェーズ5-4: MVP 公開前の仕上げ
+
+**目標:** Stripe live 移行 + ユーザーフロー完成度を上げて、外部ユーザーに公開可能な状態にする。
+
+### 5-4a. Auth UX の完成
+
+現状ログインフォームのみ。Free トライアルのセルフオンボーディングに必須。
+
+- [ ] **Sign-up フォーム**（Email / Password）を `/login` に追加（トグル or 別ルート）
+- [ ] Supabase 確認メールからのリダイレクト処理（`/auth/callback` or hashフラグメント処理）
+- [ ] **Password reset フロー**（`/forgot-password` → メールリンク → `/reset-password`）
+- [ ] Sign-up 後の初回 onboarding: プロジェクト作成を促す UI（Prospects ページ空状態 → "Create your first project"）
+
+### 5-4b. MCP OAuth の本番対応
+
+OAuth 2.1 フロー自体は実装済みだが、ストレージが in-memory で Cloudflare Workers の isolate 間で共有されない。
+
+- [ ] Cloudflare KV namespace 作成（`MCP_OAUTH_STORE`）+ wrangler.mcp.jsonc に binding 追加
+- [ ] `backend/src/mcp/oauth.ts` の `authCodes` / `registeredClients` を Map → KV に移行
+  - auth code: TTL 10 分
+  - registered client: TTL 30 日
+  - refresh token 用のストアも必要に応じて追加
+- [ ] 本番で OAuth フロー疎通確認（Claude Code で `/plugin marketplace add` → 初回起動時にブラウザ認証 → MCP ツール呼び出し）
+
+### 5-4c. MCP 接続ユーザードキュメント
+
+- [ ] plugin README.md に「Claude Code から MCP Server に接続する手順」を追加
+  - `${LEADACE_MCP_URL}=https://mcp.leadace.ai/mcp` 設定方法
+  - OAuth 初回ブラウザ認証の流れ
+  - トラブルシューティング（認証失敗・トークン期限切れ時の再ログイン）
+
+### 5-4d. 法的ドキュメント
+
+Stripe live 申請に必須。Customer Portal にも URL 登録必要。
+
+- [ ] Terms of Service ページ（`/terms` or 外部ホスティング）
+- [ ] Privacy Policy ページ（`/privacy`）
+- [ ] 特定商取引法に基づく表示（日本向け必要なら）
+- [ ] Stripe Dashboard → Customer Portal → Business information にこれらの URL を設定
+- [ ] Frontend のフッター or Settings にリンク追加
+
+### 5-4e. apex `leadace.ai` の LP or redirect
+
+現状 Cloudflare の 404 ページ。最低限のブランド表示 or `app.leadace.ai` への redirect を用意。
+
+- [ ] 最小実装: Cloudflare の Bulk Redirect で `leadace.ai` → `https://app.leadace.ai` に 302（数分で完了）
+- [ ] 本格的に LP を作る場合: Cloudflare Pages で landing プロジェクト作成、アクセント `#D06A57` + Inter フォントで統一感
+
+### 5-4f. Stripe live 移行チェックリスト
+
+test mode での動作確認完了後：
+
+- [ ] Stripe Dashboard → **Activate account**（会社情報・銀行口座・本人確認）
+- [ ] `setup-stripe.ts` を `sk_live_...` で再実行 → live Products/Prices/Portal/Webhook 作成
+- [ ] 出力された live Price ID を記録
+- [ ] `wrangler secret put STRIPE_SECRET_KEY` を live キーで上書き
+- [ ] `wrangler secret put STRIPE_WEBHOOK_SECRET` を live webhook secret で上書き
+- [ ] GitHub Variables の `VITE_STRIPE_PRICE_*` を live 版に上書き
+- [ ] 実カードで Checkout → 直後に refund、webhook でプラン反映とロールバック確認
+- [ ] test mode のリソースは参考保持 or 削除
+
+### 5-4g. メール送信ドメイン設定
+
+Supabase のデフォルト送信元だとスパム判定されやすく、Sign-up / Password reset メールが届かない可能性。
+
+- [ ] カスタム SMTP 設定（Resend / SendGrid 等）
+- [ ] `auth@leadace.ai` 等の送信元アドレスで SPF / DKIM / DMARC 設定
+- [ ] Supabase Auth → Email Templates を送信元ドメインに合わせて更新
+
+### 5-4h. エラー監視・オブザーバビリティ
+
+本番リリース後の問題早期発見。
+
+- [ ] Sentry（or 同等）を Workers + Frontend に組み込む
+- [ ] または Cloudflare Workers Logs に alert（例: 5xx が 1 分で 10 件以上で Slack 通知）
+- [ ] Stripe webhook 失敗時のアラート（Stripe Dashboard の組み込み機能を有効化）
 
 ### レビュー
 
 **できていること（確認必須）:**
-- [ ] 本番 URL で Web API / MCP Server が動作する
-- [ ] Claude Code から本番 MCP Server に接続してスキルが動作する
-- [ ] Free ユーザーが /strategy → /build-list(30件) → /outbound(10件sent) のトライアルフローを完走できる
-- [ ] Free ユーザーが outreach 10 件超過時に `get_outbound_targets` がアップグレードメッセージを返す
-- [ ] Stripe Checkout → webhook → DB 更新 → プラン反映が動作する
-- [ ] Starter/Pro/Scale で正しいプロジェクト数・outreach 上限が適用される
-- [ ] Stripe Customer Portal からアップグレード・ダウングレード・キャンセルが動作する
-- [ ] `docker compose up` でセルフホスト版が起動する
+- [ ] サインアップから Free トライアル利用開始まで、外部ユーザーが自力で完走できる
+- [ ] Password reset が動作する
+- [ ] MCP OAuth が本番で安定動作する（isolate 間で auth code を失わない）
+- [ ] Claude Code プラグインから `/setup` → `/strategy` → `/build-list` が通る
+- [ ] Stripe live mode で実カード Checkout が成功し、プラン反映する
+- [ ] `leadace.ai` アクセス時に LP or app にリダイレクトされる
+- [ ] 認証メール（確認・パスワードリセット）が実際に届く
 
 **まだできていなくて良いこと:**
 - Cloudflare Queues 経由の非同期ジョブ（build-list の完全非同期化）は後回しでも良い
+- 高度な分析ダッシュボード / A/B テスト等
 
 ---
 
@@ -794,17 +934,31 @@ master_documents:
     ↓
 フェーズ5-1b（サブスクリプション管理バックエンド）✅ 完了
     ↓
+フェーズ5-1c（RLS ポリシー追加）✅ 完了
+    ↓
+フェーズ5-1d（スキーマレビュー改善）✅ 完了
+    ↓
+フェーズ5-1e（MCP name/id 解決 + スキル整合性）✅ 完了
+    ↓
+フェーズ5-1 フロントエンド（Settings プラン表示 + クォータ表示）✅ 完了
+    ↓
+フェーズ5-1 レビュー（テナント分離・クォータ・MCP 動作確認）✅ 完了
+    ↓
+フェーズ5-3（Cloudflare 本番デプロイ）⏳ 進行中
+    - コード側準備 ✅
+    - Supabase prod + Stripe test + Cloudflare zone + secrets + 初回デプロイ ✅
+    - 残: 本番動作検証、CI/CD 有効化
+    ↓
 ★ 現在地 ★
     ↓
-フェーズ5-1c（RLS ポリシー追加）
-    ↓
-フェーズ5-1 フロントエンド（Settings プラン表示 + クォータ表示）
-    ↓
-フェーズ5-1 レビュー（テナント分離・クォータ・MCP 動作確認）
-    ↓
-フェーズ5-3（Stripe セットアップ + Cloudflare 本番デプロイ）
-    ↓
-フェーズ5 レビュー（本番環境での全体動作確認）
+フェーズ5-4（MVP 公開前の仕上げ）
+    - Sign-up/Password reset フロー
+    - MCP OAuth の KV 移行（本番安定化）
+    - 法的ドキュメント（ToS / Privacy）
+    - apex leadace.ai LP or redirect
+    - Stripe test → live 移行
+    - 認証メールのカスタムドメイン
+    - エラー監視
     ↓
 フェーズ5-2（セルフデプロイ対応・ドキュメント）
     ↓
