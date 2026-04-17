@@ -2,6 +2,49 @@
 
 アーキテクチャ設計: [large_update_infra_arch.md](./large_update_infra_arch.md)
 
+## 現状整理（2026-04-17 セッション終了時点）
+
+### 直近状況
+
+- **コード完了 / 未 push**: 15 コミットがローカル main にあり、`origin/main` には未反映。
+  最新: `3dca556 docs: mark Phase 5-2/5-4a/5-4c/5-4d as complete in task list`
+- **本番 `app.leadace.ai` は古いスナップショット**: 初回手動デプロイ以降更新されていないため、
+  5-1c〜5-4d で追加した UI/API 変更（Sign-up トグル / RLS / KV OAuth 等）は反映されていない
+- **GitHub Actions は構築済みだが稼働していない**: ワークフロー YAML 自体が未 push の
+  コミットに入っており、default branch に存在しない。Secrets / Variables も空
+- **検証タスクは本番反映後に実施**: ブラウザでのスモークテスト手順は整理済み（§5-3 §8）
+
+### 次にやること（再開時チェックリスト）
+
+1. [ ] **Cloudflare API Token 発行** — 下記 5-3 参照
+2. [ ] **GitHub Secrets / Variables 登録** — 下記 5-3 参照
+3. [ ] **`git push origin main`** → Actions が自動で API / MCP / Pages をデプロイ
+4. [ ] デプロイ完了後、§5-3 §8 のブラウザ検証手順を実行
+5. [ ] 問題なければ 5-4f（Stripe live 移行）・5-4g（認証メールドメイン）・5-4e（apex LP）へ
+
+### 今セッションで完了済み（コード）
+
+| フェーズ | 内容 | コミット |
+|---|---|---|
+| 5-1c | RLS ポリシー + `app_rls` ロール + rlsMiddleware + 全ルートを `c.get('db')` 化 | `75a025c` |
+| 5-1d | schema review: projects.name / prospects 連絡先必須 / unreachable 削除 / orgs カラム整理 | `75a025c` |
+| 5-1e | MCP resolveProjectId（name/id 双方対応）+ プラグイン SKILL の整合性修正 | `75a025c` |
+| 5-1 FE | Settings プラン表示 + サイドバークォータ + Upgrade/Portal ボタン | `1cc5a37` |
+| 5-3 コード | wrangler env.production / GitHub workflows / setup-stripe.ts / create-test-users.ts / deploy.md | `ac9f9d9` |
+| 5-4a | Sign-up トグル + `/auth/callback` + `/forgot-password` + `/reset-password` + onboarding 空状態 | `1463c43` |
+| 5-4b | MCP OAuth を Cloudflare KV に移行（namespace `78e184bebfde4e35a2261b2957067586`） | `2060272` |
+| 5-4c | Plugin README に MCP 接続手順 + `.mcp.json` を `${LEADACE_MCP_URL}` 化 | `ea5c384` |
+| 5-4d | `/terms` + `/privacy` + サイドバーフッターリンク | `ea3dd31` |
+| 5-2 | Self-host ガイド + 環境変数マトリクス | `b6b261f` |
+| 付随 | Project.name 反映 / ProjectCreateDialog / stale `unreachable` 掃除 | `0cfe127` |
+
+### 最後に判明した課題
+
+ブラウザで "Create an account" トグルが出ない → 本番デプロイが未更新。CI 未稼働が原因。
+B パス（CI/CD 有効化）を先に完了させてから push する方針に決定。
+
+---
+
 ## 背景・目的
 
 現在の構成（ローカルSQLite + Pythonスクリプト直叩き）から、クラウド対応の本格的なバックエンドアーキテクチャへ移行する。
@@ -797,8 +840,52 @@ master_documents:
 - [x] カスタムドメイン: `api.leadace.ai` / `mcp.leadace.ai` / `app.leadace.ai` 全て SSL 発行済み・疎通OK
 - [x] prod DB の RLS セットアップ完了（`GRANT app_rls TO postgres` を SQL Editor で手動適用 → migration 修正済みで次回以降は自動）
 - [ ] §8 本番動作検証（Stripe test mode での Checkout / webhook / Customer Portal）
-- [ ] Cloudflare API Token 発行（CI 用）
-- [ ] GitHub Actions 有効化: Secrets（`CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`）+ Variables（`VITE_*`）
+
+#### CI/CD 有効化手順（再開時に実行）
+
+1. **Cloudflare API Token 発行**
+   - [https://dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens)
+   - テンプレート "Edit Cloudflare Workers" を使用
+   - 必要権限（テンプレで自動付与）: Account → Workers Scripts: Edit / Pages: Edit / Account Settings: Read。Zone → Workers Routes: Edit / DNS: Edit
+   - Account は `Leo.uno@surpassone.com's Account`（`0633d5a3f3b6d8d4cb5b2c7fcf453494`）に限定
+   - 発行後の値を控える → 次で Secret に投入
+
+2. **GitHub Secrets 登録** — [repo Settings → Secrets and variables → Actions → Secrets](https://github.com/aitit-inc/lead-ace/settings/secrets/actions)
+
+   | Secret | 値 |
+   |---|---|
+   | `CLOUDFLARE_API_TOKEN` | 手順 1 で発行したトークン |
+   | `CLOUDFLARE_ACCOUNT_ID` | `0633d5a3f3b6d8d4cb5b2c7fcf453494` |
+
+3. **GitHub Variables 登録** — [同画面 → Variables tab](https://github.com/aitit-inc/lead-ace/settings/variables/actions)
+
+   Stripe Price ID は `setup-stripe.ts` の直近出力から。Supabase 値は `chaxrcdtxngoyqvtoyem` プロジェクトの Dashboard から取得。
+
+   | Variable | 値 |
+   |---|---|
+   | `VITE_API_URL` | `https://api.leadace.ai` |
+   | `VITE_SUPABASE_URL` | `https://chaxrcdtxngoyqvtoyem.supabase.co` |
+   | `VITE_SUPABASE_ANON_KEY` | Supabase publishable key（`sb_publishable_...`） |
+   | `VITE_STRIPE_PRICE_STARTER_MONTHLY` | Stripe test mode の Price ID |
+   | `VITE_STRIPE_PRICE_STARTER_YEARLY` | 〃 |
+   | `VITE_STRIPE_PRICE_PRO_MONTHLY` | 〃 |
+   | `VITE_STRIPE_PRICE_PRO_YEARLY` | 〃 |
+   | `VITE_STRIPE_PRICE_SCALE_MONTHLY` | 〃 |
+   | `VITE_STRIPE_PRICE_SCALE_YEARLY` | 〃 |
+
+4. **ローカルの 15 コミットを push**
+   ```bash
+   git push origin main
+   ```
+   これで `.github/workflows/deploy.yml` が default branch に乗り、以降 main への push で自動デプロイされる
+
+5. **初回 CI デプロイの結果確認**
+   - [Actions タブ](https://github.com/aitit-inc/lead-ace/actions) で `Deploy` が成功していること
+   - API: `curl https://api.leadace.ai/health` → `{"ok":true}`
+   - Pages: `app.leadace.ai` に "Create an account" トグル表示（5-4a の目印）
+   - 失敗時は Actions ログ → wrangler / npm のエラー内容確認
+
+6. **CI 成功後、§8 本番動作検証へ**
 
 #### 本番デプロイで判明した問題と恒久対応
 
@@ -959,7 +1046,9 @@ Supabase のデフォルト送信元だとスパム判定されやすく、Sign-
 フェーズ5-2（セルフデプロイ対応・ドキュメント）✅ コード完了
     - self-host.md + env vars matrix ✅
     ↓
-★ 現在地 ★（残: 手動検証・外部サービス手作業）
+★ 現在地 ★ = CI/CD 有効化 → push → 本番デプロイ → §8 検証
+    ↓ （5-3 の "CI/CD 有効化手順" を参照）
+手動検証 + 外部サービス手作業（5-4e / 5-4f / 5-4g / 5-4h）
     ↓
 フェーズ6（リリース・移行）→ フェーズ6 レビュー
 ```
