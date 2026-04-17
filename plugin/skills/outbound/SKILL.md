@@ -141,28 +141,28 @@ Use claude-in-chrome to send DMs on SNS (login session required). Supported plat
 
 **For X (Twitter):**
 - Click the DM (message) icon from the profile page
-- If recipient's DM settings are closed, sending is not possible -> set to `unreachable`
+- If recipient's DM settings are closed, sending is not possible -> set to `inactive`
 - channel: `sns_twitter`
 
 **For LinkedIn:**
 - Click the "Message" button from the profile page
-- DMs can only be sent to connected users. If not connected, sending is not possible -> set to `unreachable`
+- DMs can only be sent to connected users. If not connected, sending is not possible -> set to `inactive`
 - Do not use InMail (paid feature)
 - channel: `sns_linkedin`
 
 After sending, call `mcp__plugin_lead-ace_api__record_outreach` with the appropriate channel, subject (empty string for SNS), and body.
 
-### 6. Handle Unreachable Prospects
+### 6. Handle Inactive Prospects
 
-For prospects where approach failed due to a **structural reason** making future approaches impossible, call `mcp__plugin_lead-ace_api__update_prospect_status` with `status: "unreachable"`.
+For prospects where approach failed due to a **structural reason** making future approaches impossible, call `mcp__plugin_lead-ace_api__update_prospect_status` with `status: "inactive"`.
 
-**Cases where `unreachable` should be set:**
+**Cases where `inactive` should be set:**
 - Email address was invalid and bounced (permanent error)
 - SNS DMs are not open
 - Form was not suitable for B2B inquiries
 - No available contact method at all
 
-**Cases where `unreachable` should NOT be set (keep as `new`):**
+**Cases where `inactive` should NOT be set (keep as `new`):**
 - Temporary network error or timeout
 - System-side issues such as gog send authentication errors
 

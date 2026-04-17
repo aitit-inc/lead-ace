@@ -55,6 +55,26 @@ async function callApi(
   return { ok: res.ok, status: res.status, data }
 }
 
+// Resolve a project reference (either name or internal id) to the canonical id.
+// User-facing skills accept the project name; the backend uses auto-generated ids.
+async function resolveProjectId(
+  projectRef: string,
+  apiUrl: string,
+  authHeader: string,
+): Promise<{ id: string | null; error?: string }> {
+  const { ok, data } = await callApi('GET', '/projects', null, apiUrl, authHeader)
+  if (!ok) {
+    const err = data as { error?: string }
+    return { id: null, error: err.error ?? 'Failed to list projects' }
+  }
+  const { projects } = data as { projects: Array<{ id: string; name: string }> }
+  const match = projects.find((p) => p.id === projectRef || p.name === projectRef)
+  if (!match) {
+    return { id: null, error: `Project "${projectRef}" not found` }
+  }
+  return { id: match.id }
+}
+
 // ---------------------------------------------------------------------------
 // CORS headers
 // ---------------------------------------------------------------------------
@@ -110,15 +130,16 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
   // --- setup_project ---
   server.tool(
     'setup_project',
-    'Create a new Lead Ace project. Returns an error if the free plan limit (1 project) is reached.',
-    { projectId: z.string().describe('Project ID (alphanumeric, _ or -)') },
-    async ({ projectId }) => {
-      const { ok, data } = await callApi('POST', '/projects', { id: projectId }, apiUrl, authHeader)
+    'Create a new Lead Ace project. Returns the auto-generated project ID. Returns an error if the plan limit is reached.',
+    { name: z.string().describe('Project name (unique per tenant)') },
+    async ({ name }) => {
+      const { ok, data } = await callApi('POST', '/projects', { name }, apiUrl, authHeader)
       if (!ok) {
         const err = data as { error: string; detail?: string }
         return { content: [{ type: 'text' as const, text: `Error: ${err.error}${err.detail ? ` — ${err.detail}` : ''}` }], isError: true }
       }
-      return { content: [{ type: 'text' as const, text: `Project "${projectId}" created successfully.` }] }
+      const result = data as { id: string; name: string }
+      return { content: [{ type: 'text' as const, text: `Project "${name}" created (id: ${result.id}).` }] }
     },
   )
 
@@ -126,9 +147,13 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
   server.tool(
     'delete_project',
     'Delete a project and all its data (prospects, outreach logs, responses, evaluations).',
-    { projectId: z.string().describe('Project ID to delete') },
+    { projectId: z.string().describe('Project name or ID') },
     async ({ projectId }) => {
-      const { ok, data } = await callApi('DELETE', `/projects/${projectId}`, null, apiUrl, authHeader)
+      const resolved = await resolveProjectId(projectId, apiUrl, authHeader)
+      if (!resolved.id) {
+        return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+      }
+      const { ok, data } = await callApi('DELETE', `/projects/${resolved.id}`, null, apiUrl, authHeader)
       if (!ok) {
         const err = data as { error: string }
         return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
@@ -141,9 +166,13 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
   server.tool(
     'get_prospect_identifiers',
     'Get names, URLs, emails, and organization domains of all registered prospects in a project. Used to avoid duplicate registrations during build-list.',
-    { projectId: z.string().describe('Project ID') },
+    { projectId: z.string().describe('Project name or ID') },
     async ({ projectId }) => {
-      const { ok, data } = await callApi('GET', `/projects/${projectId}/prospects/identifiers`, null, apiUrl, authHeader)
+      const resolved = await resolveProjectId(projectId, apiUrl, authHeader)
+      if (!resolved.id) {
+        return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+      }
+      const { ok, data } = await callApi('GET', `/projects/${resolved.id}/prospects/identifiers`, null, apiUrl, authHeader)
       if (!ok) {
         const err = data as { error: string }
         return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
@@ -163,22 +192,18 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
     'add_prospects',
     'Batch register prospects into a project. Automatically deduplicates by email, contact form URL, and organization domain.',
     {
-      projectId: z.string().describe('Project ID'),
+      projectId: z.string().describe('Project name or ID'),
       prospects: z.array(z.object({
         organizationDomain: z.string().describe('Apex domain of the organization (e.g. example.com)'),
         organizationName: z.string(),
-        organizationNormalizedName: z.string().describe('Lowercase, trimmed name for dedup'),
         organizationWebsiteUrl: z.string().url(),
-        organizationCountry: z.string().length(2).optional().describe('ISO 3166-1 alpha-2'),
-        organizationIndustry: z.string().optional(),
-        organizationOverview: z.string().optional(),
         name: z.string().describe('Prospect name (company, school, department, etc.)'),
         contactName: z.string().optional(),
         department: z.string().optional(),
         overview: z.string(),
         industry: z.string().optional(),
         websiteUrl: z.string().url(),
-        email: z.string().email().optional(),
+        email: z.string().email().optional().describe('At least one contact channel required'),
         contactFormUrl: z.string().url().optional(),
         formType: z.enum(['google_forms', 'native_html', 'wordpress_cf7', 'iframe_embed', 'with_captcha']).optional(),
         snsAccounts: z.object({
@@ -193,7 +218,11 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
       })).describe('Array of prospects to register (max 100)'),
     },
     async ({ projectId, prospects }) => {
-      const { ok, data } = await callApi('POST', '/prospects/batch', { projectId, prospects }, apiUrl, authHeader)
+      const resolved = await resolveProjectId(projectId, apiUrl, authHeader)
+      if (!resolved.id) {
+        return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+      }
+      const { ok, data } = await callApi('POST', '/prospects/batch', { projectId: resolved.id, prospects }, apiUrl, authHeader)
       if (!ok) {
         const err = data as { error: string }
         return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
@@ -213,11 +242,15 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
     'get_outbound_targets',
     'Get uncontacted prospects ordered by priority for outbound outreach.',
     {
-      projectId: z.string(),
+      projectId: z.string().describe('Project name or ID'),
       limit: z.number().int().min(1).max(200).default(50).describe('Max number of prospects to return'),
     },
     async ({ projectId, limit }) => {
-      const { ok, data } = await callApi('GET', `/projects/${projectId}/prospects/reachable?limit=${limit}`, null, apiUrl, authHeader)
+      const resolved = await resolveProjectId(projectId, apiUrl, authHeader)
+      if (!resolved.id) {
+        return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+      }
+      const { ok, data } = await callApi('GET', `/projects/${resolved.id}/prospects/reachable?limit=${limit}`, null, apiUrl, authHeader)
       if (!ok) {
         const err = data as { error: string }
         return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
@@ -249,7 +282,7 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
     'record_outreach',
     'Record an outreach log entry after sending an email, form submission, or SNS DM. Updates prospect status to "contacted".',
     {
-      projectId: z.string(),
+      projectId: z.string().describe('Project name or ID'),
       prospectId: z.number().int(),
       channel: z.enum(['email', 'form', 'sns_twitter', 'sns_linkedin']),
       subject: z.string().optional(),
@@ -259,7 +292,11 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
       errorMessage: z.string().optional(),
     },
     async (input) => {
-      const { ok, data } = await callApi('POST', '/outreach', input, apiUrl, authHeader)
+      const resolved = await resolveProjectId(input.projectId, apiUrl, authHeader)
+      if (!resolved.id) {
+        return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+      }
+      const { ok, data } = await callApi('POST', '/outreach', { ...input, projectId: resolved.id }, apiUrl, authHeader)
       if (!ok) {
         const err = data as { error: string }
         return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
@@ -272,17 +309,21 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
   // --- update_prospect_status ---
   server.tool(
     'update_prospect_status',
-    'Update the status of a prospect in a project (e.g. mark as unreachable, inactive).',
+    'Update the status of a prospect in a project (e.g. mark as inactive, rejected).',
     {
-      projectId: z.string(),
+      projectId: z.string().describe('Project name or ID'),
       prospectId: z.number().int(),
-      status: z.enum(['new', 'contacted', 'responded', 'converted', 'rejected', 'inactive', 'unreachable']),
+      status: z.enum(['new', 'contacted', 'responded', 'converted', 'rejected', 'inactive']),
     },
     async ({ projectId, prospectId, status }) => {
+      const resolved = await resolveProjectId(projectId, apiUrl, authHeader)
+      if (!resolved.id) {
+        return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+      }
       const { ok, data } = await callApi(
         'PATCH',
         `/prospects/${prospectId}/status`,
-        { projectId, status },
+        { projectId: resolved.id, status },
         apiUrl,
         authHeader,
       )
@@ -299,11 +340,15 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
     'get_recent_outreach',
     'Get recent outreach logs for a project. Used by check-results to match Gmail/SNS replies to sent messages.',
     {
-      projectId: z.string(),
+      projectId: z.string().describe('Project name or ID'),
       limit: z.number().int().min(1).max(200).default(100),
     },
     async ({ projectId, limit }) => {
-      const { ok, data } = await callApi('GET', `/projects/${projectId}/outreach/recent?limit=${limit}`, null, apiUrl, authHeader)
+      const resolved = await resolveProjectId(projectId, apiUrl, authHeader)
+      if (!resolved.id) {
+        return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+      }
+      const { ok, data } = await callApi('GET', `/projects/${resolved.id}/outreach/recent?limit=${limit}`, null, apiUrl, authHeader)
       if (!ok) {
         const err = data as { error: string }
         return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
@@ -346,9 +391,13 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
   server.tool(
     'get_eval_data',
     'Get evaluation statistics for a project: response rates, channel performance, sentiment breakdown, etc. Also returns responded message bodies and data sufficiency check.',
-    { projectId: z.string() },
+    { projectId: z.string().describe('Project name or ID') },
     async ({ projectId }) => {
-      const { ok, data } = await callApi('GET', `/projects/${projectId}/stats`, null, apiUrl, authHeader)
+      const resolved = await resolveProjectId(projectId, apiUrl, authHeader)
+      if (!resolved.id) {
+        return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+      }
+      const { ok, data } = await callApi('GET', `/projects/${resolved.id}/stats`, null, apiUrl, authHeader)
       if (!ok) {
         const err = data as { error: string }
         return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
@@ -364,7 +413,7 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
     'record_evaluation',
     'Record an evaluation result and optionally bulk-update prospect priorities by industry.',
     {
-      projectId: z.string(),
+      projectId: z.string().describe('Project name or ID'),
       metrics: z.record(z.string(), z.unknown()).describe('Summary metrics (from get_eval_data, excluding respondedMessages/noResponseSample)'),
       findings: z.string().describe('Analysis findings text'),
       improvements: z.string().describe('Improvement actions applied (free text or JSON)'),
@@ -374,7 +423,11 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
       })).optional().describe('Bulk priority updates by industry'),
     },
     async (input) => {
-      const { ok, data } = await callApi('POST', '/evaluations', input, apiUrl, authHeader)
+      const resolved = await resolveProjectId(input.projectId, apiUrl, authHeader)
+      if (!resolved.id) {
+        return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+      }
+      const { ok, data } = await callApi('POST', '/evaluations', { ...input, projectId: resolved.id }, apiUrl, authHeader)
       if (!ok) {
         const err = data as { error: string }
         return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
@@ -393,9 +446,13 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
   server.tool(
     'get_evaluation_history',
     'Get past evaluation records for a project (findings, improvements, dates).',
-    { projectId: z.string().describe('Project ID') },
+    { projectId: z.string().describe('Project name or ID') },
     async ({ projectId }) => {
-      const { ok, data } = await callApi('GET', `/projects/${projectId}/evaluations`, null, apiUrl, authHeader)
+      const resolved = await resolveProjectId(projectId, apiUrl, authHeader)
+      if (!resolved.id) {
+        return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+      }
+      const { ok, data } = await callApi('GET', `/projects/${resolved.id}/evaluations`, null, apiUrl, authHeader)
       if (!ok) {
         const err = data as { error: string }
         return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
@@ -417,11 +474,15 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
     'get_document',
     'Get the latest version of a project document (business, sales_strategy, search_notes).',
     {
-      projectId: z.string().describe('Project ID'),
+      projectId: z.string().describe('Project name or ID'),
       slug: z.string().describe('Document slug: "business", "sales_strategy", or "search_notes"'),
     },
     async ({ projectId, slug }) => {
-      const { ok, status, data } = await callApi('GET', `/projects/${projectId}/documents/${slug}`, null, apiUrl, authHeader)
+      const resolved = await resolveProjectId(projectId, apiUrl, authHeader)
+      if (!resolved.id) {
+        return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+      }
+      const { ok, status, data } = await callApi('GET', `/projects/${resolved.id}/documents/${slug}`, null, apiUrl, authHeader)
       if (!ok) {
         if (status === 404) {
           return { content: [{ type: 'text' as const, text: `Document "${slug}" not found for project "${projectId}".` }] }
@@ -441,12 +502,16 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
     'save_document',
     'Save a new version of a project document. Appends a new version (immutable); previous versions are preserved.',
     {
-      projectId: z.string().describe('Project ID'),
+      projectId: z.string().describe('Project name or ID'),
       slug: z.string().describe('Document slug: "business", "sales_strategy", or "search_notes"'),
       content: z.string().describe('Full markdown content of the document'),
     },
     async ({ projectId, slug, content }) => {
-      const { ok, data } = await callApi('PUT', `/projects/${projectId}/documents/${slug}`, { content }, apiUrl, authHeader)
+      const resolved = await resolveProjectId(projectId, apiUrl, authHeader)
+      if (!resolved.id) {
+        return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+      }
+      const { ok, data } = await callApi('PUT', `/projects/${resolved.id}/documents/${slug}`, { content }, apiUrl, authHeader)
       if (!ok) {
         const err = data as { error: string }
         return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
@@ -461,10 +526,14 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
     'list_documents',
     'List all documents for a project with their last updated timestamps.',
     {
-      projectId: z.string().describe('Project ID'),
+      projectId: z.string().describe('Project name or ID'),
     },
     async ({ projectId }) => {
-      const { ok, data } = await callApi('GET', `/projects/${projectId}/documents`, null, apiUrl, authHeader)
+      const resolved = await resolveProjectId(projectId, apiUrl, authHeader)
+      if (!resolved.id) {
+        return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+      }
+      const { ok, data } = await callApi('GET', `/projects/${resolved.id}/documents`, null, apiUrl, authHeader)
       if (!ok) {
         const err = data as { error: string }
         return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }

@@ -2,7 +2,6 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { eq, and, desc } from 'drizzle-orm'
-import { createDb } from '../../db/connection'
 import { projects, outreachLogs, projectProspects, channelEnum } from '../../db/schema'
 import { getRemainingOutreachQuota } from '../plan-limits'
 import type { Env, Variables } from '../types'
@@ -24,7 +23,7 @@ export const outreachRouter = new Hono<{ Bindings: Env; Variables: Variables }>(
 outreachRouter.post('/outreach', zValidator('json', recordOutreachSchema), async (c) => {
   const input = c.req.valid('json')
   const tenantId = c.get('tenantId')
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
 
   // Verify project ownership
   const [project] = await db
@@ -88,7 +87,7 @@ outreachRouter.get('/projects/:id/outreach/recent', async (c) => {
   const tenantId = c.get('tenantId')
   const limitParam = c.req.query('limit')
   const limit = limitParam ? Math.min(parseInt(limitParam, 10), 200) : 100
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
 
   const [project] = await db
     .select({ id: projects.id })

@@ -26,7 +26,6 @@ export const prospectStatusEnum = pgEnum('prospect_status', [
   'converted',
   'rejected',
   'inactive',
-  'unreachable',
 ])
 
 export const channelEnum = pgEnum('channel', [
@@ -131,13 +130,15 @@ export const tenantPlans = pgTable('tenant_plans', {
 // ---------------------------------------------------------------------------
 
 export const projects = pgTable('projects', {
-  id: text('id').primaryKey(),
+  id: text('id').primaryKey(), // auto-generated nanoid
   tenantId: text('tenant_id')
     .notNull()
     .references(() => tenants.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
+  unique('uq_project_tenant_name').on(table.tenantId, table.name),
   index('idx_projects_tenant').on(table.tenantId),
 ])
 
@@ -152,18 +153,12 @@ export const organizations = pgTable('organizations', {
     .references(() => tenants.id, { onDelete: 'cascade' }),
   domain: text('domain').notNull(), // apex domain (e.g. "example.com")
   name: text('name').notNull(),
-  normalizedName: text('normalized_name').notNull(), // NFKC + lowercase + trim
   websiteUrl: text('website_url').notNull(),
-  country: text('country'), // ISO 3166-1 alpha-2
-  address: text('address'),
-  industry: text('industry'),
-  overview: text('overview'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   unique('uq_org_tenant_domain').on(table.tenantId, table.domain),
   index('idx_org_tenant').on(table.tenantId),
-  index('idx_org_normalized_name').on(table.normalizedName),
 ])
 
 export const prospects = pgTable('prospects', {

@@ -1,6 +1,5 @@
 import { Hono } from 'hono'
 import { eq } from 'drizzle-orm'
-import { createDb } from '../../db/connection'
 import { masterDocuments } from '../../db/schema'
 import type { Env, Variables } from '../types'
 
@@ -11,7 +10,7 @@ export const masterDocumentsRouter = new Hono<{ Bindings: Env; Variables: Variab
 // ---------------------------------------------------------------------------
 
 masterDocumentsRouter.get('/master-documents', async (c) => {
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
 
   const rows = await db
     .select({
@@ -31,7 +30,7 @@ masterDocumentsRouter.get('/master-documents', async (c) => {
 
 masterDocumentsRouter.get('/master-documents/:slug', async (c) => {
   const slug = c.req.param('slug')
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
 
   const [doc] = await db
     .select({

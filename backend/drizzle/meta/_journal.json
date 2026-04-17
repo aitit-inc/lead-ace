@@ -8,6 +8,20 @@
       "when": 1776347356472,
       "tag": "0000_fat_beast",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1776519600000,
+      "tag": "0001_rls_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776520000000,
+      "tag": "0002_flimsy_weapon_omega",
+      "breakpoints": true
     }
   ]
 }

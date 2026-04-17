@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { eq, and, sql, desc } from 'drizzle-orm'
-import { createDb } from '../../db/connection'
+import type { Db } from '../../db/connection'
 import {
   projects,
   organizations,
@@ -26,12 +26,7 @@ const prospectInputSchema = z.object({
   // Organization
   organizationDomain: z.string().min(1),
   organizationName: z.string().min(1),
-  organizationNormalizedName: z.string().min(1),
   organizationWebsiteUrl: z.string().url(),
-  organizationCountry: z.string().length(2).optional(),
-  organizationAddress: z.string().optional(),
-  organizationIndustry: z.string().optional(),
-  organizationOverview: z.string().optional(),
   // Prospect
   name: z.string().min(1),
   contactName: z.string().optional(),
@@ -47,7 +42,10 @@ const prospectInputSchema = z.object({
   // Linking
   matchReason: z.string().min(1),
   priority: z.number().int().min(1).max(5).default(3),
-})
+}).refine(
+  (p) => p.email || p.contactFormUrl || (p.snsAccounts && Object.values(p.snsAccounts).some(Boolean)),
+  { message: 'At least one contact channel (email, contactFormUrl, or snsAccounts) is required' },
+)
 
 const batchSchema = z.object({
   projectId: z.string().min(1),
@@ -57,7 +55,7 @@ const batchSchema = z.object({
 export const prospectsRouter = new Hono<{ Bindings: Env; Variables: Variables }>()
 
 // Helper: verify project belongs to tenant
-async function verifyProject(db: ReturnType<typeof createDb>, projectId: string, tenantId: string) {
+async function verifyProject(db: Db, projectId: string, tenantId: string) {
   const [project] = await db
     .select({ id: projects.id })
     .from(projects)
@@ -70,7 +68,7 @@ async function verifyProject(db: ReturnType<typeof createDb>, projectId: string,
 prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async (c) => {
   const { projectId, prospects: inputs } = c.req.valid('json')
   const tenantId = c.get('tenantId')
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
 
   if (!await verifyProject(db, projectId, tenantId)) {
     return c.json({ error: 'Project not found' }, 404)
@@ -168,12 +166,7 @@ prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async 
         tenantId,
         domain: input.organizationDomain,
         name: input.organizationName,
-        normalizedName: input.organizationNormalizedName,
         websiteUrl: input.organizationWebsiteUrl,
-        country: input.organizationCountry ?? null,
-        address: input.organizationAddress ?? null,
-        industry: input.organizationIndustry ?? null,
-        overview: input.organizationOverview ?? null,
         createdAt: now,
         updatedAt: now,
       })
@@ -181,12 +174,7 @@ prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async 
         target: [organizations.tenantId, organizations.domain],
         set: {
           name: sql`excluded.name`,
-          normalizedName: sql`excluded.normalized_name`,
           websiteUrl: sql`excluded.website_url`,
-          country: sql`excluded.country`,
-          address: sql`excluded.address`,
-          industry: sql`excluded.industry`,
-          overview: sql`excluded.overview`,
           updatedAt: now,
         },
       })
@@ -248,7 +236,7 @@ prospectsRouter.get('/projects/:id/prospects/reachable', async (c) => {
   const tenantId = c.get('tenantId')
   const limitParam = c.req.query('limit')
   const limit = limitParam ? Math.min(parseInt(limitParam, 10), 200) : 50
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
 
   if (!await verifyProject(db, projectId, tenantId)) {
     return c.json({ error: 'Project not found' }, 404)
@@ -336,7 +324,7 @@ prospectsRouter.get('/projects/:id/prospects/reachable', async (c) => {
 prospectsRouter.get('/projects/:id/prospects/identifiers', async (c) => {
   const projectId = c.req.param('id')
   const tenantId = c.get('tenantId')
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
 
   if (!await verifyProject(db, projectId, tenantId)) {
     return c.json({ error: 'Project not found' }, 404)
@@ -361,7 +349,7 @@ prospectsRouter.get('/projects/:id/prospects/identifiers', async (c) => {
 prospectsRouter.patch('/prospects/:id/status', async (c) => {
   const prospectId = parseInt(c.req.param('id'), 10)
   const tenantId = c.get('tenantId')
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
 
   let body: { projectId: string; status: string }
   try {
@@ -407,7 +395,7 @@ prospectsRouter.patch('/prospects/:id/status', async (c) => {
 prospectsRouter.get('/projects/:id/prospects', async (c) => {
   const projectId = c.req.param('id')
   const tenantId = c.get('tenantId')
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
 
   if (!await verifyProject(db, projectId, tenantId)) {
     return c.json({ error: 'Project not found' }, 404)
@@ -482,7 +470,7 @@ prospectsRouter.get('/projects/:id/prospects', async (c) => {
 prospectsRouter.patch('/prospects/:id/do-not-contact', async (c) => {
   const prospectId = parseInt(c.req.param('id'), 10)
   const tenantId = c.get('tenantId')
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
 
   let body: { doNotContact: boolean }
   try {

@@ -2,7 +2,6 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { eq, and, sql, desc } from 'drizzle-orm'
-import { createDb } from '../../db/connection'
 import {
   projects,
   evaluations,
@@ -21,7 +20,7 @@ export const evaluationsRouter = new Hono<{ Bindings: Env; Variables: Variables 
 evaluationsRouter.get('/projects/:id/stats', async (c) => {
   const projectId = c.req.param('id')
   const tenantId = c.get('tenantId')
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
 
   const [project] = await db
     .select({ id: projects.id })
@@ -136,7 +135,7 @@ const recordEvaluationSchema = z.object({
 evaluationsRouter.post('/evaluations', zValidator('json', recordEvaluationSchema), async (c) => {
   const input = c.req.valid('json')
   const tenantId = c.get('tenantId')
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
 
   const [project] = await db
     .select({ id: projects.id })
@@ -192,7 +191,7 @@ evaluationsRouter.post('/evaluations', zValidator('json', recordEvaluationSchema
 evaluationsRouter.get('/projects/:id/evaluations', async (c) => {
   const projectId = c.req.param('id')
   const tenantId = c.get('tenantId')
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
 
   const [project] = await db
     .select({ id: projects.id })

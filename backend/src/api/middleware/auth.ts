@@ -2,7 +2,7 @@ import { createMiddleware } from 'hono/factory'
 import { eq } from 'drizzle-orm'
 import { verifySupabaseJwt } from '../../auth/verify-jwt'
 import { createDb } from '../../db/connection'
-import { tenantMembers, tenants } from '../../db/schema'
+import { tenantMembers, tenantPlans, tenants } from '../../db/schema'
 import type { Env, Variables } from '../types'
 
 export const authMiddleware = createMiddleware<{ Bindings: Env; Variables: Variables }>(
@@ -21,7 +21,7 @@ export const authMiddleware = createMiddleware<{ Bindings: Env; Variables: Varia
 
     c.set('userId', userId)
 
-    // Resolve tenant for this user
+    // Runs as postgres superuser — bypasses RLS (intentional for tenant resolution)
     const db = createDb(c.env.DATABASE_URL)
     const [membership] = await db
       .select({ tenantId: tenantMembers.tenantId })
@@ -37,8 +37,12 @@ export const authMiddleware = createMiddleware<{ Bindings: Env; Variables: Varia
       const now = new Date()
       await db.insert(tenants).values({ id: tenantId, name: 'My Workspace', createdAt: now })
       await db.insert(tenantMembers).values({ tenantId, userId, role: 'owner', createdAt: now })
+      await db.insert(tenantPlans).values({ tenantId, plan: 'free', createdAt: now, updatedAt: now })
       c.set('tenantId', tenantId)
     }
+
+    // Store raw db for downstream middleware (rlsMiddleware wraps it in a transaction)
+    c.set('db', db)
 
     await next()
   },

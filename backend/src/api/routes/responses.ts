@@ -2,7 +2,6 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { eq, and, desc } from 'drizzle-orm'
-import { createDb } from '../../db/connection'
 import {
   projects,
   outreachLogs,
@@ -32,7 +31,7 @@ export const responsesRouter = new Hono<{ Bindings: Env; Variables: Variables }>
 responsesRouter.post('/responses', zValidator('json', recordResponseSchema), async (c) => {
   const input = c.req.valid('json')
   const tenantId = c.get('tenantId')
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
 
   // Fetch the outreach log to verify project ownership and get prospect info
   const [log] = await db
@@ -122,7 +121,7 @@ responsesRouter.post('/responses', zValidator('json', recordResponseSchema), asy
 responsesRouter.get('/projects/:id/responses', async (c) => {
   const projectId = c.req.param('id')
   const tenantId = c.get('tenantId')
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
 
   // Verify project ownership
   const [project] = await db

@@ -1,3 +1,5 @@
+import type { Db } from '../db/connection'
+
 export type Env = {
   DATABASE_URL: string
   SUPABASE_JWT_SECRET: string
@@ -10,4 +12,5 @@ export type Env = {
 export type Variables = {
   userId: string
   tenantId: string
+  db: Db
 }

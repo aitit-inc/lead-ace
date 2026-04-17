@@ -65,10 +65,14 @@ All data is isolated by tenant. Each user auto-gets a tenant on first API access
 - **`tenants`** table: auto-created per user (1 user = 1 tenant for now, expandable to teams later)
 - **`tenant_members`**: links users to tenants (currently 1:1, future: many-to-1)
 - **All data tables** have `tenant_id` column — queries always filter by tenant
-- **Auth middleware** resolves `userId → tenantId` via `tenant_members` on every request
-- **`organizations`** PK is auto-increment `id` (not domain). `UNIQUE(tenant_id, domain)` ensures per-tenant dedup
+- **Auth middleware** resolves `userId → tenantId` via `tenant_members` on every request (runs as `postgres`, bypasses RLS)
+- **RLS middleware** wraps each request in a transaction: `SET LOCAL ROLE app_rls` + `set_config('app.tenant_id', ...)` — database-level defense-in-depth
+- **`app_rls` role**: non-login role with RLS policies enforced. All 11 tenant-scoped tables have `tenant_isolation` policy. `master_documents` has no RLS (global data)
+- **`projects`**: `id` is auto-generated nanoid (PK), `name` is user-provided (`UNIQUE(tenant_id, name)`)
+- **`organizations`** PK is auto-increment `id` (not domain). `UNIQUE(tenant_id, domain)` ensures per-tenant dedup. Stores only domain, name, websiteUrl (no country/address/industry/overview)
 - **Unique constraints** (email, form URL) are scoped to tenant
-- **Future**: RLS policies via `SET LOCAL app.tenant_id` for defense-in-depth
+- **Prospect registration** requires at least one contact channel (email, contactFormUrl, or snsAccounts)
+- **Route handlers** use `c.get('db')` (the RLS-wrapped transaction), never `createDb()` directly. Only auth middleware and stripe webhook use raw `createDb()`
 
 ## Development Rules
 
@@ -113,14 +117,18 @@ Confirmed by testing on 2026-04-07: the BAD pattern was refused and the OK patte
 
 **Never write migration SQL by hand.** `backend/src/db/schema.ts` is the single source of truth.
 
+Local dev flow:
+
 ```bash
 # 1. Edit backend/src/db/schema.ts
 # 2. Auto-generate migration SQL from the diff
 cd backend && npm run db:generate
-# 3. Apply to DB
+# 3. Apply to local DB
 npm run db:migrate
 # 4. Commit schema.ts + drizzle/ together
 ```
+
+For applying migrations (and the `master_documents` seed) to the **production** Supabase DB, follow [plugin/docs/deploy.md §2](plugin/docs/deploy.md). Use the **Session Pooler** URL (port 5432), NOT the Transaction Pooler (port 6543) — DDL like `CREATE ROLE` fails silently through the transaction pooler. Never run `db:migrate` from CI.
 
 ### TypeScript Rules (backend/)
 

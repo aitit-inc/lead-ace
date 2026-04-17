@@ -2,25 +2,32 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { eq, and, count } from 'drizzle-orm'
-import { createDb } from '../../db/connection'
 import { projects } from '../../db/schema'
 import { getTenantPlan, getPlanLimits } from '../plan-limits'
 import type { Env, Variables } from '../types'
 
 const createProjectSchema = z.object({
-  id: z.string().min(1).max(100).regex(/^[a-zA-Z0-9_-]+$/, 'ID must be alphanumeric with _ or -'),
+  name: z.string().min(1).max(200),
 })
 
 export const projectsRouter = new Hono<{ Bindings: Env; Variables: Variables }>()
 
+// Simple nanoid-like ID generator
+function generateId(length = 21): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  const bytes = crypto.getRandomValues(new Uint8Array(length))
+  return Array.from(bytes, (b) => chars[b % chars.length]).join('')
+}
+
 // GET /projects — list projects for the current tenant
 projectsRouter.get('/', async (c) => {
   const tenantId = c.get('tenantId')
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
 
   const rows = await db
     .select({
       id: projects.id,
+      name: projects.name,
       createdAt: projects.createdAt,
       updatedAt: projects.updatedAt,
     })
@@ -32,19 +39,19 @@ projectsRouter.get('/', async (c) => {
 
 // POST /projects — create a project (with plan limit)
 projectsRouter.post('/', zValidator('json', createProjectSchema), async (c) => {
-  const { id } = c.req.valid('json')
+  const { name } = c.req.valid('json')
   const tenantId = c.get('tenantId')
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
 
-  // Check if project ID is already taken (by anyone)
+  // Check if project name is already taken in this tenant
   const existing = await db
     .select({ id: projects.id })
     .from(projects)
-    .where(eq(projects.id, id))
+    .where(and(eq(projects.tenantId, tenantId), eq(projects.name, name)))
     .limit(1)
 
   if (existing.length > 0) {
-    return c.json({ error: 'Project ID already exists' }, 409)
+    return c.json({ error: 'Project name already exists' }, 409)
   }
 
   // Check project limit based on tenant plan
@@ -68,17 +75,18 @@ projectsRouter.post('/', zValidator('json', createProjectSchema), async (c) => {
     }
   }
 
+  const id = generateId()
   const now = new Date()
-  await db.insert(projects).values({ id, tenantId, createdAt: now, updatedAt: now })
+  await db.insert(projects).values({ id, tenantId, name, createdAt: now, updatedAt: now })
 
-  return c.json({ id, tenantId, createdAt: now, updatedAt: now }, 201)
+  return c.json({ id, name, tenantId, createdAt: now, updatedAt: now }, 201)
 })
 
 // DELETE /projects/:id — delete a project (and cascade to all related data)
 projectsRouter.delete('/:id', async (c) => {
   const id = c.req.param('id')
   const tenantId = c.get('tenantId')
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
 
   const [project] = await db
     .select({ id: projects.id })

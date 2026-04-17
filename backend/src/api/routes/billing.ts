@@ -1,6 +1,5 @@
 import { Hono } from 'hono'
 import { eq } from 'drizzle-orm'
-import { createDb } from '../../db/connection'
 import { tenantPlans } from '../../db/schema'
 import { getTenantPlan, getPlanLimits, getRemainingOutreachQuota, countTenantProspects } from '../plan-limits'
 import type { Env, Variables } from '../types'
@@ -46,7 +45,7 @@ export const billingRouter = new Hono<{ Bindings: Env; Variables: Variables }>()
 
 billingRouter.get('/me/plan', async (c) => {
   const tenantId = c.get('tenantId')
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
 
   const tenantPlan = await getTenantPlan(db, tenantId)
   const limits = getPlanLimits(tenantPlan.plan)
@@ -118,7 +117,7 @@ billingRouter.post('/me/checkout', async (c) => {
 
 billingRouter.post('/me/portal', async (c) => {
   const tenantId = c.get('tenantId')
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
   let body: { returnUrl?: string }
   try {
     body = await c.req.json()

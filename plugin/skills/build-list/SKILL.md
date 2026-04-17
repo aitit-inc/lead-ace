@@ -170,25 +170,23 @@ Call `mcp__plugin_lead-ace_api__add_prospects` with:
 **Field mapping for the MCP tool:**
 
 For each prospect, construct the object as follows:
-- `organizationDomain`: **Extract the apex domain from website_url** (e.g., `https://www.example.com/about` -> `example.com`). Strip `www.` prefix and path. This is the organization's primary key.
+- `organizationDomain`: **Extract the apex domain from website_url** (e.g., `https://www.example.com/about` -> `example.com`). Strip `www.` prefix and path. Used for dedup.
 - `organizationName`: the legal entity name (or `name` if not separately available)
-- `organizationNormalizedName`: **lowercase and trimmed** version of organizationName (e.g., "ABC Corp." -> "abc corp.")
 - `organizationWebsiteUrl`: the organization's official website URL
-- `organizationCountry`: ISO 3166-1 alpha-2 (optional)
-- `organizationIndustry`: industry (optional)
-- `organizationOverview`: business overview (optional)
 - `name`: prospect name (company name, school name, department, etc.)
 - `contactName`: contact person name (optional)
 - `department`: department within the organization (optional)
 - `overview`: business overview (1-2 sentences)
-- `industry`: industry (optional)
+- `industry`: industry (optional, used by `/evaluate` for priority updates)
 - `websiteUrl`: the specific page URL for this prospect
-- `email`: email address (optional)
-- `contactFormUrl`: contact form URL (optional)
+- `email`: email address (optional*)
+- `contactFormUrl`: contact form URL (optional*)
 - `formType`: one of `google_forms`, `native_html`, `wordpress_cf7`, `iframe_embed`, `with_captcha` (optional)
-- `snsAccounts`: `{ x?, linkedin?, instagram?, facebook? }` (optional)
+- `snsAccounts`: `{ x?, linkedin?, instagram?, facebook? }` (optional*)
 - `matchReason`: why this prospect is a good target
 - `priority`: 1-5 (default 3)
+
+\* **At least one of `email`, `contactFormUrl`, or `snsAccounts` is required.** Prospects with no contact channel are rejected.
 
 The server automatically deduplicates by email, contact form URL, and organization domain within the project.
 

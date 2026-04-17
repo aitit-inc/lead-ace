@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { authMiddleware } from './middleware/auth'
+import { rlsMiddleware } from './middleware/rls'
 import { projectsRouter } from './routes/projects'
 import { prospectsRouter } from './routes/prospects'
 import { outreachRouter } from './routes/outreach'
@@ -21,8 +22,9 @@ app.get('/health', (c) => c.json({ ok: true }))
 // Stripe webhook — no auth middleware (uses Stripe signature verification)
 app.route('/api', stripeWebhookRouter)
 
-// All routes below require authentication
+// All routes below require authentication + tenant-scoped RLS
 app.use('/api/*', authMiddleware)
+app.use('/api/*', rlsMiddleware)
 
 app.route('/api/projects', projectsRouter)
 app.route('/api', prospectsRouter)

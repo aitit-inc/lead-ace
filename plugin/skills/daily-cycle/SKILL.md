@@ -170,7 +170,7 @@ You are an outbound sales agent. Please reach out to each company on the prospec
 - Count: 10 (final batch may be fewer)
 - Retrieve prospects via mcp__plugin_lead-ace_api__get_outbound_targets with projectId "$0" and limit 10
 - After each send, immediately record via mcp__plugin_lead-ace_api__record_outreach
-- Return to main with **only: success count, failure count, unreachable count, main failure reasons (if any), list of subject patterns used**
+- Return to main with **only: success count, failure count, inactive count, main failure reasons (if any), list of subject patterns used**
   Example: "Success 8, Failure 1 (form submission error), Unreachable 1. Subject patterns: A x 4, B x 3, C x 3"
 ```
 
@@ -183,7 +183,7 @@ You are an outbound sales agent. Please reach out to each company on the prospec
 Report progress after each batch summary (e.g., "outbound: 10/30 completed").
 
 **Success rate check between batches:** After each batch completes, check the success rate (successes / processed). If rate is below 30%, stop remaining batches and autonomously decide and execute the following:
-- Failure reason is insufficient contacts (many unreachable) -> prioritize step 8 build-list and replenish prospects with contact info
+- Failure reason is insufficient contacts (many inactive) -> prioritize step 8 build-list and replenish prospects with contact info
 - Failure reason is a system issue (gog send auth error, etc.) -> abort all outbound and report the issue in the completion report
 - Failure reason is form incompatibility, etc. -> continue remaining batches with only email-available prospects
 
@@ -255,9 +255,9 @@ Combine Phase 1 candidate info and Phase 2 contact info into complete prospect o
 For each prospect, construct the MCP tool fields:
 - `organizationDomain`: apex domain extracted from `website_url` (strip `www.` and path)
 - `organizationName`: organization/entity name (or `name` if same)
-- `organizationNormalizedName`: lowercase trimmed version of `organizationName`
 - `organizationWebsiteUrl`: official site URL
 - Plus all other fields: `name`, `overview`, `websiteUrl`, `email`, `contactFormUrl`, `formType`, `snsAccounts`, `matchReason`, `priority`, etc.
+- **At least one of `email`, `contactFormUrl`, `snsAccounts` must be set** (prospects without contact channel are rejected)
 
 The server automatically deduplicates, so no pre-check is needed.
 

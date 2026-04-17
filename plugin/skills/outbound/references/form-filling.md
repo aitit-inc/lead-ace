@@ -39,7 +39,7 @@ playwright-cli close
 
 Then call `mcp__plugin_lead-ace_api__record_outreach` with `channel: "form"`, `status: "failed"`, `errorMessage: "Sales refusal notice found"`.
 
-Then call `mcp__plugin_lead-ace_api__update_prospect_status` with `status: "unreachable"`.
+Then call `mcp__plugin_lead-ace_api__update_prospect_status` with `status: "inactive"`.
 
 ## Form Filling Policy
 

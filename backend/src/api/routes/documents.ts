@@ -2,14 +2,14 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { eq, and, desc } from 'drizzle-orm'
-import { createDb } from '../../db/connection'
+import type { Db } from '../../db/connection'
 import { projects, projectDocuments } from '../../db/schema'
 import type { Env, Variables } from '../types'
 
 export const documentsRouter = new Hono<{ Bindings: Env; Variables: Variables }>()
 
 // Helper: verify project ownership
-async function verifyProject(db: ReturnType<typeof createDb>, projectId: string, tenantId: string) {
+async function verifyProject(db: Db, projectId: string, tenantId: string) {
   const [project] = await db
     .select({ id: projects.id })
     .from(projects)
@@ -25,7 +25,7 @@ async function verifyProject(db: ReturnType<typeof createDb>, projectId: string,
 documentsRouter.get('/projects/:id/documents', async (c) => {
   const projectId = c.req.param('id')
   const tenantId = c.get('tenantId')
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
 
   if (!await verifyProject(db, projectId, tenantId)) {
     return c.json({ error: 'Project not found' }, 404)
@@ -52,7 +52,7 @@ documentsRouter.get('/projects/:id/documents/:slug', async (c) => {
   const projectId = c.req.param('id')
   const slug = c.req.param('slug')
   const tenantId = c.get('tenantId')
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
 
   if (!await verifyProject(db, projectId, tenantId)) {
     return c.json({ error: 'Project not found' }, 404)
@@ -90,7 +90,7 @@ documentsRouter.get('/projects/:id/documents/:slug/history', async (c) => {
   const limitParam = c.req.query('limit')
   const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 10, 1), 50) : 10
   const tenantId = c.get('tenantId')
-  const db = createDb(c.env.DATABASE_URL)
+  const db = c.get('db')
 
   if (!await verifyProject(db, projectId, tenantId)) {
     return c.json({ error: 'Project not found' }, 404)
@@ -129,7 +129,7 @@ documentsRouter.put(
     const slug = c.req.param('slug')
     const { content } = c.req.valid('json')
     const tenantId = c.get('tenantId')
-    const db = createDb(c.env.DATABASE_URL)
+    const db = c.get('db')
 
     if (!await verifyProject(db, projectId, tenantId)) {
       return c.json({ error: 'Project not found' }, 404)
