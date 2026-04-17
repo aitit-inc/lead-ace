@@ -87,6 +87,10 @@
       >
         Sign out
       </button>
+      <div class="px-2 pt-2 flex gap-3 text-[11px] text-text-muted">
+        <a href="/terms" class="hover:text-text transition-colors">Terms</a>
+        <a href="/privacy" class="hover:text-text transition-colors">Privacy</a>
+      </div>
     </div>
   </aside>
 
