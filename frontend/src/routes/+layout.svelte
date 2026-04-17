@@ -6,7 +6,14 @@
 
   let { children } = $props();
 
-  const publicPaths = ['/login'];
+  const publicPaths = [
+    '/login',
+    '/forgot-password',
+    '/reset-password',
+    '/auth/callback',
+    '/terms',
+    '/privacy',
+  ];
 
   $effect(() => {
     if ($auth.loading) return;
