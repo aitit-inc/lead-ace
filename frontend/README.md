@@ -40,3 +40,20 @@ npm run build
 You can preview the production build with `npm run preview`.
 
 > To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+
+## Updating dependencies
+
+`@sveltejs/adapter-cloudflare` pulls in `@img/sharp-wasm32`, whose optional
+peer deps resolve to different `@emnapi/*` versions on macOS vs Linux. Running
+`npm install` on macOS therefore writes a lockfile that fails `npm ci` on CI
+(Ubuntu). **Only when you change `package.json` or `package-lock.json`**,
+regenerate the lockfile inside a Linux container:
+
+```sh
+# from frontend/
+docker run --rm -v "$PWD":/w -w /w node:22-slim \
+  npm install --package-lock-only --no-audit --no-fund
+```
+
+Then commit the regenerated `package-lock.json`. Regular code-only changes do
+not require this step — CI will consume the committed lockfile as-is.
