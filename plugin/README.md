@@ -1,107 +1,144 @@
-# lead-ace
+# Lead Ace
 
-Autonomous lead generation plugin for Claude Code.
-Builds prospect lists, runs outbound outreach, and iterates on strategy — all hands-free.
+Autonomous lead generation plugin for Claude Code. Builds prospect lists, runs
+outbound outreach, and iterates on strategy — all hands-free.
 
 ## For Users
 
 ### Prerequisites
 
 - Claude Code
-- SQLite3
-- Gmail MCP (for sending and checking emails)
-- claude-in-chrome MCP (for form submission and SNS operations)
+- A Lead Ace account (sign up at https://app.leadace.ai)
+- Gmail MCP — for sending and checking emails
+- claude-in-chrome MCP — for form submission and SNS DMs
 
 ### Installation
 
-Run the following inside Claude Code:
+In Claude Code:
 
 ```
-/plugin marketplace add aitit-inc/claude-plugins
-/plugin install lead-ace@surpassone-plugins
+/plugin marketplace add aitit-inc/lead-ace
+/plugin install lead-ace@lead-ace
 ```
 
-To update:
+To update later:
 
 ```
 /plugin marketplace update
-/plugin update lead-ace@surpassone-plugins
+/plugin update lead-ace@lead-ace
 ```
+
+### Connect to the Lead Ace MCP Server
+
+Lead Ace stores all project data and templates in the cloud. The plugin talks
+to the cloud through an MCP server. After installing the plugin, configure the
+server URL once per machine:
+
+1. **Sign up or log in** at https://app.leadace.ai (Free tier requires no card).
+2. **Set the MCP server URL.** In your shell profile (`~/.zshrc`, `~/.bashrc`,
+   or your IDE's terminal env):
+
+   ```bash
+   export LEADACE_MCP_URL=https://mcp.leadace.ai/mcp
+   ```
+
+   Restart Claude Code so the plugin's `.mcp.json` picks up the variable.
+3. **Authorize the connection.** The first time the plugin calls a Lead Ace
+   tool, Claude Code opens a browser window to https://mcp.leadace.ai for OAuth
+   sign-in (uses the same email and password as the web app). Approve the
+   request; the token is cached locally for subsequent runs.
+
+#### Self-hosting
+
+If you run the backend yourself (`docker compose up`), point at your local URL
+instead:
+
+```bash
+export LEADACE_MCP_URL=http://localhost:8788/mcp
+```
+
+#### Troubleshooting
+
+- **`MCP server unreachable`** — check that `LEADACE_MCP_URL` is exported in
+  the shell that launched Claude Code, and that you can `curl ${LEADACE_MCP_URL%/mcp}/health`.
+- **Browser asks to sign in repeatedly** — the cached token expired or was
+  cleared. Re-running any Lead Ace command kicks off a fresh OAuth flow.
+- **`401 Unauthorized` from a tool** — your Supabase session may have expired.
+  Sign out of `app.leadace.ai`, sign in again, then re-authorize when the
+  plugin prompts.
 
 ### Usage
 
-Run the following slash commands in sequence as a pipeline.
+Run the slash commands in sequence as a pipeline. The first argument is the
+project name you chose at `/setup`.
 
 | Command | Description |
 |---|---|
-| `/setup <dir>` | Initialize project (create DB and directories) |
-| `/strategy <dir>` | Define sales and marketing strategy |
-| `/build-list <dir>` | Build a prospect list via web search |
-| `/outbound <dir>` | Reach out via email, form, or SNS DM |
-| `/check-results <dir>` | Check and record responses |
-| `/evaluate <dir>` | Run PDCA improvement based on data analysis |
-| `/daily-cycle <dir> [count]` | Run daily cycle automatically (check-results → outbound + build-list) |
-| `/delete-project <dir>` | Unregister project and delete its data |
+| `/setup <name>` | Create a Lead Ace project (cloud-managed) |
+| `/strategy <name>` | Define sales and marketing strategy |
+| `/build-list <name>` | Build a prospect list via web search |
+| `/outbound <name>` | Reach out via email, form, or SNS DM |
+| `/check-results <name>` | Check and record responses |
+| `/evaluate <name>` | Run PDCA improvement based on data analysis |
+| `/daily-cycle <name> [count]` | Daily loop: check-results → outbound + build-list |
+| `/delete-project <name>` | Delete the project and all its data |
 
-`<dir>` is the subdirectory name for each product/service (e.g., `product-a-sales`).
-The database (`data.db`) is shared at the project root; knowledge files are separated into subdirectories.
+There are no local files to manage — projects, prospects, outreach logs,
+responses, and strategy documents all live in the Lead Ace cloud.
 
 ### Basic Flow
 
 ```
 /setup my-product
-/strategy my-product        # Interactively enter business info → generate BUSINESS.md, SALES_STRATEGY.md
+/strategy my-product        # Interactively enter business info
 /build-list my-product      # Collect prospects via web search
 /outbound my-product        # Run automated outbound sales
 /check-results my-product   # Check responses
 /evaluate my-product        # Analyze results and auto-improve strategy
 ```
 
-After the initial setup, use `/daily-cycle` to automate daily sales activities:
+After initial setup, use `/daily-cycle` to automate daily sales activities:
 
 ```
-/daily-cycle my-product      # Run daily: check replies → 30 outreach → replenish list
-/daily-cycle my-product 50   # Specify count
-/evaluate my-product         # Improve strategy about once a week
+/daily-cycle my-product      # check replies → ~30 outreach → replenish list
+/daily-cycle my-product 50   # specify count
+/evaluate my-product         # improve strategy about once a week
 ```
+
+Review prospects, outreach logs, responses, and quotas in the web app at
+https://app.leadace.ai.
 
 ---
 
 ## License
 
-This plugin is provided under a proprietary license from SurpassOne Inc. See [LICENSE](../../LICENSE) for details.
+This plugin is provided under a proprietary license from SurpassOne Inc. See
+[LICENSE](../../LICENSE) for details.
 
-- **Free tier:** Up to 1 project
-- **Paid tier:** Unlimited projects. License keys can be purchased at https://leadace.ai
-
-You will be prompted for a license key when running `/setup`. Skip if using the free tier.
+- **Free trial:** 1 project, 30 prospect registrations and 10 outreach actions (lifetime)
+- **Paid plans** start at $29/month. Manage your subscription from the web app.
 
 ---
 
 ## For Developers
 
-### Plugin Structure
+The plugin lives at `plugin/` in the [aitit-inc/lead-ace](https://github.com/aitit-inc/lead-ace)
+monorepo. Backend (Cloudflare Workers + Supabase) and frontend (SvelteKit on
+Cloudflare Pages) are in `backend/` and `frontend/`.
 
 ```
-.claude-plugin/plugin.json   # Manifest
-skills/                      # Slash commands (each directory contains SKILL.md)
-scripts/                     # Shared scripts (DB initialization, query execution, etc.)
+plugin/
+├── .claude-plugin/plugin.json   # Manifest
+├── .mcp.json                    # MCP server config (uses LEADACE_MCP_URL)
+├── skills/                      # Slash commands (each directory contains SKILL.md)
+├── scripts/fetch_url.py         # Local web fetch helper
+└── references/                  # Shared reference docs
 ```
 
-- See `skills/<name>/SKILL.md` for each skill's specification
-- Detailed templates and guidelines are in `skills/<name>/references/`
+- Each skill's behavior is defined in `skills/<name>/SKILL.md`
 - Use `${CLAUDE_PLUGIN_ROOT}` to reference the plugin root from scripts
+- Domain knowledge (templates, guidelines, frameworks) lives in the cloud as
+  `master_documents` and is fetched at runtime via `get_master_document`
 
-### DB Schema
-
-Defined in `scripts/sales-db.sql`. Main tables: `projects`, `prospects`, `outreach_logs`, `responses`, `evaluations`.
-
-### Local Development and Testing
-
-```bash
-# Launch Claude Code from this repository's directory and skills are auto-loaded
-claude
-
-# Or specify as a plugin from another project
-claude --plugin-dir /path/to/this/repo
-```
+For local development and self-hosting, see the repository
+[CLAUDE.md](../../CLAUDE.md) and [plugin/docs/deploy.md](../docs/deploy.md).
