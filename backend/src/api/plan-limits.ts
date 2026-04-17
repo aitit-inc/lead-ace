@@ -1,4 +1,4 @@
-import { eq, and, sql } from 'drizzle-orm'
+import { eq, and, gte, sql } from 'drizzle-orm'
 import { tenantPlans, outreachLogs, projectProspects } from '../db/schema'
 import type { createDb } from '../db/connection'
 
@@ -76,7 +76,7 @@ export async function countSentOutreach(
   ]
 
   if (plan !== 'free' && currentPeriodStart) {
-    conditions.push(sql`${outreachLogs.sentAt} >= ${currentPeriodStart}`)
+    conditions.push(gte(outreachLogs.sentAt, currentPeriodStart))
   }
 
   const [result] = await db

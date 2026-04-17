@@ -95,13 +95,14 @@ billingRouter.post('/me/checkout', async (c) => {
     return c.json({ error: 'priceId is required' }, 400)
   }
 
+  const origin = c.req.header('origin') ?? ''
   const { ok, data } = await stripeRequest('POST', '/checkout/sessions', {
     'mode': 'subscription',
     'line_items[0][price]': body.priceId,
     'line_items[0][quantity]': '1',
     'client_reference_id': userId,
-    'success_url': body.successUrl ?? `${c.req.url.split('/api')[0]}/settings?checkout=success`,
-    'cancel_url': body.cancelUrl ?? `${c.req.url.split('/api')[0]}/settings?checkout=cancel`,
+    'success_url': body.successUrl ?? `${origin}/settings?checkout=success`,
+    'cancel_url': body.cancelUrl ?? `${origin}/settings?checkout=cancel`,
   }, c.env.STRIPE_SECRET_KEY)
 
   if (!ok) {
@@ -135,9 +136,10 @@ billingRouter.post('/me/portal', async (c) => {
     return c.json({ error: 'No active subscription found' }, 404)
   }
 
+  const origin = c.req.header('origin') ?? ''
   const { ok, data } = await stripeRequest('POST', '/billing_portal/sessions', {
     customer: row.stripeCustomerId,
-    return_url: body.returnUrl ?? `${c.req.url.split('/api')[0]}/settings`,
+    return_url: body.returnUrl ?? `${origin}/settings`,
   }, c.env.STRIPE_SECRET_KEY)
 
   if (!ok) {

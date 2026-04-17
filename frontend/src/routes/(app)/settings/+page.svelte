@@ -109,7 +109,11 @@
     }
     checkoutLoading = tier.tier;
     try {
-      const res = await post<{ url: string }>('/me/checkout', { priceId });
+      const res = await post<{ url: string }>('/me/checkout', {
+        priceId,
+        successUrl: `${window.location.origin}/settings?checkout=success`,
+        cancelUrl: `${window.location.origin}/settings?checkout=cancel`,
+      });
       window.location.href = res.url;
     } catch (e) {
       message = `Error: ${e instanceof Error ? e.message : 'Unknown error'}`;
@@ -120,7 +124,9 @@
   async function handlePortal() {
     portalLoading = true;
     try {
-      const res = await post<{ url: string }>('/me/portal', {});
+      const res = await post<{ url: string }>('/me/portal', {
+        returnUrl: `${window.location.origin}/settings`,
+      });
       window.location.href = res.url;
     } catch (e) {
       message = `Error: ${e instanceof Error ? e.message : 'Unknown error'}`;
