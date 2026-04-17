@@ -2,6 +2,5 @@
   "name": "lead-ace",
   "compatibility_date": "2026-04-01",
   "compatibility_flags": ["nodejs_compat"],
-  "account_id": "0633d5a3f3b6d8d4cb5b2c7fcf453494", // Leo.uno@surpassone.com's Account
   "pages_build_output_dir": ".svelte-kit/cloudflare"
 }
