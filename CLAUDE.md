@@ -56,7 +56,7 @@ Subscription is managed via Stripe. The API enforces limits based on user plan.
 - **Outreach actions** = `record_outreach` with `status: "sent"`. Failed attempts do not count.
 - **Quota enforcement**: `get_outbound_targets` returns `min(requested, remainingQuota, availableTargets)`. When quota is 0, returns empty list with upgrade message. `record_outreach` also guards as a safety net.
 - **Billing**: Stripe Checkout for new subscriptions, Stripe Customer Portal for upgrades/downgrades/cancellation. No billing UI in our app.
-- **Self-host**: Free on GitHub, 1 project, no cloud features (user runs their own backend via docker-compose).
+- **Self-host**: code is open source on GitHub. Users run their own Supabase + Cloudflare deploy (see [plugin/docs/self-host.md](plugin/docs/self-host.md)). No quota enforcement difference — the same plan-limits code runs; defaults to Free.
 
 ## Multi-Tenancy
 

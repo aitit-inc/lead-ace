@@ -8,49 +8,63 @@ Builds prospect lists, runs outbound outreach, and iterates on strategy — all 
 ### Prerequisites
 
 - Claude Code
-- SQLite3
-- Gmail MCP (for sending and checking emails)
-- claude-in-chrome MCP (for form filling and SNS operations)
+- A Lead Ace account at https://app.leadace.ai (Free tier — no card)
+- Gmail MCP — for sending and checking emails
+- claude-in-chrome MCP — for form filling and SNS DMs
 
 ### Installation
 
-Run the following in Claude Code:
+In Claude Code:
 
 ```
 /plugin marketplace add aitit-inc/lead-ace
 /plugin install lead-ace@lead-ace
 ```
 
-To update:
+To update later:
 
 ```
 /plugin marketplace update
 /plugin update lead-ace@lead-ace
 ```
 
+### Connecting to Lead Ace
+
+After installing the plugin, set the MCP server URL once:
+
+```bash
+export LEADACE_MCP_URL=https://mcp.leadace.ai/mcp
+```
+
+Restart Claude Code. The first time the plugin calls a Lead Ace tool, your
+browser opens for OAuth sign-in to Supabase. See
+[plugin/README.md](plugin/README.md) for details and troubleshooting.
+
 ### Usage
 
-Run the following slash commands in pipeline order:
+Run the slash commands in pipeline order. The first argument is your project
+name (chosen at `/setup`).
 
 | Command | Description |
 |---|---|
-| `/setup <dir>` | Initialize project (DB and directory setup) |
-| `/strategy <dir>` | Define sales & marketing strategy |
-| `/build-list <dir>` | Build prospect list via web search |
-| `/outbound <dir>` | Outreach via email, forms, and SNS DMs |
-| `/check-results <dir>` | Check and record responses |
-| `/evaluate <dir>` | Improve strategy based on data analysis (PDCA) |
-| `/daily-cycle <dir> [count]` | Auto-run daily cycle (check-results → outbound + build-list) |
-| `/delete-project <dir>` | Unregister project and delete data |
+| `/setup <name>` | Create a Lead Ace project (cloud-managed) |
+| `/strategy <name>` | Define sales & marketing strategy |
+| `/build-list <name>` | Build prospect list via web search |
+| `/outbound <name>` | Outreach via email, forms, and SNS DMs |
+| `/check-results <name>` | Check and record responses |
+| `/evaluate <name>` | Improve strategy based on data analysis (PDCA) |
+| `/daily-cycle <name> [count]` | Auto-run daily cycle (check-results → outbound + build-list) |
+| `/delete-project <name>` | Delete project and all its data |
 
-`<dir>` is a subdirectory name per product/service (e.g. `product-a-sales`).
-The database (`data.db`) is shared at the project root; knowledge files are stored in subdirectories.
+Projects, prospects, outreach logs, and strategy documents live in the cloud
+— there are no local files to manage. Review everything in the web app at
+https://app.leadace.ai.
 
 ### Basic Flow
 
 ```
 /setup my-product
-/strategy my-product        # Enter business info interactively → generates BUSINESS.md, SALES_STRATEGY.md
+/strategy my-product        # Enter business info interactively
 /build-list my-product      # Collect prospects via web search
 /outbound my-product        # Automated outbound sales
 /check-results my-product   # Check responses
@@ -60,7 +74,7 @@ The database (`data.db`) is shared at the project root; knowledge files are stor
 After initial setup, use `/daily-cycle` to automate daily sales activities:
 
 ```
-/daily-cycle my-product      # Run daily: check replies → 30 outreach → replenish list
+/daily-cycle my-product      # Run daily: check replies → ~30 outreach → replenish list
 /daily-cycle my-product 50   # Specify count
 /evaluate my-product         # Improve strategy weekly
 ```
@@ -71,78 +85,56 @@ After initial setup, use `/daily-cycle` to automate daily sales activities:
 
 This plugin is provided under a proprietary license by SurpassOne Inc.
 
-- **Free tier:** Up to 1 project
-- **Paid tier:** Unlimited projects. License keys available at https://leadace.ai
-
-You will be prompted for a license key when running `/setup`. Skip it for the free tier.
+- **Free trial:** 1 project, 30 prospect registrations and 10 outreach actions (lifetime)
+- **Paid plans** start at $29/month. Manage your subscription from the web app.
+- **Self-host:** see [plugin/docs/self-host.md](plugin/docs/self-host.md) — running for your
+  own use is allowed; redistributing as a hosted service to others is not.
 
 ---
 
 ## For Developers
 
-### Plugin Structure
+### Repository layout
 
 ```
 plugin/                          # Claude Code plugin
 ├── .claude-plugin/plugin.json   # Manifest
+├── .mcp.json                    # MCP server config (uses LEADACE_MCP_URL)
 ├── skills/                      # Slash commands (each directory has SKILL.md)
-├── scripts/                     # Shared scripts (DB init, query execution, etc.)
-├── migrations/                  # DB migrations
-└── docs/                        # Design documents
-backend/                         # Web API Server + MCP Server (Cloudflare Workers)
-frontend/                        # Web frontend (Cloudflare Pages)
+├── scripts/fetch_url.py         # Local web fetch helper
+├── references/                  # Shared reference docs
+└── docs/                        # Design docs, deploy runbook, self-host guide
+backend/                         # API + MCP servers (Cloudflare Workers, Hono, Drizzle)
+frontend/                        # Web app (SvelteKit, Cloudflare Pages)
+docker-compose.yml               # Bare Postgres for non-Supabase local dev
 ```
 
-- Skill specs are in `plugin/skills/<name>/SKILL.md`
-- Detailed templates and guidelines are in `plugin/skills/<name>/references/`
-- Use `${CLAUDE_PLUGIN_ROOT}` to reference the plugin root in scripts
+- Plugin conventions and the schema-change workflow: [CLAUDE.md](CLAUDE.md)
+- Production deploy runbook: [plugin/docs/deploy.md](plugin/docs/deploy.md)
+- Self-hosting and local dev: [plugin/docs/self-host.md](plugin/docs/self-host.md)
 
-### DB Schema
-
-Defined in `backend/src/db/schema.ts` (Drizzle ORM, PostgreSQL). This is the **single source of truth** for the schema.
-
-**Never write migration SQL by hand.** Edit `schema.ts` and generate automatically:
+### Quick start (local dev)
 
 ```bash
+npx supabase start                      # Auth + Postgres on ports 54321/54322
 cd backend
-
-# 1. Edit src/db/schema.ts (add/modify tables, columns, enums...)
-
-# 2. Auto-generate a migration file from the diff
-npm run db:generate
-# → creates drizzle/XXXX_description.sql automatically
-
-# 3. Apply pending migrations to the DB
+cp .dev.vars.example .dev.vars          # then edit with `supabase status` values
+npm install
 npm run db:migrate
+npx tsx scripts/seed-master-documents.ts
+
+npm run dev:api                         # API → http://localhost:8787
+npm run dev:mcp                         # MCP → http://localhost:8788  (separate terminal)
+
+cd ../frontend
+cp .env.example .env                    # set VITE_SUPABASE_* from `supabase status`
+npm install
+npm run dev                             # → http://localhost:5173
 ```
 
-Commit `src/db/schema.ts` and the new `drizzle/` files together.
-
-### Backend Local Development
+Pre-release checks:
 
 ```bash
-# 1. Start PostgreSQL
-docker compose up -d
-
-# 2. Apply migrations (first time only, or after schema changes)
-cd backend
-cp .dev.vars.example .dev.vars          # first time only
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/leadace" npm run db:migrate
-
-# 3. Start Workers dev servers (run in separate terminals)
-npm run dev:api                         # API Server → http://localhost:8787
-npm run dev:mcp                         # MCP Server → http://localhost:8788
-
-# Type check
-npm run typecheck
-```
-
-### Plugin Local Development
-
-```bash
-# Launch Claude Code in this repo directory to auto-load skills
-claude
-
-# Or specify as a plugin from another project
-claude --plugin-dir /path/to/this/repo
+cd backend && npm run typecheck
+cd frontend && npm run check
 ```
