@@ -10,7 +10,6 @@
     converted: 'bg-emerald-100 text-emerald-700',
     rejected: 'bg-red-100 text-red-700',
     inactive: 'bg-amber-100 text-amber-700',
-    unreachable: 'bg-neutral-300 text-neutral-600',
   };
 </script>
 

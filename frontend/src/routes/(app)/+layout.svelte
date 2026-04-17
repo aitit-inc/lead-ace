@@ -7,8 +7,10 @@
   import { activeProject } from '$lib/stores/project';
   import { plan } from '$lib/stores/plan';
   import ProjectSwitcher from '$lib/components/ProjectSwitcher.svelte';
+  import ProjectCreateDialog from '$lib/components/ProjectCreateDialog.svelte';
 
   let { children } = $props();
+  let showCreate = $state(false);
 
   onMount(() => {
     plan.load();
@@ -90,6 +92,12 @@
 
   <!-- Main -->
   <div class="flex flex-1 flex-col overflow-hidden">
+    {#if showCreate}
+      <ProjectCreateDialog
+        onclose={() => (showCreate = false)}
+        oncreated={() => window.location.reload()}
+      />
+    {/if}
     <!-- Header -->
     <header class="flex items-center justify-between border-b border-border px-6 py-3">
       <ProjectSwitcher />
@@ -101,8 +109,19 @@
       {#if $activeProject || page.url.pathname === '/settings'}
         {@render children()}
       {:else}
-        <div class="flex items-center justify-center h-full">
-          <p class="text-text-muted text-sm">No project selected</p>
+        <div class="flex flex-col items-center justify-center h-full gap-4">
+          <div class="text-center">
+            <p class="text-sm text-text">No projects yet</p>
+            <p class="text-xs text-text-muted mt-1">
+              Create your first project to start tracking prospects and outreach.
+            </p>
+          </div>
+          <button
+            onclick={() => (showCreate = true)}
+            class="rounded bg-text px-4 py-1.5 text-xs font-medium text-white hover:bg-text/90 transition-colors"
+          >
+            Create your first project
+          </button>
         </div>
       {/if}
     </main>

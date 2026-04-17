@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/state';
-  import { del, post } from '$lib/api';
+  import { del, get, post } from '$lib/api';
   import { activeProject } from '$lib/stores/project';
   import { plan } from '$lib/stores/plan';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-  import type { PlanTier } from '$lib/types';
+  import type { PlanTier, Project } from '$lib/types';
 
   let showDeleteDialog = $state(false);
   let deleting = $state(false);
@@ -13,6 +13,18 @@
   let portalLoading = $state(false);
   let message = $state('');
   let billingPeriod = $state<'monthly' | 'yearly'>('monthly');
+  let projectName = $state<string | null>(null);
+
+  $effect(() => {
+    const pid = $activeProject;
+    if (!pid) {
+      projectName = null;
+      return;
+    }
+    get<{ projects: Project[] }>('/projects').then(({ projects }) => {
+      projectName = projects.find((p) => p.id === pid)?.name ?? pid;
+    });
+  });
 
   interface PaidTier {
     tier: Exclude<PlanTier, 'free'>;
@@ -79,7 +91,7 @@
     deleting = true;
     try {
       await del(`/projects/${pid}`);
-      message = `Project "${pid}" deleted.`;
+      message = `Project "${projectName ?? pid}" deleted.`;
       activeProject.set(null);
       window.location.href = '/prospects';
     } catch (e) {
@@ -264,7 +276,7 @@
         <div>
           <p class="text-sm font-medium text-text">Delete project</p>
           <p class="text-xs text-text-secondary mt-0.5">
-            Permanently delete <span class="font-mono font-medium">{$activeProject}</span> and all its data (prospects, outreach logs, responses, evaluations).
+            Permanently delete <span class="font-medium">{projectName ?? $activeProject}</span> and all its data (prospects, outreach logs, responses, evaluations).
           </p>
         </div>
         <button

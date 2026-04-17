@@ -1,4 +1,4 @@
-export type ProspectStatus = 'new' | 'contacted' | 'responded' | 'converted' | 'rejected' | 'inactive' | 'unreachable';
+export type ProspectStatus = 'new' | 'contacted' | 'responded' | 'converted' | 'rejected' | 'inactive';
 export type Channel = 'email' | 'form' | 'sns_twitter' | 'sns_linkedin';
 export type OutreachStatus = 'sent' | 'failed';
 export type Sentiment = 'positive' | 'neutral' | 'negative';
@@ -6,6 +6,7 @@ export type ResponseType = 'reply' | 'auto_reply' | 'bounce' | 'meeting_request'
 
 export interface Project {
   id: string;
+  name: string;
   createdAt: string;
   updatedAt: string;
 }
