@@ -97,3 +97,23 @@ export interface ProjectStats {
   noResponseSample: Array<Record<string, unknown>>;
   dataSufficiency: { sufficient: boolean; totalSent: number; daysSinceLastSend: number | null };
 }
+
+export type PlanTier = 'free' | 'starter' | 'pro' | 'scale';
+
+export interface QuotaUsage {
+  used: number;
+  remaining: number;
+  limit: number | null;
+}
+
+export interface PlanInfo {
+  plan: PlanTier;
+  limits: {
+    maxProjects: number | null;
+    maxOutreachPerMonth: number | null;
+    maxProspects: number | null;
+    isLifetime: boolean;
+  };
+  outreach: QuotaUsage;
+  prospects?: QuotaUsage;
+}
