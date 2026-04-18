@@ -121,6 +121,7 @@ export const tenantPlans = pgTable('tenant_plans', {
   stripeSubscriptionId: text('stripe_subscription_id'),
   currentPeriodStart: timestamp('current_period_start', { withTimezone: true }),
   currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
+  isUnlimited: boolean('is_unlimited').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })

@@ -10,9 +10,31 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  migrate-db:
+    name: Apply DB migrations
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: db:migrate (Session Pooler)
+        # drizzle-kit tracks applied migrations in __drizzle_migrations, so this is idempotent.
+        # Use Session Pooler URL (port 5432) — Transaction Pooler (6543) breaks DDL.
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_SESSION_POOLER }}
+
   deploy-api:
     name: deploy API Worker
     runs-on: ubuntu-latest
+    needs: migrate-db
     defaults:
       run:
         working-directory: backend

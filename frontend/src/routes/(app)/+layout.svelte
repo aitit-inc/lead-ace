@@ -100,9 +100,9 @@
           title="View plan details"
         >
           <div class="flex items-center justify-between mb-1">
-            <span class="capitalize font-medium text-text">{p.plan}</span>
+            <span class="capitalize font-medium text-text">{p.isUnlimited ? 'Unlimited' : p.plan}</span>
             <span class="text-[10px] text-text-muted uppercase tracking-wider">
-              {p.limits.isLifetime ? 'trial' : 'monthly'}
+              {p.isUnlimited ? '∞' : p.limits.isLifetime ? 'trial' : 'monthly'}
             </span>
           </div>
           <div class="font-mono text-[11px] text-text-muted">

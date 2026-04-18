@@ -79,7 +79,7 @@ prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async 
   const limits = getPlanLimits(tp.plan)
 
   let prospectBudget: number | null = null
-  if (limits.maxProspects !== null) {
+  if (!tp.isUnlimited && limits.maxProspects !== null) {
     const currentCount = await countTenantProspects(db, tenantId)
     prospectBudget = Math.max(0, limits.maxProspects - currentCount)
     if (prospectBudget === 0) {

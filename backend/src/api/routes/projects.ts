@@ -58,7 +58,7 @@ projectsRouter.post('/', zValidator('json', createProjectSchema), async (c) => {
   const tp = await getTenantPlan(db, tenantId)
   const limits = getPlanLimits(tp.plan)
 
-  if (limits.maxProjects !== null) {
+  if (!tp.isUnlimited && limits.maxProjects !== null) {
     const [projectCount] = await db
       .select({ count: count() })
       .from(projects)

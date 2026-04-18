@@ -128,7 +128,7 @@ npm run db:migrate
 # 4. Commit schema.ts + drizzle/ together
 ```
 
-For applying migrations (and the `master_documents` seed) to the **production** Supabase DB, follow [plugin/docs/deploy.md §2](plugin/docs/deploy.md). Use the **Session Pooler** URL (port 5432), NOT the Transaction Pooler (port 6543) — DDL like `CREATE ROLE` fails silently through the transaction pooler. Never run `db:migrate` from CI.
+For **production** DB: `db:migrate` runs automatically via the `migrate-db` job in `.github/workflows/deploy.yml` on every `main` push (idempotent — drizzle tracks applied migrations). The job uses the `DATABASE_URL_SESSION_POOLER` secret (**Session Pooler**, port 5432). Transaction Pooler (port 6543) breaks DDL like `CREATE ROLE` and must not be used here. For manual / emergency apply or the initial `master_documents` seed, see [plugin/docs/deploy.md §2](plugin/docs/deploy.md).
 
 ### TypeScript Rules (backend/)
 

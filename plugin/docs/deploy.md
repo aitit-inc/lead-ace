@@ -46,29 +46,26 @@
 
 ---
 
-## 2. 本番スキーママイグレーション ✅ 完了（継続運用手順として残す）
+## 2. 本番スキーママイグレーション ✅ 完了（継続運用は GitHub Actions 経由）
 
-ローカルから本番 DB に対してマイグレーションを適用する。**必ず Session Pooler (port 5432) を使う**。Transaction Pooler (port 6543) は DDL / DO ブロック / `CREATE ROLE` 等で不具合が起きるため migrate 用途では不適。
+通常運用では **`.github/workflows/deploy.yml` の `migrate-db` ジョブが自動適用** する（`main` プッシュ時、`deploy-api` の前段。drizzle-kit の `__drizzle_migrations` テーブルで適用済みは追跡されるため毎回実行しても idempotent）。
 
-Supabase Dashboard → **Connect** → **Session pooler** の URL をコピー。形式：
+GitHub Secret 必須:
+- `DATABASE_URL_SESSION_POOLER`: **Session Pooler URL (port 5432)**。Supabase Dashboard → **Connect** → **Session pooler** からコピー。形式 `postgresql://postgres.<project_ref>:<password>@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres`。Transaction Pooler (port 6543) は DDL / DO ブロック / `CREATE ROLE` 等で不具合が起きるため不可。
 
-```
-postgresql://postgres.<project_ref>:<password>@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres
-```
+アプリ側の `wrangler secret put DATABASE_URL ...` には **Transaction Pooler URL (port 6543)** を入れる（高並列に強い）。役割が違う：
+- migrate（CI）→ Session Pooler（DDL 安全）
+- アプリ（wrangler secret）→ Transaction Pooler（高並列）
 
-適用：
+### 手動適用が必要なケース
+
+CI を通さず手元から直接当てたい場合（緊急対応・ロールバック等）:
 
 ```bash
 cd backend
- DATABASE_URL="<Session Pooler URL>" npm run db:migrate
- DATABASE_URL="<Session Pooler URL>" npx tsx scripts/seed-master-documents.ts
+DATABASE_URL="<Session Pooler URL>" npm run db:migrate
+DATABASE_URL="<Session Pooler URL>" npx tsx scripts/seed-master-documents.ts  # 初回 seed のみ
 ```
-
-アプリの `wrangler secret put DATABASE_URL ...` には **Transaction Pooler URL (port 6543)** を入れる（高並列に強い）。役割が違う：
-- migrate → Session Pooler（DDL 安全）
-- アプリ（wrangler secret）→ Transaction Pooler（高並列）
-
-**注意:** `db:migrate` は CI で流さない方針。ローカル → 本番の順で手動適用、毎回 secret 一覧と設定値を二重チェック。
 
 ---
 

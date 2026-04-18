@@ -36,25 +36,28 @@ export async function getTenantPlan(db: Db, tenantId: string): Promise<{
   plan: PlanTier
   currentPeriodStart: Date | null
   currentPeriodEnd: Date | null
+  isUnlimited: boolean
 }> {
   const [row] = await db
     .select({
       plan: tenantPlans.plan,
       currentPeriodStart: tenantPlans.currentPeriodStart,
       currentPeriodEnd: tenantPlans.currentPeriodEnd,
+      isUnlimited: tenantPlans.isUnlimited,
     })
     .from(tenantPlans)
     .where(eq(tenantPlans.tenantId, tenantId))
     .limit(1)
 
   if (!row) {
-    return { plan: 'free', currentPeriodStart: null, currentPeriodEnd: null }
+    return { plan: 'free', currentPeriodStart: null, currentPeriodEnd: null, isUnlimited: false }
   }
 
   return {
     plan: row.plan,
     currentPeriodStart: row.currentPeriodStart,
     currentPeriodEnd: row.currentPeriodEnd,
+    isUnlimited: row.isUnlimited,
   }
 }
 
@@ -107,12 +110,17 @@ export async function countTenantProspects(db: Db, tenantId: string): Promise<nu
 export async function getRemainingOutreachQuota(
   db: Db,
   tenantId: string,
-): Promise<{ remaining: number | null; limit: number | null; used: number; plan: PlanTier }> {
+): Promise<{ remaining: number | null; limit: number | null; used: number; plan: PlanTier; isUnlimited: boolean }> {
   const tp = await getTenantPlan(db, tenantId)
   const limits = getPlanLimits(tp.plan)
 
+  if (tp.isUnlimited) {
+    const used = await countSentOutreach(db, tenantId, tp.plan, tp.currentPeriodStart)
+    return { remaining: null, limit: null, used, plan: tp.plan, isUnlimited: true }
+  }
+
   if (limits.maxOutreachPerMonth === null) {
-    return { remaining: null, limit: null, used: 0, plan: tp.plan }
+    return { remaining: null, limit: null, used: 0, plan: tp.plan, isUnlimited: false }
   }
 
   const used = await countSentOutreach(db, tenantId, tp.plan, tp.currentPeriodStart)
@@ -123,5 +131,6 @@ export async function getRemainingOutreachQuota(
     limit: limits.maxOutreachPerMonth,
     used,
     plan: tp.plan,
+    isUnlimited: false,
   }
 }

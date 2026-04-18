@@ -109,6 +109,7 @@ export interface QuotaUsage {
 
 export interface PlanInfo {
   plan: PlanTier;
+  isUnlimited?: boolean;
   limits: {
     maxProjects: number | null;
     maxOutreachPerMonth: number | null;

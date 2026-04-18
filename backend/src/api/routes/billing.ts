@@ -51,14 +51,19 @@ billingRouter.get('/me/plan', async (c) => {
   const limits = getPlanLimits(tenantPlan.plan)
   const quota = await getRemainingOutreachQuota(db, tenantId)
 
+  const effectiveLimits = tenantPlan.isUnlimited
+    ? { maxProjects: null, maxOutreachPerMonth: null, maxProspects: null, isLifetime: false }
+    : {
+        maxProjects: limits.maxProjects,
+        maxOutreachPerMonth: limits.maxOutreachPerMonth,
+        maxProspects: limits.maxProspects,
+        isLifetime: limits.isLifetime,
+      }
+
   const result: Record<string, unknown> = {
     plan: tenantPlan.plan,
-    limits: {
-      maxProjects: limits.maxProjects,
-      maxOutreachPerMonth: limits.maxOutreachPerMonth,
-      maxProspects: limits.maxProspects,
-      isLifetime: limits.isLifetime,
-    },
+    isUnlimited: tenantPlan.isUnlimited,
+    limits: effectiveLimits,
     outreach: {
       used: quota.used,
       remaining: quota.remaining,
@@ -66,7 +71,7 @@ billingRouter.get('/me/plan', async (c) => {
     },
   }
 
-  if (limits.maxProspects !== null) {
+  if (!tenantPlan.isUnlimited && limits.maxProspects !== null) {
     const prospectCount = await countTenantProspects(db, tenantId)
     result['prospects'] = {
       used: prospectCount,
