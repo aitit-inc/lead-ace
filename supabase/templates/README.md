@@ -1,14 +1,14 @@
 # Supabase Email Templates
 
-English-language HTML templates for the transactional emails Supabase Auth sends to Lead Ace users. These are the source of truth; production Supabase is updated by pasting them into the Dashboard.
+English-language HTML templates for the transactional emails Supabase Auth sends to LeadAce users. These are the source of truth; production Supabase is updated by pasting them into the Dashboard.
 
 ## Files
 
 | File | Supabase type | Subject line |
 |---|---|---|
-| `confirm-signup.html` | Confirm signup | `Confirm your Lead Ace account` |
-| `reset-password.html` | Reset password | `Reset your Lead Ace password` |
-| `magic-link.html` | Magic link | `Your Lead Ace sign-in link` |
+| `confirm-signup.html` | Confirm signup | `Confirm your LeadAce account` |
+| `reset-password.html` | Reset password | `Reset your LeadAce password` |
+| `magic-link.html` | Magic link | `Your LeadAce sign-in link` |
 | `change-email.html` | Change email address | `Confirm your new email` |
 
 Not templated (current product doesn't use): `invite`.

@@ -4,29 +4,29 @@
 </script>
 
 <svelte:head>
-  <title>Terms of Service · Lead Ace</title>
+  <title>Terms of Service · LeadAce</title>
 </svelte:head>
 
 <div class="mx-auto max-w-2xl px-6 py-12">
   <a href="/" class="inline-flex items-center gap-1.5 text-xs text-text-muted hover:text-text">
     <Logo size={14} class="text-accent" />
-    ← Lead Ace
+    ← LeadAce
   </a>
   <h1 class="mt-4 text-2xl font-semibold text-text">Terms of Service</h1>
   <p class="mt-1 text-xs text-text-muted">Last updated: {lastUpdated}</p>
 
   <div class="mt-8 space-y-6 text-sm leading-relaxed text-text-secondary">
     <p>
-      These Terms of Service ("<strong>Terms</strong>") govern your use of Lead Ace, a sales
+      These Terms of Service ("<strong>Terms</strong>") govern your use of LeadAce, a sales
       automation product offered by SurpassOne Inc. ("<strong>we</strong>",
-      "<strong>us</strong>"). By creating an account or otherwise using Lead Ace, you agree to
+      "<strong>us</strong>"). By creating an account or otherwise using LeadAce, you agree to
       these Terms.
     </p>
 
     <section>
       <h2 class="text-base font-semibold text-text">1. Service</h2>
       <p class="mt-2">
-        Lead Ace is a Claude Code plugin and supporting cloud service for managing outbound sales
+        LeadAce is a Claude Code plugin and supporting cloud service for managing outbound sales
         activities. Features and limits depend on the plan you select. We may change, suspend, or
         discontinue features at any time.
       </p>
@@ -44,7 +44,7 @@
 
     <section>
       <h2 class="text-base font-semibold text-text">3. Acceptable Use</h2>
-      <p class="mt-2">You agree not to use Lead Ace to:</p>
+      <p class="mt-2">You agree not to use LeadAce to:</p>
       <ul class="mt-2 list-disc pl-5 space-y-1">
         <li>send unsolicited commercial messages in violation of applicable anti-spam laws (e.g. CAN-SPAM, GDPR, CASL, the Spam Act);</li>
         <li>impersonate any person or entity, or misrepresent your affiliation;</li>
@@ -54,7 +54,7 @@
       </ul>
       <p class="mt-2">
         You remain solely responsible for the content of any messages or contact data you generate
-        or send through Lead Ace.
+        or send through LeadAce.
       </p>
     </section>
 
@@ -88,7 +88,7 @@
     <section>
       <h2 class="text-base font-semibold text-text">6. Disclaimers</h2>
       <p class="mt-2">
-        Lead Ace is provided "AS IS" without warranties of any kind, express or implied, including
+        LeadAce is provided "AS IS" without warranties of any kind, express or implied, including
         merchantability, fitness for a particular purpose, and non-infringement. We do not warrant
         that the service will be uninterrupted or error-free, or that AI-generated content will be
         accurate or appropriate for your specific use.

@@ -240,15 +240,15 @@ otp_expiry = 3600
 # via Dashboard — see supabase/templates/README.md.
 
 [auth.email.template.confirmation]
-subject = "Confirm your Lead Ace account"
+subject = "Confirm your LeadAce account"
 content_path = "./supabase/templates/confirm-signup.html"
 
 [auth.email.template.recovery]
-subject = "Reset your Lead Ace password"
+subject = "Reset your LeadAce password"
 content_path = "./supabase/templates/reset-password.html"
 
 [auth.email.template.magic_link]
-subject = "Your Lead Ace sign-in link"
+subject = "Your LeadAce sign-in link"
 content_path = "./supabase/templates/magic-link.html"
 
 [auth.email.template.email_change]

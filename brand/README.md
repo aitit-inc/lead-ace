@@ -1,6 +1,6 @@
 # Brand assets
 
-Canonical source files for the Lead Ace logo and derived assets.
+Canonical source files for the LeadAce logo and derived assets.
 
 | File | Purpose |
 |---|---|
@@ -25,6 +25,19 @@ magick favicon-32.png favicon-16.png favicon.ico
 ```
 
 Small sizes use `-morphology Dilate` before downsampling because the stroke density is too fine to render cleanly at 16–32px otherwise.
+
+## Regenerating the OG image
+
+`og.png` is rasterized from `og.svg`. Update the SVG (wordmark, tagline, colors), then:
+
+```bash
+# From repo root
+magick -background "#F6EEE6" -density 288 brand/og.svg -resize 1200x630 brand/og.png
+cp brand/og.png frontend/static/og.png
+cp brand/og.png landing/public/og.png
+```
+
+`-density 288` (4× of 72dpi baseline) gives crisp text at the 1200×630 target size. The three copies are served as `og:image` from `brand/` (canonical), `app.leadace.ai/og.png`, and `leadace.ai/og.png`.
 
 ## Regenerating the trace from the source PNG
 

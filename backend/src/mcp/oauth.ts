@@ -1,5 +1,5 @@
 /**
- * MCP OAuth 2.1 Authorization Server for Lead Ace.
+ * MCP OAuth 2.1 Authorization Server for LeadAce.
  *
  * Implements the OAuth endpoints required by the MCP spec:
  * - /.well-known/oauth-authorization-server  (metadata)
@@ -364,7 +364,7 @@ function loginPageHtml(baseUrl: string, p: LoginParams): string {
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Lead Ace — Sign In</title>
+  <title>LeadAce — Sign In</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:Geist,Inter,-apple-system,system-ui,sans-serif;background:#F4F2F0;color:#333;display:flex;align-items:center;justify-content:center;min-height:100vh;-webkit-font-smoothing:antialiased}
@@ -382,7 +382,7 @@ function loginPageHtml(baseUrl: string, p: LoginParams): string {
 </head>
 <body>
 <div class="c">
-  <h1>Lead Ace</h1>
+  <h1>LeadAce</h1>
   <p class="sub">Sign in to authorize Claude Code</p>
   <form id="f">
     <label for="e">Email</label>

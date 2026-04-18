@@ -67,7 +67,7 @@
       <div class="mb-8 flex items-center justify-between px-2">
         <h1 class="flex items-center gap-2 font-mono text-base font-semibold text-text">
           <Logo size={22} class="text-accent" />
-          Lead Ace
+          LeadAce
         </h1>
         <button
           type="button"

@@ -8,7 +8,7 @@ Builds prospect lists, runs outbound outreach, and iterates on strategy — all 
 ### Prerequisites
 
 - Claude Code
-- A Lead Ace account at https://app.leadace.ai (Free tier — no card)
+- A LeadAce account at https://app.leadace.ai (Free tier — no card)
 - Gmail MCP — for sending and checking emails
 - claude-in-chrome MCP — for form filling and SNS DMs
 
@@ -28,7 +28,7 @@ To update later:
 /plugin update lead-ace@lead-ace
 ```
 
-### Connecting to Lead Ace
+### Connecting to LeadAce
 
 After installing the plugin, set the MCP server URL once:
 
@@ -36,7 +36,7 @@ After installing the plugin, set the MCP server URL once:
 export LEADACE_MCP_URL=https://mcp.leadace.ai/mcp
 ```
 
-Restart Claude Code. The first time the plugin calls a Lead Ace tool, your
+Restart Claude Code. The first time the plugin calls a LeadAce tool, your
 browser opens for OAuth sign-in to Supabase. See
 [plugin/README.md](plugin/README.md) for details and troubleshooting.
 
@@ -47,7 +47,7 @@ name (chosen at `/setup`).
 
 | Command | Description |
 |---|---|
-| `/setup <name>` | Create a Lead Ace project (cloud-managed) |
+| `/setup <name>` | Create a LeadAce project (cloud-managed) |
 | `/strategy <name>` | Define sales & marketing strategy |
 | `/build-list <name>` | Build prospect list via web search |
 | `/outbound <name>` | Outreach via email, forms, and SNS DMs |

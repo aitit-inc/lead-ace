@@ -1,4 +1,4 @@
-# Lead Ace
+# LeadAce
 
 Autonomous lead generation plugin for Claude Code. Builds prospect lists, runs
 outbound outreach, and iterates on strategy — all hands-free.
@@ -8,7 +8,7 @@ outbound outreach, and iterates on strategy — all hands-free.
 ### Prerequisites
 
 - Claude Code
-- A Lead Ace account (sign up at https://app.leadace.ai)
+- A LeadAce account (sign up at https://app.leadace.ai)
 - Gmail MCP — for sending and checking emails
 - claude-in-chrome MCP — for form submission and SNS DMs
 
@@ -28,9 +28,9 @@ To update later:
 /plugin update lead-ace@lead-ace
 ```
 
-### Connect to the Lead Ace MCP Server
+### Connect to the LeadAce MCP Server
 
-Lead Ace stores all project data and templates in the cloud. The plugin talks
+LeadAce stores all project data and templates in the cloud. The plugin talks
 to the cloud through an MCP server. After installing the plugin, configure the
 server URL once per machine:
 
@@ -43,7 +43,7 @@ server URL once per machine:
    ```
 
    Restart Claude Code so the plugin's `.mcp.json` picks up the variable.
-3. **Authorize the connection.** The first time the plugin calls a Lead Ace
+3. **Authorize the connection.** The first time the plugin calls a LeadAce
    tool, Claude Code opens a browser window to https://mcp.leadace.ai for OAuth
    sign-in (uses the same email and password as the web app). Approve the
    request; the token is cached locally for subsequent runs.
@@ -62,7 +62,7 @@ export LEADACE_MCP_URL=http://localhost:8788/mcp
 - **`MCP server unreachable`** — check that `LEADACE_MCP_URL` is exported in
   the shell that launched Claude Code, and that you can `curl ${LEADACE_MCP_URL%/mcp}/health`.
 - **Browser asks to sign in repeatedly** — the cached token expired or was
-  cleared. Re-running any Lead Ace command kicks off a fresh OAuth flow.
+  cleared. Re-running any LeadAce command kicks off a fresh OAuth flow.
 - **`401 Unauthorized` from a tool** — your Supabase session may have expired.
   Sign out of `app.leadace.ai`, sign in again, then re-authorize when the
   plugin prompts.
@@ -74,7 +74,7 @@ project name you chose at `/setup`.
 
 | Command | Description |
 |---|---|
-| `/setup <name>` | Create a Lead Ace project (cloud-managed) |
+| `/setup <name>` | Create a LeadAce project (cloud-managed) |
 | `/strategy <name>` | Define sales and marketing strategy |
 | `/build-list <name>` | Build a prospect list via web search |
 | `/outbound <name>` | Reach out via email, form, or SNS DM |
@@ -84,7 +84,7 @@ project name you chose at `/setup`.
 | `/delete-project <name>` | Delete the project and all its data |
 
 There are no local files to manage — projects, prospects, outreach logs,
-responses, and strategy documents all live in the Lead Ace cloud.
+responses, and strategy documents all live in the LeadAce cloud.
 
 ### Basic Flow
 

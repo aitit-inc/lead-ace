@@ -13,7 +13,7 @@
  *
  * Optional env:
  *   PORTAL_RETURN_URL — default return URL for Customer Portal (defaults to prod app URL)
- *   BUSINESS_HEADLINE — shown in portal header (defaults to 'Lead Ace subscription')
+ *   BUSINESS_HEADLINE — shown in portal header (defaults to 'LeadAce subscription')
  *   WEBHOOK_URL       — if set, create/update a webhook endpoint at this URL.
  *                       On first creation, the signing secret (whsec_...) is printed.
  *
@@ -27,7 +27,7 @@ if (!KEY) {
 }
 
 const PORTAL_RETURN_URL = process.env['PORTAL_RETURN_URL'] ?? 'https://app.leadace.ai/settings'
-const BUSINESS_HEADLINE = process.env['BUSINESS_HEADLINE'] ?? 'Lead Ace subscription'
+const BUSINESS_HEADLINE = process.env['BUSINESS_HEADLINE'] ?? 'LeadAce subscription'
 const WEBHOOK_URL = process.env['WEBHOOK_URL']
 const MODE = KEY.startsWith('sk_test_') ? 'test' : 'live'
 

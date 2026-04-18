@@ -26,7 +26,7 @@
   <div class="w-full max-w-sm px-6">
     <div class="flex items-center gap-2.5 mb-1">
       <Logo size={32} class="text-accent" />
-      <h1 class="font-mono text-2xl font-semibold text-text">Lead Ace</h1>
+      <h1 class="font-mono text-2xl font-semibold text-text">LeadAce</h1>
     </div>
     <p class="text-text-muted text-sm mb-8">Reset your password</p>
 

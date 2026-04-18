@@ -131,7 +131,7 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
   // --- setup_project ---
   server.tool(
     'setup_project',
-    'Create a new Lead Ace project. Returns the auto-generated project ID. Returns an error if the plan limit is reached.',
+    'Create a new LeadAce project. Returns the auto-generated project ID. Returns an error if the plan limit is reached.',
     { name: z.string().describe('Project name (unique per tenant)') },
     async ({ name }) => {
       const { ok, data } = await callApi('POST', '/projects', { name }, apiUrl, authHeader)

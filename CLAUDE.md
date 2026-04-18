@@ -1,6 +1,6 @@
-# Lead Ace Plugin Development Repository
+# LeadAce Plugin Development Repository
 
-Repository for Lead Ace — an autonomous sales automation Claude Code plugin by SurpassOne Inc.
+Repository for LeadAce — an autonomous sales automation Claude Code plugin by SurpassOne Inc.
 
 ## Repository Structure
 
@@ -18,7 +18,7 @@ docker-compose.yml               # Local development environment (added in Phase
 plugin/
 ├── .claude-plugin/
 │   └── plugin.json       # Plugin manifest (required)
-├── .mcp.json             # MCP server configuration (Lead Ace backend)
+├── .mcp.json             # MCP server configuration (LeadAce backend)
 ├── skills/                # Slash commands (each subdirectory has SKILL.md)
 ├── scripts/               # Local utility tools (fetch_url.py)
 ├── references/            # Shared reference documents

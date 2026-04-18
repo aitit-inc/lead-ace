@@ -4,13 +4,13 @@
 </script>
 
 <svelte:head>
-  <title>Privacy Policy · Lead Ace</title>
+  <title>Privacy Policy · LeadAce</title>
 </svelte:head>
 
 <div class="mx-auto max-w-2xl px-6 py-12">
   <a href="/" class="inline-flex items-center gap-1.5 text-xs text-text-muted hover:text-text">
     <Logo size={14} class="text-accent" />
-    ← Lead Ace
+    ← LeadAce
   </a>
   <h1 class="mt-4 text-2xl font-semibold text-text">Privacy Policy</h1>
   <p class="mt-1 text-xs text-text-muted">Last updated: {lastUpdated}</p>
@@ -18,7 +18,7 @@
   <div class="mt-8 space-y-6 text-sm leading-relaxed text-text-secondary">
     <p>
       This Privacy Policy explains how SurpassOne Inc. ("<strong>we</strong>") handles personal
-      data when you use Lead Ace.
+      data when you use LeadAce.
     </p>
 
     <section>

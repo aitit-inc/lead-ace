@@ -10,7 +10,7 @@ allowed-tools:
 
 # Setup - Project Initial Setup
 
-A skill that creates a new Lead Ace sales project. Registers the project on the server.
+A skill that creates a new LeadAce sales project. Registers the project on the server.
 
 ## Steps
 
