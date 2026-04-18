@@ -33,10 +33,11 @@
 
 ### 次セッション開始時にやること
 
-1. **5-4g: 認証メールのカスタム送信ドメイン** — Supabase デフォ `noreply@mail.supabase.io` を `noreply@leadace.ai` 系に
-2. **5-4f: Stripe test → live 移行** — 実カード収集に必須
-3. その他の UX 改善（5-4i〜5-4l は順序自由）
-4. 5-4e の残: 旧 `leadace.surpassone.com` を `https://leadace.ai` へ 301 リダイレクト（surpassone.com Zone の Redirect Rule）+ 旧 Pages デプロイ削除
+1. **5-4f: Stripe test → live 移行** — 実カード収集に必須（手動）
+2. **5-4i: モバイルレスポンシブ** — 外部流入の初回接触はモバイル率高いので優先
+3. **5-4l: Google Sign-in** — 摩擦削減効果大 / 実装コスト小
+4. **5-4j → 5-4k**: ダークモード → デザイン刷新（トークン統一で後作業を減らす）
+5. **5-4h: エラー監視** — 任意
 
 ---
 
@@ -951,15 +952,15 @@ Stripe live 申請に必須。Customer Portal にも URL 登録必要。
 - [x] OG URL を `leadace.surpassone.com` → `leadace.ai` に変更
 - 特定商取引法に基づく表記は別タスク（5-4d 残）として保留。現 LP の `legal.html` は旧商品ベースで内容が commit に値しないため破棄
 
-#### Cloudflare Pages 設定 — コード側完了・Dashboard 作業残り
+#### Cloudflare Pages 設定 ✅ 完了
 
 - [x] `landing/wrangler.jsonc` (`name: lead-ace-landing`, `pages_build_output_dir: public`) + `landing/README.md` 追加
-- [x] `.github/workflows/deploy.yml` に `deploy-landing` ジョブ追加（build なし、`wrangler pages deploy --branch main`）
+- [x] `.github/workflows/deploy.yml` に `deploy-landing` ジョブ追加
 - [x] `plugin/docs/deploy.md` §5-3 に Landing Page セクション追加
-- [x] Cloudflare Pages で `lead-ace-landing` プロジェクト作成（`wrangler pages project create` で作成 → `wrangler pages deploy` でコンテンツ投入）
-- [x] Custom domain `leadace.ai`（apex）を割り当て（Dashboard、CNAME flattening 自動）
-- [x] `www.leadace.ai` → `leadace.ai` の 301（surpassone.com Zone の Redirect Rules + `192.0.2.1` ダミー A レコード proxied）
-- [ ] 既存 `leadace.surpassone.com` を retire（`surpassone.com` Zone で `leadace.surpassone.com` → `https://leadace.ai` の Redirect Rule 追加 + 旧 Pages デプロイ削除）
+- [x] Cloudflare Pages で `lead-ace-landing` プロジェクト作成・コンテンツ投入
+- [x] Custom domain `leadace.ai`（apex）を割り当て
+- [x] `www.leadace.ai` → `leadace.ai` の 301
+- [x] 旧 `leadace.surpassone.com` retire（Pages + DNS 削除、ほぼアクセスなかったため 301 不要と判断）
 
 ### 5-4f. Stripe live 移行チェックリスト
 
@@ -988,10 +989,9 @@ test mode での動作確認完了後：
 
 - [x] メール送信サービス選定: Resend
 - [x] 送信元アドレス確定: `noreply@leadace.ai`
-- [ ] Resend アカウント作成・`leadace.ai` ドメイン追加 → 提示される DNS を Cloudflare DNS に投入（proxy OFF）
-- [ ] Resend API キー発行
-- [ ] Supabase → Project Settings → Authentication → SMTP Settings に Host `smtp.resend.com` / Port `465` / User `resend` / Pass `<API key>` / Sender `noreply@leadace.ai` を入力
-- [ ] 実際に Sign-up して届くか、スパム判定されないかを Gmail / Outlook で確認（`dkim=pass / spf=pass / dmarc=pass` のヘッダを確認）
+- [x] Resend アカウント作成・`leadace.ai` ドメイン検証・DNS 投入
+- [x] Resend API キー発行 + Supabase SMTP Settings 入力（Sender `noreply@leadace.ai`）
+- [x] Sign up / Reset password の実メール受信確認（Confirm signup + Reset password 両方 OK）
 
 手順は `plugin/docs/deploy.md §9` に詳細記載。
 
@@ -1002,11 +1002,11 @@ test mode での動作確認完了後：
 - [x] Confirm signup: `supabase/templates/confirm-signup.html` / Subject: `Confirm your Lead Ace account`
 - [x] Reset Password: `supabase/templates/reset-password.html` / Subject: `Reset your Lead Ace password`
 - [x] Magic Link: `supabase/templates/magic-link.html` / Subject: `Your Lead Ace sign-in link`
-- [x] Change Email: `supabase/templates/change-email.html` / Subject: `Confirm your new email`
-- [ ] 上記 4 件を本番 Dashboard に貼り付け（Git 同期はない。テンプレ変更時はリポと Dashboard 両方更新）
+- [x] Change Email: `supabase/templates/change-email.html`（参考・現状プロダクトではメアド変更 UI なし）
+- [x] Confirm signup / Reset Password を本番 Dashboard に貼付・疎通確認。Magic Link / Change Email は機能未提供のため保留（使うタイミングで貼れば OK）
 - Invite User はプロダクトで未使用なので skip
 
-`supabase/config.toml` でもローカル dev 用に各 template を registered 済み（`supabase start` で自動反映）。
+`supabase/config.toml` でもローカル dev 用に各 template を registered 済み（`supabase start` で自動反映）。フッターの連絡先は `contact@surpassone.com`（app 側 terms/privacy も同じ）。
 
 ### 5-4i. 最低限のレスポンシブ対応
 
@@ -1129,9 +1129,9 @@ test mode での動作確認完了後：
     - 5-4b MCP OAuth の KV 移行 ✅
     - 5-4c MCP 接続ユーザードキュメント ✅
     - 5-4d 法的ドキュメント（ToS / Privacy） ✅ コード完了（Stripe Portal 登録は手動）
-    - 5-4e apex leadace.ai に既存 LP 移設 ✅（`leadace.ai` + `www.leadace.ai` 301 稼働。旧 `leadace.surpassone.com` の retire のみ残り）
+    - 5-4e apex leadace.ai に既存 LP 移設 ✅
     - 5-4f Stripe test → live 移行 ⏳ 手動
-    - 5-4g 認証メールの送信ドメイン + 本文改善 ⏳ 手動（Resend/SendGrid + DNS + テンプレ書き直し）
+    - 5-4g 認証メールの送信ドメイン + 本文改善 ✅（Resend 経由 `noreply@leadace.ai` 稼働、Confirm/Reset テンプレ本番適用済み）
     - 5-4h エラー監視 ⏳ 任意
     - 5-4i 最低限のレスポンシブ対応 ⏳ コード
     - 5-4j ライト/ダークモード対応 ⏳ コード
@@ -1141,7 +1141,7 @@ test mode での動作確認完了後：
 フェーズ5-2（セルフデプロイ対応・ドキュメント）✅ コード完了
     - self-host.md + env vars matrix ✅
     ↓
-★ 現在地 ★ = Phase 5-4 残タスク群（優先度推奨: 5-4g → 5-4f → 5-4i → 5-4l → 5-4j → 5-4k → 5-4h）
+★ 現在地 ★ = Phase 5-4 残タスク群（優先度推奨: 5-4f → 5-4i → 5-4l → 5-4j → 5-4k → 5-4h）
     ↓
 フェーズ6（リリース・移行）→ フェーズ6 レビュー
 ```

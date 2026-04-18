@@ -33,7 +33,7 @@
       <p class="mt-2">
         You are responsible for the credentials used to access your account and for all activity
         that occurs under it. Notify us immediately at
-        <a href="mailto:support@leadace.ai" class="underline">support@leadace.ai</a>
+        <a href="mailto:contact@surpassone.com" class="underline">contact@surpassone.com</a>
         if you suspect unauthorised use.
       </p>
     </section>
@@ -123,7 +123,7 @@
       <h2 class="text-base font-semibold text-text">10. Contact</h2>
       <p class="mt-2">
         SurpassOne Inc.<br />
-        <a href="mailto:support@leadace.ai" class="underline">support@leadace.ai</a>
+        <a href="mailto:contact@surpassone.com" class="underline">contact@surpassone.com</a>
       </p>
     </section>
   </div>

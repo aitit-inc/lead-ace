@@ -85,7 +85,7 @@
         your personal data, and to object to or restrict certain processing. You can exercise most
         of these rights directly in the product (e.g. by deleting projects or your account from
         the Settings page); for anything you cannot do in-product, contact
-        <a href="mailto:support@leadace.ai" class="underline">support@leadace.ai</a>.
+        <a href="mailto:contact@surpassone.com" class="underline">contact@surpassone.com</a>.
       </p>
     </section>
 
@@ -104,7 +104,7 @@
         We rely on industry-standard transport encryption (TLS), database-level row-level security
         for tenant isolation, and OAuth/JWT-based authentication. No system is perfectly secure;
         please report suspected vulnerabilities to
-        <a href="mailto:security@leadace.ai" class="underline">security@leadace.ai</a>.
+        <a href="mailto:contact@surpassone.com" class="underline">contact@surpassone.com</a>.
       </p>
     </section>
 
@@ -129,7 +129,7 @@
       <h2 class="text-base font-semibold text-text">10. Contact</h2>
       <p class="mt-2">
         SurpassOne Inc.<br />
-        <a href="mailto:support@leadace.ai" class="underline">support@leadace.ai</a>
+        <a href="mailto:contact@surpassone.com" class="underline">contact@surpassone.com</a>
       </p>
     </section>
   </div>
