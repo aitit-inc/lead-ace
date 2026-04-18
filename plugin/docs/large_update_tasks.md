@@ -2,42 +2,42 @@
 
 アーキテクチャ設計: [large_update_infra_arch.md](./large_update_infra_arch.md)
 
-## 現状整理（2026-04-18 セッション終了時点）
+## 現状整理（2026-04-18 セッション 2 終了時点）
 
 ### 本番稼働状況
 
 | エンドポイント | 状態 |
 |---|---|
-| `https://app.leadace.ai` | ✓ フロント（SPA: Sign-up / Login / Settings / Prospects …） |
+| `https://leadace.ai` (apex) | ✓ Landing Page（Pages: `lead-ace-landing`）|
+| `https://www.leadace.ai` | ✓ apex へ 301 リダイレクト |
+| `https://app.leadace.ai` | ✓ フロント SPA（mobile-responsive 対応済み）|
 | `https://api.leadace.ai` | ✓ Web API Worker |
-| `https://mcp.leadace.ai` | ✓ MCP Worker（OAuth 2.1 + KV バック） |
-| `https://leadace.ai` (apex) | ❌ Cloudflare 404（5-4e で対応予定） |
+| `https://mcp.leadace.ai` | ✓ MCP Worker（OAuth 2.1 + KV バック）|
 
-- **CI/CD**: `main` への push 毎に `check.yml` + `deploy.yml` が走り、API / MCP Worker と Pages を自動デプロイ
-- **Stripe**: test mode で Products × 3 / Prices × 6 / Customer Portal / Webhook endpoint 稼働。Checkout → webhook → tenant_plans 更新 → UI 反映まで通しで動作確認済み
-- **Supabase 本番**（`chaxrcdtxngoyqvtoyem`）: migration + master_documents seed 適用済み。RLS 稼働
+- **CI/CD**: `main` push 毎に API / MCP Worker + Frontend Pages + Landing Pages を自動デプロイ
+- **認証メール**: Resend 経由 `noreply@leadace.ai` から Lead Ace ブランドの英語テンプレで配信。Confirm signup / Reset password 疎通確認済み
+- **Stripe**: 依然 test mode。Checkout → webhook → `tenant_plans` 反映まで OK。live 移行は 5-4f（会社情報・本人確認・live key 発行が必要）
+- **Supabase 本番**（`chaxrcdtxngoyqvtoyem`）: migration + master_documents seed + RLS 稼働
 
-### 2026-04-18 セッションでやったこと
+### 2026-04-18 セッション 2 でやったこと
 
-1. **CI/CD 有効化** — Cloudflare API Token 発行・GitHub Secrets × 2 + Variables × 9 登録・main に push して自動デプロイ稼働
-2. **CI の初期問題を解消**
-   - `1e752fe` / `8d9ca01`: `frontend/package-lock.json` が macOS 生成だと Linux CI の `npm ci` が通らない問題を Docker (node:22-slim) でロック生成し直して解消。運用手順は `frontend/README.md` に追記（`1c4079f`）
-   - `1f98ea5`: Pages の wrangler 設定に `account_id` を書くと Pages deploy が弾くため削除（env var 経由で渡す）
-3. **本番動作検証中に発覚した 2 つのバグ修正** — `dfaa256`
-   - Stripe Checkout の `success_url` フォールバックが `c.req.url.split('/api')[0]` を使っており、`api.leadace.ai` 自体が "/api" を含むため `https:/` に退化 → 結果 `https://settings/?checkout=success` にリダイレクトされて死ぬ。`Origin` ヘッダから組み立てるよう修正（frontend からも明示的に渡す）
-   - `/api/me/plan` が 500（postgres.js が Date を bind param として拒否）。`drizzle` の `sql` 直渡しを `gte(outreachLogs.sentAt, currentPeriodStart)` に置換
-4. **Settings UX 改善** — `3fc760e`
-   - bfcache 復帰時に `portalLoading` / `checkoutLoading` が true のまま残りボタン固着 → `pageshow` でリセット
-   - Checkout 成功後、webhook 到達前に plan store が読み込まれるため、`/settings?checkout=success` 到達時は plan が変化するまで最大 12 秒ポーリング
-   - Paid ユーザーに「Change plan, update payment, view invoices, or cancel via the Stripe Customer Portal」と明示
+1. **5-4e LP 移設完了** — `landing/public/index.html` に index のみ移設（旧 `legal.html` / `privacy.html` / `setup-guide.html` 等の旧商品モデルページは破棄）、CTA 4 箇所 + Login リンク + footer に Terms/Privacy 追加、apex `leadace.ai` に custom domain 付与、`www` → apex 301、旧 `leadace.surpassone.com` Pages を削除
+2. **5-4g 認証メール対応完了** — Resend サインアップ・`leadace.ai` ドメイン検証・DNS 投入（proxy OFF）・Supabase SMTP 設定（送信元 `noreply@leadace.ai`）。`supabase/templates/` に 4 種の英語テンプレ作成（Confirm signup / Reset Password は本番 Dashboard に反映済み、Magic Link / Change Email は UI 未提供のため repo に source だけ保持）
+3. **contact 統一** — 存在しない `support@leadace.ai` / `security@leadace.ai` を `contact@surpassone.com` に差し替え（email templates + app Terms/Privacy）
+4. **5-4i モバイル対応完了（コード）** — app layout をハンバーガードロワー化、Prospects/Outreach/Responses のテーブルを mobile card に、Evaluations / Documents / Settings のグリッド/2 カラムを狭幅対応。DevTools iPhone SE で実機確認済み
 
 ### 次セッション開始時にやること
 
-1. **5-4f: Stripe test → live 移行** — 実カード収集に必須（手動）
-2. **5-4i: モバイルレスポンシブ** — 外部流入の初回接触はモバイル率高いので優先
-3. **5-4l: Google Sign-in** — 摩擦削減効果大 / 実装コスト小
-4. **5-4j → 5-4k**: ダークモード → デザイン刷新（トークン統一で後作業を減らす）
-5. **5-4h: エラー監視** — 任意
+1. **5-4f Stripe test → live 移行** — 実カード収集に必須（手動）。会社情報・本人確認・銀行口座登録 → `setup-stripe.ts` を `sk_live_...` で再実行 → wrangler secret + GitHub Variables を live 値で上書き → 実カード決済で疎通
+2. **5-4l Google Sign-in** — 摩擦削減効果大。Supabase Provider 有効化 + Google Cloud Console で OAuth client 作成（手動）→ `/login` に "Continue with Google" ボタン + callback 動作確認（コード）
+3. **5-4j ダークモード → 5-4k デザイン刷新** — トークン統一で後作業を減らすため j → k の順。Tailwind v4 `@theme` + `.dark` セレクタに移行して固定色を semantic token 化、システム追従 + 手動トグル
+4. **5-4h エラー監視** — 任意（Sentry or Cloudflare Workers Logs + Slack 通知）
+
+### 長期の未決事項
+
+- Stripe live 化待ち（5-4f）が終わるまでは課金機能は `leo.uno@surpassone.com` などテスト口座限定
+- 特定商取引法に基づく表示（5-4d の残）: 日本向け有料販売する場合は別途法務判断で追加
+- 未来: `aitit-inc/business-autopilot` 配下の `projects/small-business/leadace/` はもう不要。任意タイミングで archive / remove して OK
 
 ---
 
