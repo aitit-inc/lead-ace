@@ -796,6 +796,57 @@
 
     /* Note: prefers-reduced-motion is intentionally not respected for decorative
        LP motion — the motion IS the design. Core content remains operable. */
+
+    /* ===== Cookie notice ===== */
+    .cookie-notice {
+      position: fixed;
+      inset-inline: 0;
+      bottom: 0;
+      z-index: 100;
+      padding: 14px 20px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      color: var(--text-secondary);
+      font-size: 13px;
+      line-height: 1.55;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.4s ease, transform 0.4s ease;
+      pointer-events: none;
+    }
+    .cookie-notice.visible {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+    @media (min-width: 768px) {
+      .cookie-notice {
+        inset-inline: auto;
+        right: 20px;
+        bottom: 20px;
+        width: 380px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 16px 18px;
+      }
+    }
+    .cookie-notice p { margin: 0 0 10px; }
+    .cookie-notice a { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
+    .cookie-notice a:hover { color: var(--accent); }
+    .cookie-notice .actions { display: flex; justify-content: flex-end; }
+    .cookie-notice button {
+      font: inherit;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text);
+      background: var(--page);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 12px;
+      cursor: pointer;
+      transition: border-color 0.2s ease, color 0.2s ease;
+    }
+    .cookie-notice button:hover { border-color: var(--accent); color: var(--accent); }
   </style>
 </head>
 <body>
@@ -1375,6 +1426,32 @@ const REDUCED = false;
   }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
 
   document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+})();
+
+/* ===== Cookie notice ===== */
+(function() {
+  const KEY = 'leadace.cookie_consent';
+  let accepted = false;
+  try { accepted = localStorage.getItem(KEY) === 'accepted'; } catch (e) {}
+  if (accepted) return;
+
+  const el = document.createElement('div');
+  el.className = 'cookie-notice';
+  el.setAttribute('role', 'region');
+  el.setAttribute('aria-label', 'Cookie notice');
+  el.innerHTML =
+    '<p>This site uses first-party storage for preferences only. We don\'t use analytics or advertising trackers. ' +
+    '<a href="https://app.leadace.ai/privacy#cookies">Learn more</a>.</p>' +
+    '<div class="actions"><button type="button">Got it</button></div>';
+  document.body.appendChild(el);
+
+  requestAnimationFrame(() => el.classList.add('visible'));
+
+  el.querySelector('button').addEventListener('click', () => {
+    try { localStorage.setItem(KEY, 'accepted'); } catch (e) {}
+    el.classList.remove('visible');
+    setTimeout(() => el.remove(), 400);
+  });
 })();
 </script>
 

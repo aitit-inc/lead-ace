@@ -1,6 +1,6 @@
 <script lang="ts">
   import Logo from '$lib/components/Logo.svelte';
-  const lastUpdated = '2026-04-17';
+  const lastUpdated = '2026-04-18';
 </script>
 
 <svelte:head>
@@ -93,12 +93,49 @@
       </p>
     </section>
 
-    <section>
+    <section id="cookies">
       <h2 class="text-base font-semibold text-text">6. Cookies and local storage</h2>
       <p class="mt-2">
-        We use first-party cookies and local storage strictly for authentication and to remember
-        UI preferences (e.g. the active project). We do not use third-party advertising or tracking
-        cookies.
+        We use only first-party browser storage that is strictly necessary to operate the service,
+        plus storage to remember preferences you have set yourself. We do not use analytics,
+        advertising, or cross-site tracking technologies.
+      </p>
+
+      <h3 class="mt-4 text-sm font-semibold text-text">Strictly necessary</h3>
+      <ul class="mt-2 list-disc pl-5 space-y-1">
+        <li>
+          <strong>Authentication tokens</strong> (stored in local storage by Supabase Auth, key
+          <code class="font-mono text-xs">sb-*-auth-token</code>). Required to keep you signed in.
+        </li>
+      </ul>
+
+      <h3 class="mt-4 text-sm font-semibold text-text">Preferences (set by you)</h3>
+      <ul class="mt-2 list-disc pl-5 space-y-1">
+        <li>
+          <code class="font-mono text-xs">leadace.theme</code> — your light/dark mode choice.
+        </li>
+        <li>
+          <code class="font-mono text-xs">leadace_active_project</code> — the project currently
+          selected in the sidebar.
+        </li>
+        <li>
+          <code class="font-mono text-xs">leadace.cookie_consent</code> — records that you have
+          seen this notice, so we don't show it again.
+        </li>
+      </ul>
+
+      <h3 class="mt-4 text-sm font-semibold text-text">Third parties</h3>
+      <p class="mt-2">
+        When you are redirected to Stripe (for checkout or billing portal) or Google (for
+        sign-in), those services set their own cookies under their own domains, governed by their
+        respective privacy policies. The landing page and application load web fonts from Google
+        Fonts, which may transmit your IP address to Google as part of that request.
+      </p>
+
+      <p class="mt-3">
+        To revoke your stored preferences, clear the site data for <code class="font-mono text-xs"
+          >leadace.ai</code
+        > and <code class="font-mono text-xs">app.leadace.ai</code> in your browser settings.
       </p>
     </section>
 

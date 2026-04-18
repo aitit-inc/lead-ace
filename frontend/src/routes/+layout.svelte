@@ -3,6 +3,7 @@
   import { auth } from '$lib/stores/auth';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
+  import CookieBanner from '$lib/components/CookieBanner.svelte';
 
   let { children } = $props();
 
@@ -32,4 +33,5 @@
   </div>
 {:else}
   {@render children()}
+  <CookieBanner />
 {/if}
