@@ -33,10 +33,10 @@
 
 ### 次セッション開始時にやること
 
-1. **5-4e: apex `leadace.ai` へ既存 LP を移設** — 下記参照
-2. **5-4g: 認証メールのカスタム送信ドメイン** — Supabase デフォ `noreply@mail.supabase.io` を `noreply@leadace.ai` 系に
-3. **5-4f: Stripe test → live 移行** — 実カード収集に必須
-4. その他の UX 改善（5-4i〜5-4l は順序自由）
+1. **5-4g: 認証メールのカスタム送信ドメイン** — Supabase デフォ `noreply@mail.supabase.io` を `noreply@leadace.ai` 系に
+2. **5-4f: Stripe test → live 移行** — 実カード収集に必須
+3. その他の UX 改善（5-4i〜5-4l は順序自由）
+4. 5-4e の残: 旧 `leadace.surpassone.com` を `https://leadace.ai` へ 301 リダイレクト（surpassone.com Zone の Redirect Rule）+ 旧 Pages デプロイ削除
 
 ---
 
@@ -956,10 +956,10 @@ Stripe live 申請に必須。Customer Portal にも URL 登録必要。
 - [x] `landing/wrangler.jsonc` (`name: lead-ace-landing`, `pages_build_output_dir: public`) + `landing/README.md` 追加
 - [x] `.github/workflows/deploy.yml` に `deploy-landing` ジョブ追加（build なし、`wrangler pages deploy --branch main`）
 - [x] `plugin/docs/deploy.md` §5-3 に Landing Page セクション追加
-- [ ] Cloudflare Dashboard → Pages で `lead-ace-landing` プロジェクト作成（初回 `wrangler pages deploy` 実行時に自動作成される可能性あり。空プロジェクトを先に作っておいても良い）
-- [ ] 同プロジェクトに Custom domain `leadace.ai`（apex）を割り当て（Cloudflare が CNAME flattening で自動対応）
-- [ ] `www.leadace.ai` → `leadace.ai` の 301（任意）を Page Rule or Bulk Redirect で設定
-- [ ] 既存 `leadace.surpassone.com` を retire（公開停止 or `https://leadace.ai` へ 301）
+- [x] Cloudflare Pages で `lead-ace-landing` プロジェクト作成（`wrangler pages project create` で作成 → `wrangler pages deploy` でコンテンツ投入）
+- [x] Custom domain `leadace.ai`（apex）を割り当て（Dashboard、CNAME flattening 自動）
+- [x] `www.leadace.ai` → `leadace.ai` の 301（surpassone.com Zone の Redirect Rules + `192.0.2.1` ダミー A レコード proxied）
+- [ ] 既存 `leadace.surpassone.com` を retire（`surpassone.com` Zone で `leadace.surpassone.com` → `https://leadace.ai` の Redirect Rule 追加 + 旧 Pages デプロイ削除）
 
 ### 5-4f. Stripe live 移行チェックリスト
 
@@ -979,29 +979,34 @@ test mode での動作確認完了後：
 現状: Supabase Auth のデフォルト送信元 `noreply@mail.supabase.io` で、かつ Supabase テンプレート英語のまま。
 目標: 自前ドメイン + Lead Ace のトーン・内容に合わせたメール文面。
 
+採用方針（確定）:
+- 送信サービス: **Resend**（無料 3,000 通/月、DKIM/SPF 自動発行、Supabase 統合例あり）
+- 送信元: `noreply@leadace.ai`（返信不要）
+- 言語: 英語のみ（app 本体に合わせる）
+
 #### 送信ドメイン移行
 
-- [ ] メール送信サービス選定（候補: Resend / SendGrid / Amazon SES。Resend が Developer DX 良好・無料枠あり）
-- [ ] Cloudflare DNS に SPF / DKIM / DMARC レコード追加
-- [ ] 送信元アドレス確定: `noreply@leadace.ai` or `auth@leadace.ai`（返信不要なら `noreply`、返信受け付けなら `hello@` など別途用意）
-- [ ] Supabase → Project Settings → Auth → SMTP Settings にカスタム SMTP 情報を入力
-- [ ] 実際に Sign-up して届くか、スパム判定されないかを Gmail / Outlook で確認
+- [x] メール送信サービス選定: Resend
+- [x] 送信元アドレス確定: `noreply@leadace.ai`
+- [ ] Resend アカウント作成・`leadace.ai` ドメイン追加 → 提示される DNS を Cloudflare DNS に投入（proxy OFF）
+- [ ] Resend API キー発行
+- [ ] Supabase → Project Settings → Authentication → SMTP Settings に Host `smtp.resend.com` / Port `465` / User `resend` / Pass `<API key>` / Sender `noreply@leadace.ai` を入力
+- [ ] 実際に Sign-up して届くか、スパム判定されないかを Gmail / Outlook で確認（`dkim=pass / spf=pass / dmarc=pass` のヘッダを確認）
 
-#### メール本文改善（Supabase Auth → Email Templates）
+手順は `plugin/docs/deploy.md §9` に詳細記載。
 
-Supabase が送る以下のテンプレートを日本語 or 丁寧な英語で Lead Ace のブランドに合わせる:
+#### メール本文改善 ✅ コード側完了（Dashboard 反映のみ残り）
 
-- [ ] Confirm signup（サインアップ確認）
-- [ ] Magic Link（使う場合のみ）
-- [ ] Change Email（メールアドレス変更）
-- [ ] Reset Password（パスワード再設定）
-- [ ] Invite User（現状は使わない想定なら skip）
+`supabase/templates/` にブランド付き HTML 4 種を作成済み。件名付きで以下を Supabase Dashboard → Authentication → Email Templates に貼り付けるのみ。
 
-ポイント:
-- 件名を短く・意図が分かる文言に（"Confirm your Lead Ace account" など）
-- 本文は 2〜3 段落程度。リンククリック前に「何をしようとしているか」が分かる
-- フッターに会社名（SurpassOne Inc.）・サポート連絡先・ unsubscribe 相当の案内（確認メール類では不要だがブランド方針次第）
-- テンプレートに使える変数: `{{ .ConfirmationURL }}` / `{{ .Email }}` / `{{ .SiteURL }}` 等（Supabase docs 参照）
+- [x] Confirm signup: `supabase/templates/confirm-signup.html` / Subject: `Confirm your Lead Ace account`
+- [x] Reset Password: `supabase/templates/reset-password.html` / Subject: `Reset your Lead Ace password`
+- [x] Magic Link: `supabase/templates/magic-link.html` / Subject: `Your Lead Ace sign-in link`
+- [x] Change Email: `supabase/templates/change-email.html` / Subject: `Confirm your new email`
+- [ ] 上記 4 件を本番 Dashboard に貼り付け（Git 同期はない。テンプレ変更時はリポと Dashboard 両方更新）
+- Invite User はプロダクトで未使用なので skip
+
+`supabase/config.toml` でもローカル dev 用に各 template を registered 済み（`supabase start` で自動反映）。
 
 ### 5-4i. 最低限のレスポンシブ対応
 
@@ -1124,7 +1129,7 @@ Supabase が送る以下のテンプレートを日本語 or 丁寧な英語で 
     - 5-4b MCP OAuth の KV 移行 ✅
     - 5-4c MCP 接続ユーザードキュメント ✅
     - 5-4d 法的ドキュメント（ToS / Privacy） ✅ コード完了（Stripe Portal 登録は手動）
-    - 5-4e apex leadace.ai に既存 LP 移設: 戦略B採用・landing/public/index.html 配置・CTA/Login 修正・deploy.yml ジョブ追加完了 ⏳ Cloudflare Dashboard 作業 + surpassone 旧 LP retire 残り
+    - 5-4e apex leadace.ai に既存 LP 移設 ✅（`leadace.ai` + `www.leadace.ai` 301 稼働。旧 `leadace.surpassone.com` の retire のみ残り）
     - 5-4f Stripe test → live 移行 ⏳ 手動
     - 5-4g 認証メールの送信ドメイン + 本文改善 ⏳ 手動（Resend/SendGrid + DNS + テンプレ書き直し）
     - 5-4h エラー監視 ⏳ 任意
@@ -1136,7 +1141,7 @@ Supabase が送る以下のテンプレートを日本語 or 丁寧な英語で 
 フェーズ5-2（セルフデプロイ対応・ドキュメント）✅ コード完了
     - self-host.md + env vars matrix ✅
     ↓
-★ 現在地 ★ = Phase 5-4 残タスク群（優先度推奨: 5-4e → 5-4g → 5-4f → 5-4i → 5-4l → 5-4j → 5-4k → 5-4h）
+★ 現在地 ★ = Phase 5-4 残タスク群（優先度推奨: 5-4g → 5-4f → 5-4i → 5-4l → 5-4j → 5-4k → 5-4h）
     ↓
 フェーズ6（リリース・移行）→ フェーズ6 レビュー
 ```

@@ -236,10 +236,24 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# Uncomment to customize email template
-# [auth.email.template.invite]
-# subject = "You have been invited"
-# content_path = "./supabase/templates/invite.html"
+# Customized email templates (local dev). Production Supabase is updated
+# via Dashboard — see supabase/templates/README.md.
+
+[auth.email.template.confirmation]
+subject = "Confirm your Lead Ace account"
+content_path = "./supabase/templates/confirm-signup.html"
+
+[auth.email.template.recovery]
+subject = "Reset your Lead Ace password"
+content_path = "./supabase/templates/reset-password.html"
+
+[auth.email.template.magic_link]
+subject = "Your Lead Ace sign-in link"
+content_path = "./supabase/templates/magic-link.html"
+
+[auth.email.template.email_change]
+subject = "Confirm your new email"
+content_path = "./supabase/templates/change-email.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]

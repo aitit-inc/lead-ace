@@ -329,6 +329,68 @@ stripe trigger checkout.session.completed
 
 ---
 
+## 9. 認証メール送信（Resend + Supabase SMTP）⚠️
+
+Supabase デフォルトの `noreply@mail.supabase.io` は送信元が信頼できずスパム箱に入りがち。Resend 経由で `noreply@leadace.ai` から送る。テンプレートは `supabase/templates/` 配下。
+
+### 9-1. Resend アカウント作成・ドメイン検証
+
+1. [resend.com](https://resend.com) で登録
+2. **Domains → Add Domain** → `leadace.ai`（region は近い方）
+3. Resend が表示する DNS レコード（通常 1× MX + 2× TXT (SPF/DKIM) + 1× TXT (DMARC)）を控える
+4. Cloudflare Dashboard → `leadace.ai` Zone → **DNS → Records** に 1 件ずつ追加
+   - **proxy は OFF（DNS only）**にする。mail ドメインはプロキシ不可
+   - Resend 画面で ✅ Verified になるまで待つ（数分〜15分）
+
+### 9-2. API キー発行
+
+Resend → **API Keys → Create API Key** → 権限は **Sending access**。発行キーは一度しか表示されないので即座に控える。
+
+### 9-3. Supabase SMTP 設定
+
+[Dashboard → Project Settings → Authentication → SMTP Settings](https://supabase.com/dashboard/project/chaxrcdtxngoyqvtoyem/auth/providers) で **Enable Custom SMTP** をオンにして以下を入力：
+
+| Field | Value |
+|---|---|
+| Sender email | `noreply@leadace.ai` |
+| Sender name | `Lead Ace` |
+| Host | `smtp.resend.com` |
+| Port | `465` |
+| Min interval | `60` (seconds) |
+| Username | `resend` |
+| Password | 9-2 の API キー |
+
+保存すると rate limit が自動引き上げ（デフォ 2 通/時 → 30 通/時）。
+
+### 9-4. Email テンプレート反映
+
+[Dashboard → Authentication → Email Templates](https://supabase.com/dashboard/project/chaxrcdtxngoyqvtoyem/auth/templates) で以下 4 つを更新：
+
+| Template | Subject | Body source |
+|---|---|---|
+| Confirm signup | `Confirm your Lead Ace account` | `supabase/templates/confirm-signup.html` |
+| Reset Password | `Reset your Lead Ace password` | `supabase/templates/reset-password.html` |
+| Magic Link | `Your Lead Ace sign-in link` | `supabase/templates/magic-link.html` |
+| Change Email | `Confirm your new email` | `supabase/templates/change-email.html` |
+
+テンプレ変更後はリポジトリ側も手で同期すること（Dashboard → Git の自動同期はない）。
+
+### 9-5. 疎通確認
+
+1. `app.leadace.ai/login` で新アカウントを Sign up → 確認メールが `noreply@leadace.ai` から届くこと
+2. Gmail / Outlook 受信箱に入ること（Promotions / Spam に入っていないこと）
+3. メールヘッダで `Authentication-Results: dkim=pass`、`spf=pass`、`dmarc=pass` を確認
+4. Forgot password → Reset password メールが届くこと
+5. Settings → Change email → 新旧両方のアドレスに Confirm new email メールが届くこと（`double_confirm_changes = true`）
+
+### トラブルシュート
+
+- **Resend が Verified にならない**: proxy が ON だと不可。OFF に。TTL も `Auto` で OK
+- **スパム箱に入る**: DMARC が `p=none` だとゆるい。`p=quarantine` にし、SPF/DKIM pass を徹底
+- **Rate limit に当たる**: Supabase `auth.rate_limit.email_sent` を見る。Resend 側の send limit（無料 100 通/日）も確認
+
+---
+
 ## 緊急時の切り戻し
 
 - Workers: Cloudflare Dashboard → Workers & Pages → 該当 Worker → Deployments → 過去版を "Rollback"

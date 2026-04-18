@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Your Lead Ace sign-in link</title>
+</head>
+<body style="margin:0;padding:0;background-color:#F4F2F0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#333333;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F4F2F0;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background-color:#ffffff;border-radius:12px;padding:40px 32px;">
+          <tr>
+            <td>
+              <div style="font-family:'JetBrains Mono','SF Mono',Menlo,monospace;font-size:15px;letter-spacing:0.02em;color:#E87462;margin-bottom:32px;">leadace</div>
+              <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#333333;line-height:1.3;">Sign in to Lead Ace</h1>
+              <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#333333;">Use the link below to finish signing in to the account for <strong>{{ .Email }}</strong>. This link expires in one hour.</p>
+              <p style="margin:24px 0;">
+                <a href="{{ .ConfirmationURL }}" style="display:inline-block;background-color:#E87462;color:#ffffff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Sign in</a>
+              </p>
+              <p style="margin:24px 0 8px;font-size:13px;color:#706A68;line-height:1.6;">If the button doesn't work, paste this link into your browser:</p>
+              <p style="margin:0 0 24px;font-size:13px;word-break:break-all;"><a href="{{ .ConfirmationURL }}" style="color:#D06A58;">{{ .ConfirmationURL }}</a></p>
+              <p style="margin:0;font-size:13px;color:#706A68;line-height:1.6;">If you didn't request this, you can safely ignore this email.</p>
+            </td>
+          </tr>
+        </table>
+        <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;margin-top:24px;">
+          <tr>
+            <td style="font-size:12px;color:#948D8A;text-align:center;line-height:1.6;">
+              Lead Ace is made by SurpassOne Inc.<br>
+              Questions? <a href="mailto:support@leadace.ai" style="color:#D06A58;">support@leadace.ai</a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
