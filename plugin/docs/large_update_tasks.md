@@ -26,10 +26,10 @@
 
 ### 次セッション開始時にやること
 
-1. **5-4l 外部設定（手動）** — Google Cloud Console で OAuth client 作成 + Supabase Dashboard → Providers → Google 有効化 → 本番 `app.leadace.ai/login` で疎通確認（`plugin/docs/deploy.md §10` の手順通り）
-2. **5-4f Stripe test → live 移行** — 実カード収集に必須（手動）。会社情報・本人確認・銀行口座登録 → `setup-stripe.ts` を `sk_live_...` で再実行 → wrangler secret + GitHub Variables を live 値で上書き → 実カード決済で疎通
-3. **5-4k デザイン刷新** — `j` でトークン基盤ができたので、ブランドムードボード → パレット/タイポ決定 → 全ページ反映
-4. **5-4h エラー監視** — 任意（Sentry or Cloudflare Workers Logs + Slack 通知）
+1. **5-4f Stripe test → live 移行** — 実カード収集に必須（手動）。会社情報・本人確認・銀行口座登録 → `setup-stripe.ts` を `sk_live_...` で再実行 → wrangler secret + GitHub Variables を live 値で上書き → 実カード決済で疎通
+2. **5-4k デザイン刷新** — `j` でトークン基盤ができたので、ブランドムードボード → パレット/タイポ決定 → 全ページ反映
+3. **5-4h エラー監視** — 任意（Sentry or Cloudflare Workers Logs + Slack 通知）
+4. **5-4m Supabase Custom Auth Domain** — Pro プラン移行時の対応（Google 同意画面の `supabase.co` 表示を `leadace.ai` に差し替える。ユーザー数拡大後）
 
 ### 長期の未決事項
 
@@ -1053,10 +1053,36 @@ test mode での動作確認完了後：
 - [x] `/login` ページに "Continue with Google" ボタン追加（Supabase SDK `signInWithOAuth`）。最上部配置 + "or" divider + 既存 Email/Password の順
 - [x] `/auth/callback` ルート既存ロジックが OAuth return にも対応（Supabase JS v2 は `detectSessionInUrl: true` + PKCE デフォルトで `?code=...` を自動交換）
 - [x] 手動手順を `plugin/docs/deploy.md §10` に整備（Google Cloud OAuth consent + client 作成 / Supabase Provider 有効化 / 疎通確認）
-- [ ] Supabase Dashboard → Authentication → Providers → Google を有効化（手動）
-- [ ] Google Cloud Console で OAuth client 作成（手動。Authorized redirect URI: `https://chaxrcdtxngoyqvtoyem.supabase.co/auth/v1/callback`）
-- [ ] 本番疎通確認（`app.leadace.ai/login` で Continue with Google → `/prospects` まで）
+- [x] Supabase Dashboard → Authentication → Providers → Google を有効化（手動完了）
+- [x] Google Cloud Console で OAuth client 作成（手動完了。Authorized redirect URI: `https://chaxrcdtxngoyqvtoyem.supabase.co/auth/v1/callback`）
+- [x] 本番疎通確認（`app.leadace.ai/login` で Continue with Google → `/prospects` までログインできることを確認）
 - [ ] 既存 Email アカウントと同メアドで Google ログインが来た時の account linking 挙動を確認（Supabase デフォルトは分離。必要時に identity linking ポリシー見直し）
+
+### 5-4m. Supabase Custom Auth Domain（後日・Pro プラン移行時）
+
+Google OAuth 同意画面で「`chaxrcdtxngoyqvtoyem.supabase.co` にログイン」と表示される件を解消するため、Supabase Auth を自前サブドメイン（`auth.leadace.ai` 等）に差し替える。2022 年以降の Google 同意画面は App name ではなく redirect URI のドメインを大きく表示する仕様で、consent screen 側の設定では変更できないため、Supabase Custom Domain しか対処法がない。
+
+**前提:**
+- Supabase **Pro プラン**（$25/mo）以上が必要
+- **Custom Domain アドオン**（$10/mo）が追加で必要
+- 現状（Free プラン）では実施不可 — ユーザー数が増えてブランド体験の重要性が ROI を上回った段階で移行
+
+**移行時の手順:**
+
+- [ ] Supabase 組織を Pro プランにアップグレード → プロジェクトに Custom Domain アドオンを有効化
+- [ ] `auth.leadace.ai` を Supabase Dashboard → Project Settings → Custom Domain で申請
+- [ ] Cloudflare DNS に CNAME `auth` → `<project-ref>.supabase.co` を追加（proxy OFF、TTL Auto）
+- [ ] Supabase 側で DNS 検証・SSL 発行の完了を待つ（数分〜数時間）
+- [ ] Google Cloud Console → OAuth Client → Authorized redirect URIs に `https://auth.leadace.ai/auth/v1/callback` を追加（既存の `supabase.co` 側は即削除せずフォールバックとして一定期間残す）
+- [ ] フロント/バックエンドの環境変数 `VITE_SUPABASE_URL` / `SUPABASE_URL` を `https://auth.leadace.ai` に更新
+  - Cloudflare Pages (`app.leadace.ai`) — GitHub Variables の `VITE_SUPABASE_URL` 書き換え + 再デプロイ
+  - API / MCP Worker — `wrangler secret put SUPABASE_URL` で上書き + 再デプロイ
+- [ ] Resend SMTP 設定と `supabase/templates/*.html` 内のリンク先（メール内の confirm/reset URL）が新ドメインで発行されることを確認
+- [ ] 本番 Google ログインで「leadace.ai にログイン」表示になることを確認
+- [ ] 一定期間後、旧 `supabase.co` redirect URI を Google OAuth Client から削除
+- [ ] `plugin/docs/deploy.md` にこの手順を反映
+
+**代替案（いずれも非推奨）:** 自前 Worker 経由で OAuth コードを中継する / Google の Brand Verification（数週間審査、ドメイン所有証明必要）— コスト・リスクに見合わない
 
 ### 5-4h. エラー監視・オブザーバビリティ
 
@@ -1141,7 +1167,8 @@ test mode での動作確認完了後：
     - 5-4i 最低限のレスポンシブ対応 ✅ コード完了（ブラウザ実機確認で調整の可能性あり）
     - 5-4j ライト/ダークモード対応 ✅ コード完了（トークン化 + トグル、本番反映はデプロイ時）
     - 5-4k デザイン刷新（色・タイポ） ⏳ デザイン判断 + 実装
-    - 5-4l Google Sign-in 追加 ✅ コード完了（Google Cloud Console + Supabase Dashboard は手動）
+    - 5-4l Google Sign-in 追加 ✅ 完了（コード + Google Cloud Console + Supabase Dashboard 全て、本番疎通 OK）
+    - 5-4m Supabase Custom Auth Domain ⏳ Pro プラン移行時の後日対応（Google 同意画面のブランド化）
     ↓
 フェーズ5-2（セルフデプロイ対応・ドキュメント）✅ コード完了
     - self-host.md + env vars matrix ✅
