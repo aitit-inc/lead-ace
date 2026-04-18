@@ -128,7 +128,7 @@
           {#if p.contactName}<p><span class="text-text-muted">Contact:</span> {p.contactName}{#if p.overview} &mdash; {p.overview}{/if}</p>{/if}
           <p><span class="text-text-muted">Match reason:</span> {p.matchReason}</p>
           {#if p.notes}<p><span class="text-text-muted">Notes:</span> {p.notes}</p>{/if}
-          {#if p.doNotContact}<p class="text-accent font-medium">Do not contact</p>{/if}
+          {#if p.doNotContact}<p class="text-danger font-medium">Do not contact</p>{/if}
         </div>
       {/if}
     {/each}

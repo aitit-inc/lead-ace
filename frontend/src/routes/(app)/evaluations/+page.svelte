@@ -64,7 +64,7 @@
         <p class="text-xs text-text-muted mt-0.5">Response rate</p>
       </div>
       <div>
-        <p class="text-2xl font-mono font-semibold {stats.dataSufficiency.sufficient ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}">
+        <p class="text-2xl font-mono font-semibold {stats.dataSufficiency.sufficient ? 'text-success' : 'text-warning'}">
           {stats.dataSufficiency.sufficient ? 'Yes' : 'No'}
         </p>
         <p class="text-xs text-text-muted mt-0.5">Data sufficient</p>
@@ -134,7 +134,7 @@
     {:else}
       <div class="space-y-6">
         {#each evaluations as ev}
-          <div class="border-l-2 border-warm-dark pl-4">
+          <div class="border-l-2 border-surface-2 pl-4">
             <p class="text-xs font-mono text-text-muted mb-2">{formatDate(ev.evaluationDate)}</p>
             <div class="space-y-2">
               <div>

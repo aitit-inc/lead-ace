@@ -4,18 +4,11 @@
   let { channel }: { channel: Channel } = $props();
 
   const labels: Record<Channel, string> = {
-    email: 'Email',
-    form: 'Form',
-    sns_twitter: 'X',
-    sns_linkedin: 'LinkedIn',
-  };
-
-  const colors: Record<Channel, string> = {
-    email: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
-    form: 'bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300',
-    sns_twitter: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
-    sns_linkedin: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300',
+    email: 'email',
+    form: 'form',
+    sns_twitter: 'x',
+    sns_linkedin: 'linkedin',
   };
 </script>
 
-<span class="inline-block rounded px-1.5 py-0.5 text-xs font-medium {colors[channel]}">{labels[channel]}</span>
+<span class="inline-block rounded bg-surface-2 px-1.5 py-0.5 text-[11px] font-medium font-mono text-text-secondary">{labels[channel]}</span>

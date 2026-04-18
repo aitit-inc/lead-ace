@@ -33,7 +33,7 @@
       title={opt.label}
       class="flex items-center justify-center rounded px-1.5 py-0.5 transition-colors {$theme ===
       opt.value
-        ? 'bg-page text-text shadow-sm'
+        ? 'bg-page text-text'
         : 'hover:text-text'}"
     >
       <svg

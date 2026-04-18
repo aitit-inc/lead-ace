@@ -41,7 +41,7 @@
   <div class="fixed inset-0" onclick={onclose}></div>
   <form
     onsubmit={handleSubmit}
-    class="relative z-10 w-full max-w-sm rounded-lg bg-page border border-border p-6 shadow-lg"
+    class="relative z-10 w-full max-w-sm rounded-md bg-page border border-border p-6"
   >
     <h3 class="text-sm font-semibold text-text mb-3">Create project</h3>
     <label for="project-name" class="block text-xs font-medium text-text-secondary mb-1">
@@ -57,7 +57,7 @@
       class="w-full rounded-md bg-surface px-3 py-2 text-sm text-text outline-none focus:ring-2 focus:ring-accent/30 placeholder:text-text-muted"
     />
     {#if error}
-      <p class="text-accent text-xs mt-2">{error}</p>
+      <p class="text-danger text-xs mt-2">{error}</p>
     {/if}
     <div class="mt-5 flex justify-end gap-3">
       <button

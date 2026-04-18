@@ -23,7 +23,7 @@
 >
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="fixed inset-0" onclick={oncancel}></div>
-  <div class="relative z-10 w-full max-w-sm rounded-lg bg-page border border-border p-6 shadow-lg">
+  <div class="relative z-10 w-full max-w-sm rounded-md bg-page border border-border p-6">
     <h3 class="text-sm font-semibold text-text mb-2">{title}</h3>
     <p class="text-xs text-text-secondary mb-6">{message}</p>
     <div class="flex justify-end gap-3">
@@ -33,7 +33,7 @@
       <button
         onclick={onconfirm}
         class="rounded px-3 py-1.5 text-xs font-medium transition-colors {danger
-          ? 'bg-accent text-white hover:bg-accent-light'
+          ? 'bg-danger text-page hover:bg-accent-strong'
           : 'bg-text text-page hover:bg-text/90'}"
       >
         {confirmLabel}

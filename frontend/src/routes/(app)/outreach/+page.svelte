@@ -61,8 +61,8 @@
         <span>
           <span
             class="inline-block h-1.5 w-1.5 rounded-full {log.status === 'sent'
-              ? 'bg-green-500'
-              : 'bg-red-500'}"
+              ? 'bg-success'
+              : 'bg-danger'}"
           ></span>
           <span class="text-xs text-text-secondary ml-1">{log.status}</span>
         </span>
@@ -88,8 +88,8 @@
           <div class="flex items-center gap-1 shrink-0">
             <span
               class="inline-block h-1.5 w-1.5 rounded-full {log.status === 'sent'
-                ? 'bg-green-500'
-                : 'bg-red-500'}"
+                ? 'bg-success'
+                : 'bg-danger'}"
             ></span>
             <span class="text-[11px] text-text-secondary">{log.status}</span>
           </div>
@@ -108,7 +108,7 @@
           {/if}
           <p class="text-xs text-text-secondary whitespace-pre-wrap break-words">{log.body}</p>
           {#if log.errorMessage}
-            <p class="text-xs text-accent mt-2 break-words">Error: {log.errorMessage}</p>
+            <p class="text-xs text-danger mt-2 break-words">Error: {log.errorMessage}</p>
           {/if}
         </div>
       {/if}

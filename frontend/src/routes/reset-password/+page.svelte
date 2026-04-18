@@ -98,7 +98,7 @@
         </div>
 
         {#if error}
-          <p class="text-accent text-xs">{error}</p>
+          <p class="text-danger text-xs">{error}</p>
         {/if}
 
         <button

@@ -367,16 +367,16 @@ function loginPageHtml(baseUrl: string, p: LoginParams): string {
   <title>Lead Ace — Sign In</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:Inter,-apple-system,system-ui,sans-serif;background:#fff;color:#333;display:flex;align-items:center;justify-content:center;min-height:100vh;-webkit-font-smoothing:antialiased}
+    body{font-family:Geist,Inter,-apple-system,system-ui,sans-serif;background:#F4F2F0;color:#333;display:flex;align-items:center;justify-content:center;min-height:100vh;-webkit-font-smoothing:antialiased}
     .c{width:100%;max-width:340px;padding:0 20px}
-    h1{font-family:"JetBrains Mono",monospace;font-size:20px;font-weight:600;margin-bottom:4px}
-    .sub{color:#999;font-size:13px;margin-bottom:28px}
-    label{display:block;font-size:11px;font-weight:500;color:#666;margin-bottom:4px}
-    input[type=email],input[type=password]{width:100%;padding:8px 12px;font-size:13px;color:#333;background:#fafafa;border:none;border-radius:6px;outline:none;margin-bottom:14px}
-    input:focus{box-shadow:0 0 0 2px rgba(208,106,87,.3)}
-    .err{color:#D06A57;font-size:12px;margin-bottom:12px;display:none}
-    button{width:100%;padding:9px;font-size:13px;font-weight:500;color:#fff;background:#333;border:none;border-radius:6px;cursor:pointer;transition:background .15s}
-    button:hover{background:#555}
+    h1{font-size:20px;font-weight:600;margin-bottom:4px;letter-spacing:-0.01em}
+    .sub{color:#948D8A;font-size:13px;margin-bottom:28px}
+    label{display:block;font-size:11px;font-weight:500;color:#676162;margin-bottom:4px}
+    input[type=email],input[type=password]{width:100%;padding:8px 12px;font-size:13px;color:#333;background:#EBE8E6;border:1px solid transparent;border-radius:4px;outline:none;margin-bottom:14px;font-family:inherit}
+    input:focus{border-color:#E87462;box-shadow:0 0 0 2px rgba(232,116,98,.15)}
+    .err{color:#C05248;font-size:12px;margin-bottom:12px;display:none}
+    button{width:100%;padding:9px;font-size:13px;font-weight:500;color:#F4F2F0;background:#333;border:none;border-radius:6px;cursor:pointer;transition:background .15s;font-family:inherit}
+    button:hover{background:#1a1a1a}
     button:disabled{opacity:.5;cursor:default}
   </style>
 </head>

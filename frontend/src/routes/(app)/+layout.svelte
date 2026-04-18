@@ -83,7 +83,7 @@
           <a
             href={item.href}
             class="block rounded px-2 py-2 text-sm transition-colors {isActive(item.href)
-              ? 'bg-warm text-text font-medium'
+              ? 'bg-surface-2 text-text font-medium'
               : 'text-text-secondary hover:text-text hover:bg-surface'}"
           >
             {item.label}

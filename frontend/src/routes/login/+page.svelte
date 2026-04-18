@@ -133,7 +133,7 @@
       </div>
 
       {#if error}
-        <p class="text-accent text-xs">{error}</p>
+        <p class="text-danger text-xs">{error}</p>
       {/if}
       {#if info}
         <p class="text-text-secondary text-xs">{info}</p>

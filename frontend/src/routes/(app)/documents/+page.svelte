@@ -89,7 +89,7 @@
             onclick={() => selectDoc(doc.slug)}
             class="text-left px-3 py-2 rounded text-sm transition-colors md:w-full
               {selectedSlug === doc.slug
-                ? 'bg-warm text-text font-medium'
+                ? 'bg-surface-2 text-text font-medium'
                 : 'text-text-secondary hover:text-text hover:bg-surface'}"
           >
             <span class="block">{label(doc.slug)}</span>

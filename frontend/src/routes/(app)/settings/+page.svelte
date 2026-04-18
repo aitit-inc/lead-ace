@@ -176,10 +176,10 @@
   {#if $plan.loading}
     <p class="text-text-muted text-sm">Loading...</p>
   {:else if $plan.error}
-    <p class="text-sm text-accent">Error: {$plan.error}</p>
+    <p class="text-sm text-danger">Error: {$plan.error}</p>
   {:else if $plan.data}
     {@const p = $plan.data}
-    <div class="rounded-lg border border-border p-5 mb-6">
+    <div class="rounded-md border border-border p-5 mb-6">
       <div class="flex items-start justify-between mb-5">
         <div>
           <p class="text-xs text-text-muted uppercase tracking-wider mb-1">Current plan</p>
@@ -257,7 +257,7 @@
           <button
             onclick={() => (billingPeriod = 'monthly')}
             class="px-3 py-1 {billingPeriod === 'monthly'
-              ? 'bg-warm text-text font-medium'
+              ? 'bg-surface-2 text-text font-medium'
               : 'text-text-muted hover:text-text'}"
           >
             Monthly
@@ -265,7 +265,7 @@
           <button
             onclick={() => (billingPeriod = 'yearly')}
             class="px-3 py-1 {billingPeriod === 'yearly'
-              ? 'bg-warm text-text font-medium'
+              ? 'bg-surface-2 text-text font-medium'
               : 'text-text-muted hover:text-text'}"
           >
             Yearly
@@ -278,7 +278,7 @@
         {#each TIERS as tier}
           {@const price = billingPeriod === 'monthly' ? tier.monthlyPrice : tier.yearlyPrice}
           {@const suffix = billingPeriod === 'monthly' ? '/month' : '/year'}
-          <div class="rounded-lg border border-border p-4 flex flex-col">
+          <div class="rounded-md border border-border p-4 flex flex-col">
             <p class="text-sm font-medium text-text">{tier.name}</p>
             <p class="mt-1">
               <span class="font-mono text-xl font-semibold text-text">${price}</span>
@@ -291,7 +291,7 @@
             <button
               onclick={() => handleUpgrade(tier)}
               disabled={checkoutLoading !== null}
-              class="mt-4 w-full rounded px-3 py-1.5 text-xs font-medium text-white bg-accent hover:bg-accent/90 transition-colors disabled:opacity-50"
+              class="mt-4 w-full rounded px-3 py-1.5 text-xs font-medium text-page bg-accent hover:bg-accent-strong transition-colors disabled:opacity-50"
             >
               {checkoutLoading === tier.tier ? 'Redirecting...' : `Upgrade to ${tier.name}`}
             </button>
@@ -307,7 +307,7 @@
   <h3 class="text-xs font-medium text-text-muted uppercase tracking-wider mb-4">Danger Zone</h3>
 
   {#if $activeProject}
-    <div class="rounded-lg border border-accent/20 p-4">
+    <div class="rounded-md border border-danger/30 p-4">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <p class="text-sm font-medium text-text">Delete project</p>
@@ -318,7 +318,7 @@
         <button
           onclick={() => (showDeleteDialog = true)}
           disabled={deleting}
-          class="rounded px-3 py-1.5 text-xs font-medium text-accent border border-accent/30 hover:bg-accent hover:text-white transition-colors disabled:opacity-50 self-start sm:self-auto"
+          class="rounded px-3 py-1.5 text-xs font-medium text-danger border border-danger/40 hover:bg-danger hover:text-page transition-colors disabled:opacity-50 self-start sm:self-auto"
         >
           Delete
         </button>
