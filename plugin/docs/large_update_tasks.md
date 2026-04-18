@@ -2,7 +2,7 @@
 
 アーキテクチャ設計: [large_update_infra_arch.md](./large_update_infra_arch.md)
 
-## 現状整理（2026-04-18 セッション 2 終了時点）
+## 現状整理（2026-04-18 セッション 3 終了時点）
 
 ### 本番稼働状況
 
@@ -19,18 +19,16 @@
 - **Stripe**: 依然 test mode。Checkout → webhook → `tenant_plans` 反映まで OK。live 移行は 5-4f（会社情報・本人確認・live key 発行が必要）
 - **Supabase 本番**（`chaxrcdtxngoyqvtoyem`）: migration + master_documents seed + RLS 稼働
 
-### 2026-04-18 セッション 2 でやったこと
+### 2026-04-18 セッション 3 でやったこと
 
-1. **5-4e LP 移設完了** — `landing/public/index.html` に index のみ移設（旧 `legal.html` / `privacy.html` / `setup-guide.html` 等の旧商品モデルページは破棄）、CTA 4 箇所 + Login リンク + footer に Terms/Privacy 追加、apex `leadace.ai` に custom domain 付与、`www` → apex 301、旧 `leadace.surpassone.com` Pages を削除
-2. **5-4g 認証メール対応完了** — Resend サインアップ・`leadace.ai` ドメイン検証・DNS 投入（proxy OFF）・Supabase SMTP 設定（送信元 `noreply@leadace.ai`）。`supabase/templates/` に 4 種の英語テンプレ作成（Confirm signup / Reset Password は本番 Dashboard に反映済み、Magic Link / Change Email は UI 未提供のため repo に source だけ保持）
-3. **contact 統一** — 存在しない `support@leadace.ai` / `security@leadace.ai` を `contact@surpassone.com` に差し替え（email templates + app Terms/Privacy）
-4. **5-4i モバイル対応完了（コード）** — app layout をハンバーガードロワー化、Prospects/Outreach/Responses のテーブルを mobile card に、Evaluations / Documents / Settings のグリッド/2 カラムを狭幅対応。DevTools iPhone SE で実機確認済み
+1. **5-4l Google Sign-in（コード側）完了** — `/login` に "Continue with Google" ボタン + Google ブランド SVG + "or" divider 追加。`supabase.auth.signInWithOAuth({ provider: 'google' })` 経由で `/auth/callback` に戻るフロー。Supabase JS v2 は PKCE デフォルトで `?code=...` を自動交換するため既存 callback は無改修で動作。手動設定手順を `plugin/docs/deploy.md §10` に整備（Google Cloud OAuth consent + client 作成 / Supabase Provider 有効化 / 疎通確認）
+2. **5-4j ライト/ダークモード対応（コード側）完了** — Tailwind v4 の `@custom-variant dark (&:where(.dark, .dark *))` に切り替え、`@theme` にライト定義 + `.dark` でトークン上書き。新規 `--color-page`（`#ffffff` ↔ `#141414`）と既存 warm/surface/border/text を dark 対応、アクセントは `#E0887A` に軽く lift。残っていた `bg-white` と主ボタンの `text-white` を `bg-page` / `text-page` に置換、badge 系（status/sentiment/channel）に `dark:` variant 追加。`ThemeToggle.svelte`（system/light/dark 3択）をサイドバー footer に配置、`leadace.theme` localStorage 永続化 + `app.html` に FOUC 防止 inline script。`color-scheme: dark` 付与で OS 描画も追従
 
 ### 次セッション開始時にやること
 
-1. **5-4f Stripe test → live 移行** — 実カード収集に必須（手動）。会社情報・本人確認・銀行口座登録 → `setup-stripe.ts` を `sk_live_...` で再実行 → wrangler secret + GitHub Variables を live 値で上書き → 実カード決済で疎通
-2. **5-4l Google Sign-in** — 摩擦削減効果大。Supabase Provider 有効化 + Google Cloud Console で OAuth client 作成（手動）→ `/login` に "Continue with Google" ボタン + callback 動作確認（コード）
-3. **5-4j ダークモード → 5-4k デザイン刷新** — トークン統一で後作業を減らすため j → k の順。Tailwind v4 `@theme` + `.dark` セレクタに移行して固定色を semantic token 化、システム追従 + 手動トグル
+1. **5-4l 外部設定（手動）** — Google Cloud Console で OAuth client 作成 + Supabase Dashboard → Providers → Google 有効化 → 本番 `app.leadace.ai/login` で疎通確認（`plugin/docs/deploy.md §10` の手順通り）
+2. **5-4f Stripe test → live 移行** — 実カード収集に必須（手動）。会社情報・本人確認・銀行口座登録 → `setup-stripe.ts` を `sk_live_...` で再実行 → wrangler secret + GitHub Variables を live 値で上書き → 実カード決済で疎通
+3. **5-4k デザイン刷新** — `j` でトークン基盤ができたので、ブランドムードボード → パレット/タイポ決定 → 全ページ反映
 4. **5-4h エラー監視** — 任意（Sentry or Cloudflare Workers Logs + Slack 通知）
 
 ### 長期の未決事項
@@ -1023,15 +1021,18 @@ test mode での動作確認完了後：
 
 観測範囲: 少なくとも 375px（iPhone SE 相当）で全ページ機能する。実機テストはブラウザ DevTools の device emulation 等で。
 
-### 5-4j. ライト / ダークモード対応
+### 5-4j. ライト / ダークモード対応 ✅ コード完了
 
 現状は暖色ベースのライトテーマ単一（`bg: #F6EEE6` / `text: #333` / `accent: #D06A57`）。システム prefers-color-scheme に追従 + 手動トグルを入れる。
 
-- [ ] Tailwind v4 の CSS variable ベーステーマに移行（`@theme` + `.dark` セレクタ）
-- [ ] 全コンポーネントで `bg-white` / `text-gray-*` 等の固定色を semantic token（`bg-surface` / `text-text` 等）に置換
-- [ ] ダークパレット設計: 背景 `#1A1A1A` 系、テキスト `#E8E8E8`、アクセントは同じ `#D06A57` を濃度調整
-- [ ] ナビ下部 or Settings にテーマトグル（`system / light / dark` の 3 択）
-- [ ] localStorage に選択を保存 / 初期値は system
+- [x] Tailwind v4 の CSS variable ベーステーマに移行（`@theme` + `@custom-variant dark (&:where(.dark, .dark *))`）。`.dark` セレクタで全トークンを上書き
+- [x] 固定色（`bg-white` / 主ボタンの `text-white`）を semantic token（`bg-page` / `text-page`）に置換。badge 系（status/sentiment/channel）には `dark:bg-*/15 dark:text-*-300` variant を追加
+- [x] 新規トークン: `--color-page`（`#ffffff` ↔ `#141414`）。既存 `--color-warm/--color-surface/--color-border/--color-text` も dark で上書き。アクセントは `#D06A57` → `#E0887A` に軽く持ち上げてコントラスト確保
+- [x] サイドバー footer にテーマトグル（`system / light / dark` の 3 択アイコン群）。`ThemeToggle.svelte`
+- [x] localStorage `leadace.theme` に選択を保存、初期値は `system`。FOUC 防止のため `app.html` に早期適用 inline script
+- [x] `color-scheme: dark` を `.dark` に付与（OS のフォーム/スクロールバー要素を dark で描画）
+- [x] 検証: ライト/ダーク両方で `/login` 描画 OK（Chrome DevTools で確認、CSS var 切替確認済み）
+- Landing (`landing/public/index.html`) は静的 HTML で別系統のため今回は対象外
 
 ### 5-4k. デザイン刷新（色 / タイポ / 全体トーン）
 
@@ -1049,12 +1050,13 @@ test mode での動作確認完了後：
 
 現状は Email + Password のみ。オンボーディング摩擦を減らすために Google を追加。
 
-- [ ] Supabase Dashboard → Authentication → Providers → Google を有効化
-- [ ] Google Cloud Console で OAuth client 作成（Authorized redirect URI: `https://<project-ref>.supabase.co/auth/v1/callback`）
-- [ ] `/login` ページに "Continue with Google" ボタン追加（Supabase SDK `signInWithOAuth`）
-- [ ] `/auth/callback` ルート既存ロジックが OAuth return にも対応しているか確認（PKCE フロー）
-- [ ] Sign-up トグルとの並び順設計（Google を最上部に置くのが一般的）
-- [ ] 既存 Email アカウントと同メアド Google ログインが来たときの account linking 挙動を確認（Supabase のデフォルト動作 or 明示設定）
+- [x] `/login` ページに "Continue with Google" ボタン追加（Supabase SDK `signInWithOAuth`）。最上部配置 + "or" divider + 既存 Email/Password の順
+- [x] `/auth/callback` ルート既存ロジックが OAuth return にも対応（Supabase JS v2 は `detectSessionInUrl: true` + PKCE デフォルトで `?code=...` を自動交換）
+- [x] 手動手順を `plugin/docs/deploy.md §10` に整備（Google Cloud OAuth consent + client 作成 / Supabase Provider 有効化 / 疎通確認）
+- [ ] Supabase Dashboard → Authentication → Providers → Google を有効化（手動）
+- [ ] Google Cloud Console で OAuth client 作成（手動。Authorized redirect URI: `https://chaxrcdtxngoyqvtoyem.supabase.co/auth/v1/callback`）
+- [ ] 本番疎通確認（`app.leadace.ai/login` で Continue with Google → `/prospects` まで）
+- [ ] 既存 Email アカウントと同メアドで Google ログインが来た時の account linking 挙動を確認（Supabase デフォルトは分離。必要時に identity linking ポリシー見直し）
 
 ### 5-4h. エラー監視・オブザーバビリティ
 
@@ -1137,14 +1139,16 @@ test mode での動作確認完了後：
     - 5-4g 認証メールの送信ドメイン + 本文改善 ✅（Resend 経由 `noreply@leadace.ai` 稼働、Confirm/Reset テンプレ本番適用済み）
     - 5-4h エラー監視 ⏳ 任意
     - 5-4i 最低限のレスポンシブ対応 ✅ コード完了（ブラウザ実機確認で調整の可能性あり）
-    - 5-4j ライト/ダークモード対応 ⏳ コード
+    - 5-4j ライト/ダークモード対応 ✅ コード完了（トークン化 + トグル、本番反映はデプロイ時）
     - 5-4k デザイン刷新（色・タイポ） ⏳ デザイン判断 + 実装
-    - 5-4l Google Sign-in 追加 ⏳ コード + Google Cloud Console
+    - 5-4l Google Sign-in 追加 ✅ コード完了（Google Cloud Console + Supabase Dashboard は手動）
     ↓
 フェーズ5-2（セルフデプロイ対応・ドキュメント）✅ コード完了
     - self-host.md + env vars matrix ✅
     ↓
-★ 現在地 ★ = Phase 5-4 残タスク群（優先度推奨: 5-4f → 5-4l → 5-4j → 5-4k → 5-4h）
+★ 現在地 ★ = Phase 5-4 残タスク（5-4j / 5-4l コード完了）
+    - 手動待ち: 5-4f Stripe live 化 / 5-4l Google OAuth 外部設定（Console + Supabase Dashboard）
+    - コード: 5-4k デザイン刷新 / 5-4h エラー監視（任意）
     ↓
 フェーズ6（リリース・移行）→ フェーズ6 レビュー
 ```

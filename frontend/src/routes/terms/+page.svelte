@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Logo from '$lib/components/Logo.svelte';
   const lastUpdated = '2026-04-17';
 </script>
 
@@ -7,7 +8,10 @@
 </svelte:head>
 
 <div class="mx-auto max-w-2xl px-6 py-12">
-  <a href="/" class="text-xs text-text-muted hover:text-text">← Lead Ace</a>
+  <a href="/" class="inline-flex items-center gap-1.5 text-xs text-text-muted hover:text-text">
+    <Logo size={14} class="text-accent" />
+    ← Lead Ace
+  </a>
   <h1 class="mt-4 text-2xl font-semibold text-text">Terms of Service</h1>
   <p class="mt-1 text-xs text-text-muted">Last updated: {lastUpdated}</p>
 

@@ -8,6 +8,8 @@
   import { plan } from '$lib/stores/plan';
   import ProjectSwitcher from '$lib/components/ProjectSwitcher.svelte';
   import ProjectCreateDialog from '$lib/components/ProjectCreateDialog.svelte';
+  import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+  import Logo from '$lib/components/Logo.svelte';
 
   let { children } = $props();
   let showCreate = $state(false);
@@ -56,14 +58,17 @@
 
   <!-- Sidebar -->
   <aside
-    class="fixed inset-y-0 left-0 z-30 flex w-64 flex-col justify-between border-r border-border bg-white px-3 py-5 transition-transform md:static md:w-48 md:translate-x-0 {drawerOpen
+    class="fixed inset-y-0 left-0 z-30 flex w-64 flex-col justify-between border-r border-border bg-page px-3 py-5 transition-transform md:static md:w-48 md:translate-x-0 {drawerOpen
       ? 'translate-x-0'
       : '-translate-x-full'}"
     aria-hidden={!drawerOpen}
   >
     <div>
       <div class="mb-8 flex items-center justify-between px-2">
-        <h1 class="font-mono text-base font-semibold text-text">Lead Ace</h1>
+        <h1 class="flex items-center gap-2 font-mono text-base font-semibold text-text">
+          <Logo size={22} class="text-accent" />
+          Lead Ace
+        </h1>
         <button
           type="button"
           class="md:hidden -mr-1 p-1 text-text-muted hover:text-text"
@@ -119,9 +124,12 @@
       >
         Sign out
       </button>
-      <div class="px-2 pt-2 flex gap-3 text-[11px] text-text-muted">
-        <a href="/terms" class="hover:text-text transition-colors">Terms</a>
-        <a href="/privacy" class="hover:text-text transition-colors">Privacy</a>
+      <div class="px-2 pt-2 flex items-center justify-between gap-3">
+        <div class="flex gap-3 text-[11px] text-text-muted">
+          <a href="/terms" class="hover:text-text transition-colors">Terms</a>
+          <a href="/privacy" class="hover:text-text transition-colors">Privacy</a>
+        </div>
+        <ThemeToggle />
       </div>
     </div>
   </aside>
@@ -165,7 +173,7 @@
           </div>
           <button
             onclick={() => (showCreate = true)}
-            class="rounded bg-text px-4 py-1.5 text-xs font-medium text-white hover:bg-text/90 transition-colors"
+            class="rounded bg-text px-4 py-1.5 text-xs font-medium text-page hover:bg-text/90 transition-colors"
           >
             Create your first project
           </button>

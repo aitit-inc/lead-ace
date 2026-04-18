@@ -1,5 +1,6 @@
 <script lang="ts">
   import { supabase } from '$lib/auth';
+  import Logo from '$lib/components/Logo.svelte';
 
   let email = $state('');
   let loading = $state(false);
@@ -21,9 +22,12 @@
   }
 </script>
 
-<div class="flex min-h-screen items-center justify-center bg-white">
+<div class="flex min-h-screen items-center justify-center bg-page">
   <div class="w-full max-w-sm px-6">
-    <h1 class="font-mono text-2xl font-semibold text-text mb-1">Lead Ace</h1>
+    <div class="flex items-center gap-2.5 mb-1">
+      <Logo size={32} class="text-accent" />
+      <h1 class="font-mono text-2xl font-semibold text-text">Lead Ace</h1>
+    </div>
     <p class="text-text-muted text-sm mb-8">Reset your password</p>
 
     {#if sent}
@@ -58,7 +62,7 @@
         <button
           type="submit"
           disabled={loading}
-          class="w-full rounded-md bg-text py-2 text-sm font-medium text-white transition-colors hover:bg-text/90 disabled:opacity-50"
+          class="w-full rounded-md bg-text py-2 text-sm font-medium text-page transition-colors hover:bg-text/90 disabled:opacity-50"
         >
           {loading ? 'Sending...' : 'Send reset link'}
         </button>
