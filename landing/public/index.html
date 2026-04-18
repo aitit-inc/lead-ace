@@ -27,21 +27,25 @@
 
     :root {
       --page: #1A1B24;
+      --page-deep: #141520;
       --surface: #22232B;
       --surface-2: #2C2D33;
       --border: #32333A;
+      --border-bright: #3D3E46;
       --text: #DEE0E5;
       --text-secondary: #969AA0;
       --text-muted: #64656A;
       --accent: #E8755E;
       --accent-strong: #F08A72;
+      --accent-rgb: 232, 117, 94;
+      --accent-glow: rgba(232, 117, 94, 0.35);
       color-scheme: dark;
     }
 
     html { scroll-behavior: smooth; }
 
     body {
-      font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-size: 16px;
       line-height: 1.6;
       color: var(--text);
@@ -49,7 +53,7 @@
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
       overflow-x: hidden;
-      font-feature-settings: "cv11", "ss01";
+      font-feature-settings: "cv11", "ss01", "ss03";
     }
 
     .mono { font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace; font-variant-numeric: tabular-nums; }
@@ -57,10 +61,18 @@
     a { color: var(--accent); text-decoration: none; transition: color 0.15s; }
     a:hover { color: var(--accent-strong); }
 
-    .container {
-      max-width: 1120px;
-      margin: 0 auto;
-      padding: 0 32px;
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 32px; }
+
+    /* ===== Global grain overlay ===== */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 100;
+      opacity: 0.07;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      mix-blend-mode: overlay;
     }
 
     /* ===== Nav ===== */
@@ -68,8 +80,15 @@
       position: fixed;
       top: 0; left: 0; right: 0;
       z-index: 50;
-      background: var(--page);
-      border-bottom: 1px solid var(--border);
+      background: rgba(26, 27, 36, 0.6);
+      backdrop-filter: blur(14px) saturate(160%);
+      -webkit-backdrop-filter: blur(14px) saturate(160%);
+      border-bottom: 1px solid rgba(50, 51, 58, 0.5);
+      transition: border-color 0.2s, background 0.2s;
+    }
+    nav.scrolled {
+      background: rgba(26, 27, 36, 0.85);
+      border-bottom-color: var(--border);
     }
     nav .container {
       display: flex;
@@ -82,18 +101,31 @@
       font-size: 14px;
       font-weight: 600;
       color: var(--text);
-      letter-spacing: -0.01em;
+      letter-spacing: -0.005em;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
+    }
+    .logo-wrap {
+      position: relative;
+      width: 22px; height: 22px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
     .logo-mark {
-      width: 20px; height: 20px;
+      width: 22px; height: 22px;
       color: var(--accent);
-      display: inline-block;
-      flex-shrink: 0;
+      position: relative;
+      z-index: 1;
+      animation: logo-glow 2.8s ease-in-out infinite;
     }
     .logo-mark svg { display: block; width: 100%; height: 100%; }
+    @keyframes logo-glow {
+      0%, 100% { filter: drop-shadow(0 0 4px rgba(var(--accent-rgb), 0.35)); }
+      50%      { filter: drop-shadow(0 0 14px rgba(var(--accent-rgb), 0.9)); }
+    }
+
     .nav-links {
       display: flex;
       gap: 28px;
@@ -106,23 +138,20 @@
       align-items: center;
       gap: 18px;
     }
-    .nav-login {
-      font-size: 13px;
-      color: var(--text-secondary);
-    }
+    .nav-login { font-size: 13px; color: var(--text-secondary); }
     .nav-login:hover { color: var(--text); }
     .nav-cta {
       font-size: 13px;
       padding: 7px 14px;
-      border: 1px solid var(--border);
+      border: 1px solid var(--border-bright);
       border-radius: 6px;
       color: var(--text);
-      transition: border-color 0.15s, background 0.15s;
+      transition: border-color 0.15s, background 0.15s, color 0.15s;
     }
     .nav-cta:hover {
-      background: var(--surface-2);
-      border-color: var(--text-muted);
-      color: var(--text);
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--page);
     }
     @media (max-width: 760px) {
       .nav-links { display: none; }
@@ -132,7 +161,7 @@
     /* ===== Hero ===== */
     .hero {
       position: relative;
-      min-height: 92vh;
+      min-height: 100vh;
       display: flex;
       align-items: center;
       padding: 120px 0 80px;
@@ -143,21 +172,63 @@
       inset: 0;
       width: 100%; height: 100%;
       z-index: 0;
-      opacity: 0.35;
-      mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
-      -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+      opacity: 0.7;
+      mask-image: radial-gradient(ellipse 80% 90% at 40% 45%, black 25%, transparent 85%);
+      -webkit-mask-image: radial-gradient(ellipse 80% 90% at 40% 45%, black 25%, transparent 85%);
+    }
+    .hero-blob {
+      position: absolute;
+      top: -15%; right: -15%;
+      width: 65vw; height: 65vw;
+      max-width: 900px; max-height: 900px;
+      background: radial-gradient(circle at center, rgba(var(--accent-rgb), 0.28) 0%, rgba(var(--accent-rgb), 0.08) 40%, transparent 70%);
+      z-index: 0;
+      pointer-events: none;
+      animation: blob-drift 18s ease-in-out infinite alternate;
+      filter: blur(12px);
+    }
+    .hero-blob-2 {
+      position: absolute;
+      bottom: -20%; left: -10%;
+      width: 45vw; height: 45vw;
+      max-width: 650px; max-height: 650px;
+      background: radial-gradient(circle at center, rgba(110, 173, 176, 0.10) 0%, transparent 60%);
+      z-index: 0;
+      pointer-events: none;
+      animation: blob-drift-2 22s ease-in-out infinite alternate;
+      filter: blur(20px);
+    }
+    @keyframes blob-drift-2 {
+      0%   { transform: translate(0, 0); }
+      100% { transform: translate(8%, -6%); }
+    }
+    @keyframes blob-drift {
+      0%   { transform: translate(0, 0); }
+      50%  { transform: translate(-6%, 5%); }
+      100% { transform: translate(4%, -3%); }
     }
     .hero::after {
       content: "";
       position: absolute;
       bottom: 0; left: 0; right: 0;
-      height: 120px;
+      height: 140px;
       background: linear-gradient(to bottom, transparent, var(--page));
       z-index: 1;
       pointer-events: none;
     }
     .hero-content { position: relative; z-index: 2; width: 100%; }
 
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+      gap: 60px;
+      align-items: center;
+    }
+    @media (max-width: 960px) {
+      .hero-grid { grid-template-columns: 1fr; gap: 48px; }
+    }
+
+    /* Eyebrow */
     .eyebrow {
       display: inline-flex;
       align-items: center;
@@ -165,59 +236,86 @@
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
       font-weight: 500;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
       color: var(--accent);
       padding: 6px 12px;
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      margin-bottom: 32px;
+      border: 1px solid rgba(var(--accent-rgb), 0.22);
+      background: rgba(var(--accent-rgb), 0.06);
+      border-radius: 999px;
+      margin-bottom: 28px;
     }
     .eyebrow::before {
       content: "";
       width: 5px; height: 5px;
       background: var(--accent);
       border-radius: 50%;
+      box-shadow: 0 0 10px var(--accent-glow);
     }
 
+    /* Headline kinetic reveal */
     h1 {
-      font-size: clamp(40px, 6.5vw, 76px);
-      line-height: 1;
-      letter-spacing: -0.03em;
+      font-size: clamp(40px, 6.4vw, 82px);
+      line-height: 1.02;
+      letter-spacing: -0.032em;
       font-weight: 600;
-      margin-bottom: 28px;
+      margin-bottom: 26px;
       max-width: 880px;
     }
+    h1 .line { display: block; overflow: hidden; padding-bottom: 0.08em; margin-bottom: -0.08em; }
+    h1 .line .inner {
+      display: inline-block;
+      transform: translateY(105%);
+      opacity: 0;
+      animation: line-reveal 0.9s cubic-bezier(0.22, 0.9, 0.2, 1) forwards;
+    }
+    h1 .line:nth-child(1) .inner { animation-delay: 0.15s; }
+    h1 .line:nth-child(2) .inner { animation-delay: 0.32s; }
+    @keyframes line-reveal {
+      from { transform: translateY(105%); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
     h1 .dim { color: var(--text-muted); font-weight: 500; }
+
     .rotator {
       display: inline-block;
       color: var(--accent);
       position: relative;
       min-width: 1ch;
     }
-    .rotator::after {
-      content: "|";
+    .rotator-caret {
       display: inline-block;
       color: var(--accent);
-      animation: blink 1s step-start infinite;
       margin-left: 2px;
       font-weight: 300;
+      animation: blink 1s step-start infinite;
     }
     @keyframes blink { 50% { opacity: 0; } }
 
+    /* Reveal children (eyebrow, lede, CTAs, note) */
+    .reveal-up {
+      opacity: 0;
+      transform: translateY(14px);
+      animation: reveal-up 0.8s cubic-bezier(0.22, 0.9, 0.2, 1) forwards;
+      animation-delay: var(--delay, 0s);
+    }
+    @keyframes reveal-up {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
     .lede {
-      font-size: clamp(15px, 1.6vw, 18px);
+      font-size: clamp(15px, 1.4vw, 18px);
       line-height: 1.6;
       color: var(--text-secondary);
-      max-width: 540px;
-      margin-bottom: 40px;
+      max-width: 520px;
+      margin-bottom: 36px;
     }
     .cta-row {
       display: flex;
       gap: 12px;
       flex-wrap: wrap;
       align-items: center;
-      margin-bottom: 24px;
+      margin-bottom: 22px;
     }
     .btn {
       display: inline-flex;
@@ -228,23 +326,31 @@
       font-weight: 500;
       padding: 11px 22px;
       border-radius: 6px;
-      transition: background 0.15s, border-color 0.15s, color 0.15s;
+      transition: background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.3s;
       cursor: pointer;
       border: 1px solid transparent;
+      position: relative;
     }
     .btn-primary {
       background: var(--accent);
       color: var(--page);
       font-weight: 600;
+      box-shadow: 0 6px 18px -8px var(--accent-glow);
+      will-change: transform;
     }
     .btn-primary:hover {
       background: var(--accent-strong);
-      color: var(--page);
+      box-shadow: 0 18px 36px -10px var(--accent-glow), 0 2px 8px -2px rgba(0,0,0,0.3);
     }
+    .btn-primary .arrow {
+      display: inline-block;
+      transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.2, 1);
+    }
+    .btn-primary:hover .arrow { transform: translateX(3px); }
     .btn-secondary {
       background: transparent;
       color: var(--text);
-      border-color: var(--border);
+      border-color: var(--border-bright);
     }
     .btn-secondary:hover {
       border-color: var(--text-muted);
@@ -265,9 +371,79 @@
       border-radius: 50%;
     }
 
+    /* ===== Terminal (hero right) ===== */
+    .terminal {
+      position: relative;
+      background: linear-gradient(180deg, rgba(34, 35, 43, 0.9) 0%, rgba(26, 27, 36, 0.92) 100%);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+      font-size: 13px;
+      line-height: 1.65;
+      box-shadow: 0 40px 80px -40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.02);
+      opacity: 0;
+      transform: translateY(18px) scale(0.98);
+      animation: terminal-in 1s cubic-bezier(0.2, 0.9, 0.2, 1) 0.6s forwards;
+    }
+    @keyframes terminal-in {
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .terminal::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(ellipse 100% 60% at 50% 0%, rgba(var(--accent-rgb), 0.08), transparent 60%);
+    }
+    .terminal-bar {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(20, 21, 32, 0.5);
+    }
+    .terminal-bar .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--surface-2);
+    }
+    .terminal-bar .dot.red   { background: #E5786F; }
+    .terminal-bar .dot.amber { background: #D4A76A; }
+    .terminal-bar .dot.green { background: #8B9E78; }
+    .terminal-title {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+    }
+    .terminal-body {
+      padding: 20px 22px 24px;
+      min-height: 320px;
+      max-height: 360px;
+      position: relative;
+      z-index: 1;
+      overflow: hidden;
+    }
+    .term-line { display: block; min-height: 1.65em; }
+    .term-prompt { color: var(--accent); font-weight: 600; }
+    .term-cmd    { color: var(--text); }
+    .term-out    { color: var(--text-secondary); }
+    .term-out.dim { color: var(--text-muted); }
+    .term-out.ok { color: #8B9E78; }
+    .term-caret {
+      display: inline-block;
+      width: 8px; height: 1em;
+      background: var(--accent);
+      vertical-align: -2px;
+      margin-left: 2px;
+      animation: blink 1s step-start infinite;
+    }
+
     /* ===== Sections ===== */
     section {
-      padding: 96px 0;
+      padding: 110px 0;
       border-top: 1px solid var(--border);
       position: relative;
     }
@@ -275,24 +451,23 @@
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
       font-weight: 500;
-      letter-spacing: 0.15em;
+      letter-spacing: 0.18em;
       text-transform: uppercase;
       color: var(--accent);
       margin-bottom: 18px;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
     }
     .section-label::before {
       content: "";
-      width: 20px;
-      height: 1px;
+      width: 24px; height: 1px;
       background: var(--accent);
     }
     h2 {
-      font-size: clamp(26px, 4vw, 42px);
+      font-size: clamp(26px, 4vw, 44px);
       line-height: 1.1;
-      letter-spacing: -0.02em;
+      letter-spacing: -0.022em;
       font-weight: 600;
       margin-bottom: 20px;
       max-width: 780px;
@@ -301,26 +476,27 @@
     .section-sub {
       font-size: 16px;
       color: var(--text-secondary);
-      margin-bottom: 48px;
+      margin-bottom: 52px;
       max-width: 620px;
     }
 
     /* ===== Compare ===== */
     .compare {
       border: 1px solid var(--border);
-      border-radius: 6px;
+      border-radius: 8px;
       overflow: hidden;
       margin: 0 auto;
       max-width: 1000px;
+      background: var(--surface);
     }
     .compare-row {
       display: grid;
-      grid-template-columns: 200px 1fr 140px;
-      padding: 22px 28px;
+      grid-template-columns: 220px 1fr 140px;
+      padding: 24px 28px;
       gap: 24px;
       align-items: center;
       border-bottom: 1px solid var(--border);
-      background: var(--surface);
+      transition: background 0.2s;
     }
     .compare-row:last-child { border-bottom: none; }
     .compare-row.header {
@@ -328,20 +504,31 @@
       font-size: 11px;
       text-transform: uppercase;
       color: var(--text-muted);
-      letter-spacing: 0.1em;
-      padding: 12px 28px;
-      background: var(--page);
+      letter-spacing: 0.12em;
+      padding: 13px 28px;
+      background: var(--page-deep);
     }
+    .compare-row:not(.header):hover { background: var(--surface-2); }
     .compare-row .label {
       font-weight: 500;
       font-size: 15px;
       color: var(--text);
     }
-    .compare-row .label.leadace { color: var(--accent); font-weight: 600; }
-    .compare-row .desc {
-      color: var(--text-secondary);
-      font-size: 14px;
+    .compare-row .label.leadace {
+      color: var(--accent);
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
     }
+    .compare-row .label.leadace::before {
+      content: "";
+      width: 5px; height: 5px;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--accent-glow);
+    }
+    .compare-row .desc { color: var(--text-secondary); font-size: 14px; }
     .compare-row .price {
       font-family: 'JetBrains Mono', monospace;
       font-size: 13px;
@@ -350,7 +537,7 @@
       white-space: nowrap;
     }
     @media (max-width: 720px) {
-      .compare-row { grid-template-columns: 1fr; gap: 6px; padding: 18px 20px; }
+      .compare-row { grid-template-columns: 1fr; gap: 6px; padding: 18px 22px; }
       .compare-row .price { text-align: left; }
       .compare-row.header { display: none; }
     }
@@ -361,38 +548,37 @@
       gap: 1px;
       background: var(--border);
       border: 1px solid var(--border);
-      border-radius: 6px;
+      border-radius: 8px;
       overflow: hidden;
       max-width: 1000px;
       margin: 0 auto;
     }
     .cmd {
       display: grid;
-      grid-template-columns: 50px 220px 1fr;
-      padding: 22px 28px;
+      grid-template-columns: 50px 230px 1fr;
+      padding: 24px 28px;
       background: var(--surface);
       gap: 24px;
       align-items: center;
+      transition: background 0.2s;
+      position: relative;
     }
-    .cmd .num {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-      color: var(--text-muted);
+    .cmd:hover { background: var(--surface-2); }
+    .cmd::before {
+      content: "";
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 2px;
+      background: var(--accent);
+      transform: scaleY(0);
+      transform-origin: center;
+      transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.2, 1);
     }
-    .cmd .name {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--accent);
-    }
-    .cmd .desc {
-      color: var(--text-secondary);
-      font-size: 14px;
-      line-height: 1.6;
-    }
-    @media (max-width: 760px) {
-      .cmd { grid-template-columns: 1fr; gap: 6px; padding: 20px; }
-    }
+    .cmd:hover::before { transform: scaleY(1); }
+    .cmd .num { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-muted); }
+    .cmd .name { font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 600; color: var(--accent); }
+    .cmd .desc { color: var(--text-secondary); font-size: 14px; line-height: 1.6; }
+    @media (max-width: 760px) { .cmd { grid-template-columns: 1fr; gap: 6px; padding: 20px; } }
 
     /* ===== Points ===== */
     .points {
@@ -401,38 +587,33 @@
       gap: 1px;
       background: var(--border);
       border: 1px solid var(--border);
-      border-radius: 6px;
+      border-radius: 8px;
       max-width: 1000px;
       margin: 0 auto;
+      overflow: hidden;
     }
-    .point {
-      padding: 28px;
-      background: var(--surface);
-    }
+    .point { padding: 28px; background: var(--surface); transition: background 0.2s; }
+    .point:hover { background: var(--surface-2); }
     .point-icon {
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
       color: var(--accent);
       margin-bottom: 12px;
-      display: block;
-      letter-spacing: 0.05em;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
     }
-    .point h3 {
-      font-size: 16px;
-      font-weight: 600;
-      color: var(--text);
-      margin-bottom: 8px;
-      letter-spacing: -0.01em;
+    .point-icon::before {
+      content: "";
+      width: 4px; height: 4px;
+      background: var(--accent);
+      border-radius: 50%;
     }
-    .point p {
-      color: var(--text-secondary);
-      font-size: 14px;
-      line-height: 1.6;
-    }
-    @media (max-width: 720px) {
-      .points { grid-template-columns: 1fr; }
-    }
+    .point h3 { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 8px; letter-spacing: -0.01em; }
+    .point p { color: var(--text-secondary); font-size: 14px; line-height: 1.6; }
+    @media (max-width: 720px) { .points { grid-template-columns: 1fr; } }
 
     /* ===== Pricing ===== */
     .pricing-grid {
@@ -445,18 +626,34 @@
     .price-card {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 6px;
+      border-radius: 8px;
       padding: 28px 26px;
       position: relative;
       display: flex;
       flex-direction: column;
+      transition: border-color 0.25s, background 0.25s, transform 0.3s cubic-bezier(0.2, 0.9, 0.2, 1);
     }
-    .price-card.featured { border-color: var(--accent); }
+    .price-card:hover {
+      border-color: var(--border-bright);
+      background: var(--surface-2);
+      transform: translateY(-2px);
+    }
+    .price-card.featured {
+      border-color: rgba(var(--accent-rgb), 0.6);
+      background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.05), var(--surface));
+    }
+    .price-card.featured::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 24px; right: 24px;
+      height: 1px;
+      background: linear-gradient(to right, transparent, var(--accent), transparent);
+    }
     .price-tier {
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
       font-weight: 500;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
       color: var(--text-muted);
       margin-bottom: 14px;
@@ -499,7 +696,7 @@
       flex: 1;
     }
     .price-features li {
-      padding: 8px 0;
+      padding: 9px 0;
       color: var(--text-secondary);
       font-size: 13px;
       border-bottom: 1px solid var(--border);
@@ -529,21 +726,19 @@
       text-align: center;
       line-height: 1.8;
     }
-    @media (max-width: 820px) {
-      .pricing-grid { grid-template-columns: 1fr; max-width: 400px; }
-    }
+    @media (max-width: 820px) { .pricing-grid { grid-template-columns: 1fr; max-width: 400px; } }
 
     /* ===== FAQ ===== */
-    .faq-list {
-      max-width: 760px;
-      margin: 0 auto;
-    }
+    .faq-list { max-width: 760px; margin: 0 auto; }
     details {
       border: 1px solid var(--border);
-      border-radius: 6px;
+      border-radius: 8px;
       margin-bottom: 10px;
       background: var(--surface);
+      transition: border-color 0.2s;
     }
+    details:hover { border-color: var(--border-bright); }
+    details[open] { border-color: var(--border-bright); }
     summary {
       cursor: pointer;
       font-weight: 500;
@@ -561,7 +756,7 @@
       font-family: 'JetBrains Mono', monospace;
       color: var(--accent);
       font-size: 18px;
-      transition: transform 0.2s;
+      transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.2, 1);
     }
     details[open] summary::after { transform: rotate(45deg); }
     details p {
@@ -590,24 +785,27 @@
     footer a:hover { color: var(--text); }
     footer .links { display: flex; gap: 20px; flex-wrap: wrap; }
 
-    /* ===== Reveal animation ===== */
+    /* ===== Scroll reveals ===== */
     .reveal {
       opacity: 0;
-      transition: opacity 0.6s ease;
+      transform: translateY(28px);
+      transition: opacity 0.9s cubic-bezier(0.22, 0.9, 0.2, 1), transform 0.9s cubic-bezier(0.22, 0.9, 0.2, 1);
+      transition-delay: var(--delay, 0ms);
     }
-    .reveal.visible { opacity: 1; }
-    @media (prefers-reduced-motion: reduce) {
-      .reveal { opacity: 1; transition: none; }
-      .rotator::after { animation: none; }
-    }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+
+    /* Note: prefers-reduced-motion is intentionally not respected for decorative
+       LP motion — the motion IS the design. Core content remains operable. */
   </style>
 </head>
 <body>
 
-<nav>
+<nav id="nav">
   <div class="container">
-    <div class="logo mono">
-      <span class="logo-mark" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" fill="currentColor"><g transform="translate(0,1024) scale(0.1,-0.1)"><path d="M4310 9361 c-110 -36 -224 -134 -275 -236 -27 -54 -30 -71 -33 -176 -4 -115 -3 -118 31 -190 58 -126 156 -212 285 -250 42 -12 42 -12 42 -146 0 -598 -201 -1090 -625 -1532 -156 -162 -335 -315 -795 -677 -803 -631 -1157 -1013 -1449 -1565 -179 -339 -270 -629 -337 -1084 -26 -172 -26 -672 0 -865 82 -620 227 -1080 527 -1680 141 -280 170 -323 230 -341 92 -28 147 17 214 176 244 585 695 1034 1270 1268 349 143 637 208 1405 317 269 38 586 90 675 110 458 104 746 203 1080 373 686 350 1238 953 1506 1646 42 108 42 108 95 120 310 70 447 435 259 690 -275 373 -852 121 -776 -339 16 -98 61 -179 136 -248 36 -33 65 -65 65 -71 0 -22 -81 -204 -141 -320 -457 -867 -1287 -1424 -2419 -1622 -202 -35 -339 -56 -725 -110 -902 -125 -1464 -327 -1910 -686 -99 -79 -345 -325 -345 -343 0 -6 -4 -10 -10 -10 -24 0 106 303 222 515 264 486 669 931 1162 1279 335 236 397 269 1568 844 497 244 705 359 998 554 1218 810 1918 1952 2205 3598 9 52 18 105 21 117 3 16 15 25 42 33 55 15 132 62 181 111 234 233 142 631 -169 734 -85 28 -248 18 -325 -20 -307 -154 -334 -568 -51 -770 36 -26 66 -53 66 -60 0 -32 -94 -479 -135 -641 -200 -797 -561 -1521 -1022 -2050 -525 -603 -1092 -987 -2268 -1539 -843 -396 -1323 -697 -1758 -1102 -424 -395 -728 -840 -942 -1378 -26 -66 -52 -124 -57 -130 -19 -19 5 218 51 497 32 189 126 504 213 713 201 481 451 848 848 1245 290 291 469 434 1080 865 846 597 1301 995 1684 1473 49 61 93 112 96 112 4 0 32 -9 64 -20 285 -98 593 7 757 258 263 403 0 951 -476 988 -277 21 -519 -112 -636 -351 -108 -221 -93 -443 43 -653 47 -73 56 -54 -122 -257 -408 -466 -763 -772 -1475 -1275 -652 -460 -853 -616 -1116 -867 -698 -669 -1090 -1407 -1239 -2333 -17 -103 -24 -180 -48 -525 -7 -100 -7 -100 -50 10 -310 787 -393 1609 -228 2261 198 787 602 1329 1549 2081 122 97 287 229 367 292 525 418 792 712 981 1083 166 327 235 619 246 1044 6 231 6 231 40 249 19 11 58 44 86 75 170 184 167 443 -7 615 -94 93 -155 119 -291 122 -60 1 -121 -1 -135 -6z m237 -207 c181 -88 175 -347 -11 -441 -214 -109 -439 133 -321 346 67 120 201 159 332 95z m3909 21 c268 -80 210 -486 -70 -486 -232 0 -337 281 -164 439 59 54 150 72 234 47z m-2095 -1615 c316 -60 434 -464 203 -696 -86 -86 -146 -109 -284 -109 -137 0 -177 15 -272 103 -306 284 -57 779 353 702z m1817 -2279 c232 -120 149 -465 -113 -466 -244 -1 -336 315 -131 453 60 40 179 47 244 13z"/></g></svg></span>
+    <div class="logo">
+      <span class="logo-wrap">
+        <span class="logo-mark" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" fill="currentColor"><g transform="translate(0,1024) scale(0.1,-0.1)"><path d="M4310 9361 c-110 -36 -224 -134 -275 -236 -27 -54 -30 -71 -33 -176 -4 -115 -3 -118 31 -190 58 -126 156 -212 285 -250 42 -12 42 -12 42 -146 0 -598 -201 -1090 -625 -1532 -156 -162 -335 -315 -795 -677 -803 -631 -1157 -1013 -1449 -1565 -179 -339 -270 -629 -337 -1084 -26 -172 -26 -672 0 -865 82 -620 227 -1080 527 -1680 141 -280 170 -323 230 -341 92 -28 147 17 214 176 244 585 695 1034 1270 1268 349 143 637 208 1405 317 269 38 586 90 675 110 458 104 746 203 1080 373 686 350 1238 953 1506 1646 42 108 42 108 95 120 310 70 447 435 259 690 -275 373 -852 121 -776 -339 16 -98 61 -179 136 -248 36 -33 65 -65 65 -71 0 -22 -81 -204 -141 -320 -457 -867 -1287 -1424 -2419 -1622 -202 -35 -339 -56 -725 -110 -902 -125 -1464 -327 -1910 -686 -99 -79 -345 -325 -345 -343 0 -6 -4 -10 -10 -10 -24 0 106 303 222 515 264 486 669 931 1162 1279 335 236 397 269 1568 844 497 244 705 359 998 554 1218 810 1918 1952 2205 3598 9 52 18 105 21 117 3 16 15 25 42 33 55 15 132 62 181 111 234 233 142 631 -169 734 -85 28 -248 18 -325 -20 -307 -154 -334 -568 -51 -770 36 -26 66 -53 66 -60 0 -32 -94 -479 -135 -641 -200 -797 -561 -1521 -1022 -2050 -525 -603 -1092 -987 -2268 -1539 -843 -396 -1323 -697 -1758 -1102 -424 -395 -728 -840 -942 -1378 -26 -66 -52 -124 -57 -130 -19 -19 5 218 51 497 32 189 126 504 213 713 201 481 451 848 848 1245 290 291 469 434 1080 865 846 597 1301 995 1684 1473 49 61 93 112 96 112 4 0 32 -9 64 -20 285 -98 593 7 757 258 263 403 0 951 -476 988 -277 21 -519 -112 -636 -351 -108 -221 -93 -443 43 -653 47 -73 56 -54 -122 -257 -408 -466 -763 -772 -1475 -1275 -652 -460 -853 -616 -1116 -867 -698 -669 -1090 -1407 -1239 -2333 -17 -103 -24 -180 -48 -525 -7 -100 -7 -100 -50 10 -310 787 -393 1609 -228 2261 198 787 602 1329 1549 2081 122 97 287 229 367 292 525 418 792 712 981 1083 166 327 235 619 246 1044 6 231 6 231 40 249 19 11 58 44 86 75 170 184 167 443 -7 615 -94 93 -155 119 -291 122 -60 1 -121 -1 -135 -6z m237 -207 c181 -88 175 -347 -11 -441 -214 -109 -439 133 -321 346 67 120 201 159 332 95z m3909 21 c268 -80 210 -486 -70 -486 -232 0 -337 281 -164 439 59 54 150 72 234 47z m-2095 -1615 c316 -60 434 -464 203 -696 -86 -86 -146 -109 -284 -109 -137 0 -177 15 -272 103 -306 284 -57 779 353 702z m1817 -2279 c232 -120 149 -465 -113 -466 -244 -1 -336 315 -131 453 60 40 179 47 244 13z"/></g></svg></span>
+      </span>
       leadace
     </div>
     <div class="nav-links">
@@ -625,48 +823,70 @@
 <!-- ===== Hero ===== -->
 <header class="hero">
   <canvas id="network-canvas"></canvas>
+  <div class="hero-blob" aria-hidden="true"></div>
+  <div class="hero-blob-2" aria-hidden="true"></div>
   <div class="container hero-content">
-    <span class="eyebrow">Claude Code Plugin</span>
-    <h1>
-      Outbound sales,<br>
-      <span class="rotator" id="rotator">autopiloted</span><span class="dim">.</span>
-    </h1>
-    <p class="lede">
-      One plugin. Every prospect, personally researched.<br>
-      Every email, individually written. Your inbox, your reputation.
-    </p>
-    <div class="cta-row">
-      <a href="https://app.leadace.ai/login?signup=1" class="btn btn-primary">Get LeadAce — from $29/mo</a>
-      <a href="#how" class="btn btn-secondary">See how it works</a>
+    <div class="hero-grid">
+      <div class="hero-text">
+        <span class="eyebrow reveal-up" style="--delay: 0.55s">Claude Code Plugin</span>
+        <h1>
+          <span class="line"><span class="inner">Outbound sales,</span></span>
+          <span class="line"><span class="inner"><span class="rotator" id="rotator">autopiloted</span><span class="dim">.</span><span class="rotator-caret" aria-hidden="true">|</span></span></span>
+        </h1>
+        <p class="lede reveal-up" style="--delay: 0.7s">
+          One plugin. Every prospect, personally researched.<br>
+          Every email, individually written. Your inbox, your reputation.
+        </p>
+        <div class="cta-row reveal-up" style="--delay: 0.82s">
+          <a href="https://app.leadace.ai/login?signup=1" class="btn btn-primary" id="cta-primary">
+            <span>Get LeadAce — from $29/mo</span>
+            <span class="arrow">→</span>
+          </a>
+          <a href="#how" class="btn btn-secondary">See how it works</a>
+        </div>
+        <div class="meta-note reveal-up" style="--delay: 0.92s">macOS · Claude Code (Pro or Max) · from $29/mo</div>
+      </div>
+
+      <!-- Animated terminal -->
+      <div class="hero-visual">
+        <div class="terminal" aria-hidden="true">
+          <div class="terminal-bar">
+            <span class="dot red"></span>
+            <span class="dot amber"></span>
+            <span class="dot green"></span>
+            <span class="terminal-title">~/outbound — claude-code</span>
+          </div>
+          <div class="terminal-body" id="terminal-body"></div>
+        </div>
+      </div>
     </div>
-    <div class="meta-note">macOS · Claude Code (Pro or Max) · from $29/mo</div>
   </div>
 </header>
 
 <!-- ===== Why different ===== -->
 <section id="why">
   <div class="container">
-    <div class="section-label">01 / The difference</div>
+    <div class="section-label reveal">01 / The difference</div>
     <h2 class="reveal">Not another mass-mailer. <span class="dim">AI reads every prospect first.</span></h2>
     <p class="section-sub reveal">Outbound broke because tools optimized for volume. LeadAce optimizes for signal.</p>
 
-    <div class="compare reveal">
-      <div class="compare-row header">
+    <div class="compare">
+      <div class="compare-row header reveal">
         <div>Tool</div>
         <div>How it writes</div>
         <div>Cost</div>
       </div>
-      <div class="compare-row">
+      <div class="compare-row reveal" style="--delay: 60ms">
         <div class="label">Mass-mail SaaS</div>
         <div class="desc">Same template, 500 companies. Spam filters love it.</div>
         <div class="price">$500+ / mo</div>
       </div>
-      <div class="compare-row">
+      <div class="compare-row reveal" style="--delay: 120ms">
         <div class="label">Manual outbound</div>
         <div class="desc">You research, write, send. Doesn't scale past 20 a week.</div>
         <div class="price">Your hours</div>
       </div>
-      <div class="compare-row">
+      <div class="compare-row reveal" style="--delay: 180ms">
         <div class="label leadace">LeadAce</div>
         <div class="desc">AI reads each site. Writes each email. Iterates from replies.</div>
         <div class="price">from $29/mo</div>
@@ -678,27 +898,27 @@
 <!-- ===== How it works ===== -->
 <section id="how">
   <div class="container">
-    <div class="section-label">02 / How it works</div>
+    <div class="section-label reveal">02 / How it works</div>
     <h2 class="reveal">Four commands. <span class="dim">That's the product.</span></h2>
     <p class="section-sub reveal">Installed as a Claude Code plugin. Your pipeline runs as slash commands.</p>
 
-    <div class="commands reveal">
-      <div class="cmd">
+    <div class="commands">
+      <div class="cmd reveal" style="--delay: 0ms">
         <div class="num mono">01</div>
         <div class="name mono">/strategy</div>
         <div class="desc">Define who, how, why. AI structures your pitch.</div>
       </div>
-      <div class="cmd">
+      <div class="cmd reveal" style="--delay: 70ms">
         <div class="num mono">02</div>
         <div class="name mono">/build-list</div>
         <div class="desc">AI crawls the web for prospects matching your ICP.</div>
       </div>
-      <div class="cmd">
+      <div class="cmd reveal" style="--delay: 140ms">
         <div class="num mono">03</div>
         <div class="name mono">/outbound</div>
         <div class="desc">AI reads each site, writes one email per prospect, sends.</div>
       </div>
-      <div class="cmd">
+      <div class="cmd reveal" style="--delay: 210ms">
         <div class="num mono">04</div>
         <div class="name mono">/daily-cycle</div>
         <div class="desc">Runs the loop daily. Checks replies, improves, sends more.</div>
@@ -710,27 +930,27 @@
 <!-- ===== Ownership ===== -->
 <section id="own">
   <div class="container">
-    <div class="section-label">03 / Your inbox, your reputation</div>
+    <div class="section-label reveal">03 / Your inbox, your reputation</div>
     <h2 class="reveal">No shared IPs. <span class="dim">No pooled warmup.</span></h2>
     <p class="section-sub reveal">Your emails are sent from your own account. Your sending reputation belongs to you alone.</p>
 
-    <div class="points reveal">
-      <div class="point">
+    <div class="points">
+      <div class="point reveal" style="--delay: 0ms">
         <span class="point-icon mono">inbox</span>
         <h3>Your email account</h3>
         <p>Every email is sent from your own inbox. No shared infrastructure, no middlemen.</p>
       </div>
-      <div class="point">
+      <div class="point reveal" style="--delay: 80ms">
         <span class="point-icon mono">reputation</span>
         <h3>Your domain reputation</h3>
         <p>Other users can't tank your deliverability. Your sender score stays yours.</p>
       </div>
-      <div class="point">
+      <div class="point reveal" style="--delay: 160ms">
         <span class="point-icon mono">private</span>
         <h3>Your data stays private</h3>
         <p>Prospect data is never shared with other users. Simpler compliance and security reviews.</p>
       </div>
-      <div class="point">
+      <div class="point reveal" style="--delay: 240ms">
         <span class="point-icon mono">keys</span>
         <h3>Your AI, your keys</h3>
         <p>AI runs on your own Claude Code plan. No shared compute, no vendor-side inference.</p>
@@ -742,12 +962,12 @@
 <!-- ===== Pricing ===== -->
 <section id="pricing">
   <div class="container">
-    <div class="section-label">04 / Pricing</div>
+    <div class="section-label reveal">04 / Pricing</div>
     <h2 class="reveal">Simple plans. <span class="dim">Scale when you need to.</span></h2>
     <p class="section-sub reveal">All plans include the Claude Code plugin, cloud dashboard, and all future updates.</p>
 
     <div class="pricing-grid">
-      <div class="price-card reveal">
+      <div class="price-card reveal" style="--delay: 0ms">
         <div class="price-tier">Starter</div>
         <div class="price-amount"><span class="currency">$</span>29<span class="period">/mo</span></div>
         <div class="price-note">$290/yr (save 17%)</div>
@@ -759,7 +979,7 @@
         </ul>
         <a href="https://app.leadace.ai/login?signup=1" class="btn btn-secondary">Get started</a>
       </div>
-      <div class="price-card featured reveal">
+      <div class="price-card featured reveal" style="--delay: 80ms">
         <div class="price-tier">Pro</div>
         <div class="price-amount"><span class="currency">$</span>79<span class="period">/mo</span></div>
         <div class="price-note">$790/yr (save 17%)</div>
@@ -771,7 +991,7 @@
         </ul>
         <a href="https://app.leadace.ai/login?signup=1" class="btn btn-primary">Get Pro</a>
       </div>
-      <div class="price-card reveal">
+      <div class="price-card reveal" style="--delay: 160ms">
         <div class="price-tier">Scale</div>
         <div class="price-amount"><span class="currency">$</span>199<span class="period">/mo</span></div>
         <div class="price-note">$1,990/yr (save 17%)</div>
@@ -794,32 +1014,26 @@
 <!-- ===== FAQ ===== -->
 <section id="faq">
   <div class="container">
-    <div class="section-label">05 / FAQ</div>
+    <div class="section-label reveal">05 / FAQ</div>
     <h2 class="reveal">Questions.</h2>
 
     <div class="faq-list">
-      <details class="reveal">
-        <summary>Do I need Claude Code?</summary>
+      <details class="reveal"><summary>Do I need Claude Code?</summary>
         <p>Yes. LeadAce is a Claude Code plugin — it runs inside Claude Code on your Mac. You'll need a Pro or Max plan from Anthropic. Both work.</p>
       </details>
-      <details class="reveal">
-        <summary>Why macOS only?</summary>
+      <details class="reveal"><summary>Why macOS only?</summary>
         <p>LeadAce depends on tools and workflows built for macOS. Windows and Linux support is not currently planned.</p>
       </details>
-      <details class="reveal">
-        <summary>How is this different from Apollo or Instantly?</summary>
+      <details class="reveal"><summary>How is this different from Apollo or Instantly?</summary>
         <p>Those tools blast the same template to hundreds of prospects. LeadAce has Claude read every prospect's website before writing, producing one genuine email per prospect. Lower volume, much higher signal.</p>
       </details>
-      <details class="reveal">
-        <summary>Will this flag me as spam?</summary>
+      <details class="reveal"><summary>Will this flag me as spam?</summary>
         <p>LeadAce sends from your own inbox at a reasonable cadence, writing genuinely personalized messages. Deliverability depends on your domain reputation — we don't share infrastructure with other users.</p>
       </details>
-      <details class="reveal">
-        <summary>Can I cancel anytime?</summary>
+      <details class="reveal"><summary>Can I cancel anytime?</summary>
         <p>Yes. All plans are month-to-month. Cancel anytime from your dashboard — no lock-in, no cancellation fees. Annual plans are non-refundable but can be cancelled at renewal.</p>
       </details>
-      <details class="reveal">
-        <summary>Who built this?</summary>
+      <details class="reveal"><summary>Who built this?</summary>
         <p>SurpassOne Inc., a one-person software company based in Tokyo. LeadAce is the tool we built to run our own outbound — now shipped as a product.</p>
       </details>
     </div>
@@ -829,8 +1043,10 @@
 <!-- ===== Footer ===== -->
 <footer>
   <div class="container">
-    <div class="logo mono">
-      <span class="logo-mark" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" fill="currentColor"><g transform="translate(0,1024) scale(0.1,-0.1)"><path d="M4310 9361 c-110 -36 -224 -134 -275 -236 -27 -54 -30 -71 -33 -176 -4 -115 -3 -118 31 -190 58 -126 156 -212 285 -250 42 -12 42 -12 42 -146 0 -598 -201 -1090 -625 -1532 -156 -162 -335 -315 -795 -677 -803 -631 -1157 -1013 -1449 -1565 -179 -339 -270 -629 -337 -1084 -26 -172 -26 -672 0 -865 82 -620 227 -1080 527 -1680 141 -280 170 -323 230 -341 92 -28 147 17 214 176 244 585 695 1034 1270 1268 349 143 637 208 1405 317 269 38 586 90 675 110 458 104 746 203 1080 373 686 350 1238 953 1506 1646 42 108 42 108 95 120 310 70 447 435 259 690 -275 373 -852 121 -776 -339 16 -98 61 -179 136 -248 36 -33 65 -65 65 -71 0 -22 -81 -204 -141 -320 -457 -867 -1287 -1424 -2419 -1622 -202 -35 -339 -56 -725 -110 -902 -125 -1464 -327 -1910 -686 -99 -79 -345 -325 -345 -343 0 -6 -4 -10 -10 -10 -24 0 106 303 222 515 264 486 669 931 1162 1279 335 236 397 269 1568 844 497 244 705 359 998 554 1218 810 1918 1952 2205 3598 9 52 18 105 21 117 3 16 15 25 42 33 55 15 132 62 181 111 234 233 142 631 -169 734 -85 28 -248 18 -325 -20 -307 -154 -334 -568 -51 -770 36 -26 66 -53 66 -60 0 -32 -94 -479 -135 -641 -200 -797 -561 -1521 -1022 -2050 -525 -603 -1092 -987 -2268 -1539 -843 -396 -1323 -697 -1758 -1102 -424 -395 -728 -840 -942 -1378 -26 -66 -52 -124 -57 -130 -19 -19 5 218 51 497 32 189 126 504 213 713 201 481 451 848 848 1245 290 291 469 434 1080 865 846 597 1301 995 1684 1473 49 61 93 112 96 112 4 0 32 -9 64 -20 285 -98 593 7 757 258 263 403 0 951 -476 988 -277 21 -519 -112 -636 -351 -108 -221 -93 -443 43 -653 47 -73 56 -54 -122 -257 -408 -466 -763 -772 -1475 -1275 -652 -460 -853 -616 -1116 -867 -698 -669 -1090 -1407 -1239 -2333 -17 -103 -24 -180 -48 -525 -7 -100 -7 -100 -50 10 -310 787 -393 1609 -228 2261 198 787 602 1329 1549 2081 122 97 287 229 367 292 525 418 792 712 981 1083 166 327 235 619 246 1044 6 231 6 231 40 249 19 11 58 44 86 75 170 184 167 443 -7 615 -94 93 -155 119 -291 122 -60 1 -121 -1 -135 -6z m237 -207 c181 -88 175 -347 -11 -441 -214 -109 -439 133 -321 346 67 120 201 159 332 95z m3909 21 c268 -80 210 -486 -70 -486 -232 0 -337 281 -164 439 59 54 150 72 234 47z m-2095 -1615 c316 -60 434 -464 203 -696 -86 -86 -146 -109 -284 -109 -137 0 -177 15 -272 103 -306 284 -57 779 353 702z m1817 -2279 c232 -120 149 -465 -113 -466 -244 -1 -336 315 -131 453 60 40 179 47 244 13z"/></g></svg></span>
+    <div class="logo">
+      <span class="logo-wrap">
+        <span class="logo-mark" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" fill="currentColor"><g transform="translate(0,1024) scale(0.1,-0.1)"><path d="M4310 9361 c-110 -36 -224 -134 -275 -236 -27 -54 -30 -71 -33 -176 -4 -115 -3 -118 31 -190 58 -126 156 -212 285 -250 42 -12 42 -12 42 -146 0 -598 -201 -1090 -625 -1532 -156 -162 -335 -315 -795 -677 -803 -631 -1157 -1013 -1449 -1565 -179 -339 -270 -629 -337 -1084 -26 -172 -26 -672 0 -865 82 -620 227 -1080 527 -1680 141 -280 170 -323 230 -341 92 -28 147 17 214 176 244 585 695 1034 1270 1268 349 143 637 208 1405 317 269 38 586 90 675 110 458 104 746 203 1080 373 686 350 1238 953 1506 1646 42 108 42 108 95 120 310 70 447 435 259 690 -275 373 -852 121 -776 -339 16 -98 61 -179 136 -248 36 -33 65 -65 65 -71 0 -22 -81 -204 -141 -320 -457 -867 -1287 -1424 -2419 -1622 -202 -35 -339 -56 -725 -110 -902 -125 -1464 -327 -1910 -686 -99 -79 -345 -325 -345 -343 0 -6 -4 -10 -10 -10 -24 0 106 303 222 515 264 486 669 931 1162 1279 335 236 397 269 1568 844 497 244 705 359 998 554 1218 810 1918 1952 2205 3598 9 52 18 105 21 117 3 16 15 25 42 33 55 15 132 62 181 111 234 233 142 631 -169 734 -85 28 -248 18 -325 -20 -307 -154 -334 -568 -51 -770 36 -26 66 -53 66 -60 0 -32 -94 -479 -135 -641 -200 -797 -561 -1521 -1022 -2050 -525 -603 -1092 -987 -2268 -1539 -843 -396 -1323 -697 -1758 -1102 -424 -395 -728 -840 -942 -1378 -26 -66 -52 -124 -57 -130 -19 -19 5 218 51 497 32 189 126 504 213 713 201 481 451 848 848 1245 290 291 469 434 1080 865 846 597 1301 995 1684 1473 49 61 93 112 96 112 4 0 32 -9 64 -20 285 -98 593 7 757 258 263 403 0 951 -476 988 -277 21 -519 -112 -636 -351 -108 -221 -93 -443 43 -653 47 -73 56 -54 -122 -257 -408 -466 -763 -772 -1475 -1275 -652 -460 -853 -616 -1116 -867 -698 -669 -1090 -1407 -1239 -2333 -17 -103 -24 -180 -48 -525 -7 -100 -7 -100 -50 10 -310 787 -393 1609 -228 2261 198 787 602 1329 1549 2081 122 97 287 229 367 292 525 418 792 712 981 1083 166 327 235 619 246 1044 6 231 6 231 40 249 19 11 58 44 86 75 170 184 167 443 -7 615 -94 93 -155 119 -291 122 -60 1 -121 -1 -135 -6z m237 -207 c181 -88 175 -347 -11 -441 -214 -109 -439 133 -321 346 67 120 201 159 332 95z m3909 21 c268 -80 210 -486 -70 -486 -232 0 -337 281 -164 439 59 54 150 72 234 47z m-2095 -1615 c316 -60 434 -464 203 -696 -86 -86 -146 -109 -284 -109 -137 0 -177 15 -272 103 -306 284 -57 779 353 702z m1817 -2279 c232 -120 149 -465 -113 -466 -244 -1 -336 315 -131 453 60 40 179 47 244 13z"/></g></svg></span>
+      </span>
       leadace
     </div>
     <div class="links">
@@ -843,18 +1059,21 @@
 </footer>
 
 <script>
-/* ===== Network canvas (subtle) ===== */
+// Decorative LP motion runs regardless of prefers-reduced-motion — LP motion IS the design
+const REDUCED = false;
+
+/* ===== Cursor-reactive constellation ===== */
 (function() {
   const canvas = document.getElementById('network-canvas');
-  if (!canvas) return;
-  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (prefersReduced) { canvas.style.display = 'none'; return; }
+  if (!canvas || REDUCED) { if (canvas) canvas.style.display = 'none'; return; }
 
   const ctx = canvas.getContext('2d');
   let w, h, nodes;
-  const NODE_COUNT = 50;
-  const LINK_DIST = 140;
+  const NODE_COUNT = 56;
+  const LINK_DIST = 150;
+  const CURSOR_RADIUS = 220;
   const ACCENT = '232, 117, 94';
+  const mouse = { x: -9999, y: -9999, active: false };
 
   function resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -870,11 +1089,19 @@
     nodes = Array.from({ length: NODE_COUNT }, () => ({
       x: Math.random() * w,
       y: Math.random() * h,
-      vx: (Math.random() - 0.5) * 0.2,
-      vy: (Math.random() - 0.5) * 0.2,
-      r: Math.random() * 1.2 + 0.5,
+      vx: (Math.random() - 0.5) * 0.22,
+      vy: (Math.random() - 0.5) * 0.22,
+      r: Math.random() * 1.3 + 0.5,
     }));
   }
+
+  canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = e.clientX - rect.left;
+    mouse.y = e.clientY - rect.top;
+    mouse.active = true;
+  });
+  canvas.addEventListener('mouseleave', () => { mouse.active = false; mouse.x = -9999; mouse.y = -9999; });
 
   function tick() {
     ctx.clearRect(0, 0, w, h);
@@ -886,15 +1113,23 @@
       if (n.y < 0 || n.y > h) n.vy *= -1;
     }
 
+    /* Links */
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
         const a = nodes[i], b = nodes[j];
         const dx = a.x - b.x, dy = a.y - b.y;
         const d = Math.sqrt(dx * dx + dy * dy);
         if (d < LINK_DIST) {
-          const alpha = (1 - d / LINK_DIST) * 0.22;
-          ctx.strokeStyle = `rgba(${ACCENT}, ${alpha})`;
-          ctx.lineWidth = 0.5;
+          let alpha = (1 - d / LINK_DIST) * 0.28;
+          // Boost for nodes near cursor
+          const mx = (a.x + b.x) / 2 - mouse.x;
+          const my = (a.y + b.y) / 2 - mouse.y;
+          const md = Math.sqrt(mx * mx + my * my);
+          if (mouse.active && md < CURSOR_RADIUS) {
+            alpha += (1 - md / CURSOR_RADIUS) * 0.5;
+          }
+          ctx.strokeStyle = `rgba(${ACCENT}, ${Math.min(alpha, 0.85)})`;
+          ctx.lineWidth = 0.6;
           ctx.beginPath();
           ctx.moveTo(a.x, a.y);
           ctx.lineTo(b.x, b.y);
@@ -903,10 +1138,26 @@
       }
     }
 
+    /* Nodes */
     for (const n of nodes) {
-      ctx.fillStyle = `rgba(${ACCENT}, 0.7)`;
+      let scale = 1, core = 0.8;
+      if (mouse.active) {
+        const dx = n.x - mouse.x, dy = n.y - mouse.y;
+        const md = Math.sqrt(dx * dx + dy * dy);
+        if (md < CURSOR_RADIUS) {
+          const boost = 1 - md / CURSOR_RADIUS;
+          scale = 1 + boost * 1.8;
+          core = 0.8 + boost * 0.2;
+          // Halo
+          ctx.fillStyle = `rgba(${ACCENT}, ${boost * 0.15})`;
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, n.r * (4 + boost * 6), 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.fillStyle = `rgba(${ACCENT}, ${core})`;
       ctx.beginPath();
-      ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+      ctx.arc(n.x, n.y, n.r * scale, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -918,17 +1169,15 @@
   window.addEventListener('resize', init);
 })();
 
-/* ===== Hero headline rotator ===== */
+/* ===== Hero headline rotator (typewriter) ===== */
 (function() {
   const el = document.getElementById('rotator');
-  if (!el) return;
-  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (prefersReduced) return;
+  if (!el || REDUCED) return;
 
   const words = ['autopiloted', 'personal', 'on repeat', 'yours'];
   let idx = 0;
   let current = words[0];
-  let typing = true;
+  let typing = false; // false = typing in, true = deleting
   let pos = current.length;
 
   function step() {
@@ -944,15 +1193,174 @@
       pos++;
       if (pos > current.length) {
         typing = true;
-        setTimeout(step, 1800);
+        setTimeout(step, 2000);
         return;
       }
     }
     el.textContent = current.slice(0, pos);
-    setTimeout(step, typing ? 50 : 80);
+    setTimeout(step, typing ? 55 : 85);
   }
 
-  setTimeout(step, 2000);
+  setTimeout(() => {
+    typing = true;
+    step();
+  }, 2200);
+})();
+
+/* ===== Animated terminal demo ===== */
+(function() {
+  const body = document.getElementById('terminal-body');
+  if (!body) return;
+
+  const SCRIPT = [
+    {
+      prompt: '$',
+      cmd: '/strategy',
+      delay: 420,
+      out: [
+        { t: '› Analyzing market for B2B SaaS...', cls: 'dim' },
+        { t: '› ICP locked: series-A, 20–200 employees', cls: '' },
+        { t: '› 3 outreach angles drafted', cls: '' },
+        { t: '✓ strategy.md saved', cls: 'ok' },
+      ],
+    },
+    {
+      prompt: '$',
+      cmd: '/build-list --size 50',
+      delay: 420,
+      out: [
+        { t: '› Crawling: linear.app, stripe.com, retool.com...', cls: 'dim' },
+        { t: '› 47 prospects matched ICP', cls: '' },
+        { t: '› 39 emails resolved · 12 contact forms', cls: '' },
+        { t: '✓ list built (47/50)', cls: 'ok' },
+      ],
+    },
+    {
+      prompt: '$',
+      cmd: '/outbound',
+      delay: 420,
+      out: [
+        { t: '› Reading stripe.com/about...', cls: 'dim' },
+        { t: '› Writing email for Alex (Platform Eng)', cls: '' },
+        { t: '› Subject: re: your infra post on Apr 3', cls: '' },
+        { t: '✓ sent 1/47', cls: 'ok' },
+      ],
+    },
+    {
+      prompt: '$',
+      cmd: '/daily-cycle',
+      delay: 420,
+      out: [
+        { t: '› Checking replies... 3 new', cls: 'dim' },
+        { t: '› 1 positive (Alex, Stripe) — meeting booked', cls: 'ok' },
+        { t: '› Tuning strategy → prompt v3', cls: '' },
+        { t: '✓ cycle complete · 12 more sent', cls: 'ok' },
+      ],
+    },
+  ];
+
+  // Render fixed-height frame: always 9 lines visible, old lines scroll up
+  const LINE_HEIGHT_EM = 1.65;
+  const MAX_LINES = 9;
+  let lines = [];
+  let stepIndex = 0;
+
+  function render() {
+    const visible = lines.slice(-MAX_LINES);
+    body.innerHTML = visible.map(l => `<div class="term-line"><span class="${l.cls || 'term-out'}">${l.html}</span></div>`).join('');
+  }
+
+  function addLine(html, cls, done) {
+    lines.push({ html, cls });
+    render();
+    done && done();
+  }
+
+  function type(cmd, done) {
+    const lineIdx = lines.length;
+    lines.push({ html: '<span class="term-prompt">$</span>&nbsp;<span class="term-cmd"></span><span class="term-caret"></span>', cls: '' });
+    render();
+    let i = 0;
+    function tick() {
+      i++;
+      const visible = cmd.slice(0, i);
+      lines[lineIdx].html = `<span class="term-prompt">$</span>&nbsp;<span class="term-cmd">${visible}</span><span class="term-caret"></span>`;
+      render();
+      if (i < cmd.length) setTimeout(tick, 45 + Math.random() * 30);
+      else {
+        // remove caret after typing
+        setTimeout(() => {
+          lines[lineIdx].html = `<span class="term-prompt">$</span>&nbsp;<span class="term-cmd">${cmd}</span>`;
+          render();
+          done();
+        }, 280);
+      }
+    }
+    tick();
+  }
+
+  function emit(outLines, i, done) {
+    if (i >= outLines.length) { done(); return; }
+    const l = outLines[i];
+    addLine(l.t, l.cls ? `term-out ${l.cls}` : 'term-out');
+    setTimeout(() => emit(outLines, i + 1, done), 360);
+  }
+
+  function runStep() {
+    const step = SCRIPT[stepIndex];
+    type(step.cmd, () => {
+      setTimeout(() => {
+        emit(step.out, 0, () => {
+          setTimeout(() => {
+            stepIndex = (stepIndex + 1) % SCRIPT.length;
+            // Between commands: add spacer then clear gradually
+            if (stepIndex === 0) {
+              // Full restart — clear lines slowly
+              setTimeout(() => { lines = []; render(); runStep(); }, 1400);
+            } else {
+              addLine('', '');
+              runStep();
+            }
+          }, 1100);
+        });
+      }, step.delay);
+    });
+  }
+
+  // Kick off after terminal fades in
+  setTimeout(runStep, 1400);
+})();
+
+/* ===== Magnetic primary CTA ===== */
+(function() {
+  const btn = document.getElementById('cta-primary');
+  if (!btn || REDUCED) return;
+  const STRENGTH_X = 0.35, STRENGTH_Y = 0.45;
+  btn.addEventListener('mouseenter', () => {
+    btn.style.transition = 'background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.3s';
+  });
+  btn.addEventListener('mousemove', e => {
+    const r = btn.getBoundingClientRect();
+    const x = e.clientX - (r.left + r.width / 2);
+    const y = e.clientY - (r.top + r.height / 2);
+    btn.style.transform = `translate(${x * STRENGTH_X}px, ${y * STRENGTH_Y}px)`;
+  });
+  btn.addEventListener('mouseleave', () => {
+    btn.style.transition = 'transform 0.45s cubic-bezier(0.2, 0.9, 0.2, 1), background 0.2s, box-shadow 0.3s';
+    btn.style.transform = '';
+  });
+})();
+
+/* ===== Nav scroll state ===== */
+(function() {
+  const nav = document.getElementById('nav');
+  if (!nav) return;
+  const onScroll = () => {
+    if (window.scrollY > 20) nav.classList.add('scrolled');
+    else nav.classList.remove('scrolled');
+  };
+  onScroll();
+  window.addEventListener('scroll', onScroll, { passive: true });
 })();
 
 /* ===== Reveal on scroll ===== */
@@ -964,7 +1372,7 @@
         io.unobserve(e.target);
       }
     });
-  }, { threshold: 0.1, rootMargin: '0px 0px -60px 0px' });
+  }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
 
   document.querySelectorAll('.reveal').forEach(el => io.observe(el));
 })();
