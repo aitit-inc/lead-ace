@@ -124,12 +124,12 @@
       >
         Sign out
       </button>
-      <div class="px-2 pt-2 flex items-center justify-between gap-3">
+      <div class="px-2 pt-2 space-y-2">
+        <ThemeToggle />
         <div class="flex gap-3 text-[11px] text-text-muted">
           <a href="/terms" class="hover:text-text transition-colors">Terms</a>
           <a href="/privacy" class="hover:text-text transition-colors">Privacy</a>
         </div>
-        <ThemeToggle />
       </div>
     </div>
   </aside>
