@@ -4,9 +4,9 @@
   let { sentiment }: { sentiment: Sentiment } = $props();
 
   const colors: Record<Sentiment, string> = {
-    positive: 'bg-green-100 text-green-700',
-    neutral: 'bg-neutral-200 text-neutral-600',
-    negative: 'bg-red-100 text-red-700',
+    positive: 'bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300',
+    neutral: 'bg-neutral-200 text-neutral-600 dark:bg-neutral-700 dark:text-neutral-200',
+    negative: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300',
   };
 </script>
 

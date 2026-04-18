@@ -41,7 +41,7 @@
   <div class="fixed inset-0" onclick={onclose}></div>
   <form
     onsubmit={handleSubmit}
-    class="relative z-10 w-full max-w-sm rounded-lg bg-white p-6 shadow-lg"
+    class="relative z-10 w-full max-w-sm rounded-lg bg-page border border-border p-6 shadow-lg"
   >
     <h3 class="text-sm font-semibold text-text mb-3">Create project</h3>
     <label for="project-name" class="block text-xs font-medium text-text-secondary mb-1">
@@ -70,7 +70,7 @@
       <button
         type="submit"
         disabled={saving || !name.trim()}
-        class="rounded px-3 py-1.5 text-xs font-medium text-white bg-text hover:bg-text/90 transition-colors disabled:opacity-50"
+        class="rounded px-3 py-1.5 text-xs font-medium text-page bg-text hover:bg-text/90 transition-colors disabled:opacity-50"
       >
         {saving ? 'Creating...' : 'Create'}
       </button>

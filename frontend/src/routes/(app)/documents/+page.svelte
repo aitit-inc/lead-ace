@@ -121,7 +121,7 @@
           </button>
         </div>
 
-        <div class="rounded border border-border bg-white p-4 overflow-x-auto">
+        <div class="rounded border border-border bg-page p-4 overflow-x-auto">
           <pre class="text-sm text-text whitespace-pre-wrap font-mono leading-relaxed">{currentDoc.content}</pre>
         </div>
 

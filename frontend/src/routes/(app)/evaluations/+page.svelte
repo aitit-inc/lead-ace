@@ -64,7 +64,7 @@
         <p class="text-xs text-text-muted mt-0.5">Response rate</p>
       </div>
       <div>
-        <p class="text-2xl font-mono font-semibold {stats.dataSufficiency.sufficient ? 'text-green-600' : 'text-amber-600'}">
+        <p class="text-2xl font-mono font-semibold {stats.dataSufficiency.sufficient ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}">
           {stats.dataSufficiency.sufficient ? 'Yes' : 'No'}
         </p>
         <p class="text-xs text-text-muted mt-0.5">Data sufficient</p>

@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Class-based dark mode: <html class="dark"> enables dark variant */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-accent: #D06A57;
   --color-accent-light: #e0887a;
@@ -10,14 +13,29 @@
   --color-text-muted: #999999;
   --color-border: #e5e5e5;
   --color-surface: #fafafa;
+  --color-page: #ffffff;
   --font-sans: "Inter", "SF Pro Text", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
+}
+
+.dark {
+  --color-accent: #E0887A;
+  --color-accent-light: #d06a57;
+  --color-warm: #1F1A17;
+  --color-warm-dark: #2A2320;
+  --color-text: #E8E8E8;
+  --color-text-secondary: #B0B0B0;
+  --color-text-muted: #808080;
+  --color-border: #2A2A2A;
+  --color-surface: #1C1C1C;
+  --color-page: #141414;
+  color-scheme: dark;
 }
 
 html {
   font-family: var(--font-sans);
   color: var(--color-text);
-  background: white;
+  background: var(--color-page);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -30,6 +48,6 @@ html {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #d4d4d4;
+  background: var(--color-border);
   border-radius: 3px;
 }

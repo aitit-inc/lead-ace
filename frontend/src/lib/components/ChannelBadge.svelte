@@ -11,10 +11,10 @@
   };
 
   const colors: Record<Channel, string> = {
-    email: 'bg-blue-100 text-blue-700',
-    form: 'bg-purple-100 text-purple-700',
-    sns_twitter: 'bg-sky-100 text-sky-700',
-    sns_linkedin: 'bg-indigo-100 text-indigo-700',
+    email: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
+    form: 'bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300',
+    sns_twitter: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
+    sns_linkedin: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300',
   };
 </script>
 

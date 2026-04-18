@@ -16,6 +16,6 @@
   });
 </script>
 
-<div class="flex min-h-screen items-center justify-center bg-white">
+<div class="flex min-h-screen items-center justify-center bg-page">
   <p class="text-text-muted font-mono text-sm">Signing you in...</p>
 </div>
