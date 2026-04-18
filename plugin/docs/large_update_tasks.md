@@ -18,34 +18,20 @@
 - **認証メール**: Resend 経由 `noreply@leadace.ai` から新パレット（card radius 6px / link `#C05248` / Geist フォールバック）で配信
 - **Stripe**: ✅ live mode 稼働。`setup-stripe.ts` で live Products/Prices/Portal/Webhook 作成 → wrangler secret + GitHub Variables を live 値で上書き済み。test → live 移行時に残っていた test mode `stripe_customer_id` は prod DB の `tenant_plans` を UPDATE で全クリアして解消
 - **Supabase 本番**（`chaxrcdtxngoyqvtoyem`）: migration + master_documents seed + RLS 稼働
-- **プラグイン版**: 0.5.22（今日のデザイン刷新 + LP モーション追加で x 2）
+- **プラグイン版**: 0.5.23
 
 ### 2026-04-18 セッション 4 でやったこと
 
-1. **5-4k デザイン刷新（色・タイポ・全体トーン）完了** — SurpassOne VSCode テーマをベースに「フラット・ミニマル・エンジニア感」で統一：
-   - **カラートークン刷新**: `--color-page / surface / surface-2 / border / text / text-secondary / text-muted / accent / accent-strong` + semantic `success / warning / danger / info`。Light `#F4F2F0` 基調 / Dark `#1A1B24` 基調。旧 `warm / warm-dark / accent-light` 全廃
-   - **タイポ**: Inter → **Geist** (Google Fonts) + JetBrains Mono（`tabular-nums` 有効）
-   - **コンポーネント移行**: 全 Svelte routes/components。Badge 3種（status/sentiment/channel）を semantic token ベースに（Tailwind raw palette `blue-100 / green-500 / purple-100` 等を全廃）。shadow 全撤去、rounded-lg → rounded-md（4–6px）
-   - **反映範囲**: frontend / landing (`index.html`) / backend (`mcp/oauth.ts` login page) / supabase 認証メール 4 テンプレ / ロゴ SVG 6 枚（`#D06A57` → `#E87462`）
-   - **LP モーション再実装**（最初フラット化しすぎた反省で、Hero を中心に signature motion を復活）：
-     - Hero 見出し kinetic reveal（clip-mask で下からスライドイン、1 回限り）
-     - **Hero 右 animated terminal**（4 コマンド `/strategy` `/build-list` `/outbound` `/daily-cycle` を type→output→次でループ、9 行固定ウィンドウ）
-     - Cursor-reactive constellation（近傍ノードが halo + リンク強化）
-     - Typewriter rotator（`|` caret を period の後ろに配置）
-     - Logo drop-shadow glow pulse、Nav backdrop-blur、Magnetic primary CTA（0.35/0.45 追従）、dual blob gradient（暖色 + 寒色）、SVG grain overlay、scroll stagger reveals
-     - **注**: `prefers-reduced-motion` はデコラティブモーション限定で意図的に非尊重（LP motion IS the design）。本文・ボタン・ナビは motion なしでも操作可能
-2. **Sidebar UI fix** — ThemeToggle + Terms/Privacy が `w-48` サイドバーから横にはみ出ていた件を、縦積み（ThemeToggle の上に Terms/Privacy）で解消
+1. **5-4k デザイン刷新完了**（詳細は Phase 5-4k セクション参照）— SurpassOne VSCode テーマベース、カラートークン刷新、Inter → Geist、LP モーション再実装（Hero kinetic reveal / animated terminal / constellation / magnetic CTA 等）
+2. **Sidebar UI fix** — ThemeToggle を Terms/Privacy の上に縦積みで横はみ出し解消
 
 ### 2026-04-18 セッション 5 でやったこと
 
-1. **5-4f Stripe live 移行完了** — Stripe Dashboard 本人確認 → `setup-stripe.ts` を `sk_live_...` + `WEBHOOK_URL` で再実行 → live Products × 3 / Prices × 6 / Portal / Webhook 作成 → `gh variable set` で 6 つの Price ID を GitHub Variables に一括投入 → `wrangler secret put` で `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` を live 値に上書き → 空コミット push で CI 再デプロイ
-2. **test → live 移行で判明した問題と恒久対応** — `tenant_plans.stripe_customer_id` に残っていた test mode の customer ID が live key で `No such customer` エラー。`UPDATE tenant_plans SET plan='free', stripe_customer_id=NULL, stripe_subscription_id=NULL, current_period_start=NULL, current_period_end=NULL` で全テナントをリセットして解消。test 期間中のサブスクは実質テストデータのみだったので全消しで OK
-
-### 2026-04-18 セッション 5 後半でやったこと
-
-1. **5-4n ブランド統一完了** — "Lead Ace" → "LeadAce" を 29 ファイルで置換（frontend / LP / 認証メールテンプレ / OG SVG + PNG / 法的ドキュメント / plugin README / deploy.md / MCP OAuth ログイン / setup-stripe の BUSINESS_HEADLINE）。`leadace.ai` / `LEADACE_MCP_URL` / `leadace.theme` 等の識別子、LP/メールのロゴ wordmark（JetBrains Mono lowercase）は意図的に保持。OG PNG は `magick -density 288` で再生成して 3 箇所にコピー
-2. **5-4o Cookie 同意バナー実装完了** — LP + app 両方に配置。app 側は Svelte コンポーネント、LP 側は vanilla JS inline。同一 localStorage キー `leadace.cookie_consent` で管理。`/privacy §6` を Strictly necessary / Preferences / Third parties の 3 区分に詳細化、`#cookies` アンカー追加
-3. **フェーズ6 完了** — 旧 `aitit-inc/claude-plugins` から lead-ace 関連を削除（plugins/lead-ace/ + marketplace.json + README/CLAUDE.md の記述）。移行案内は意図的に省略
+1. **5-4f Stripe test → live 移行完了** — Dashboard 本人確認 → `setup-stripe.ts` を `sk_live_...` + `WEBHOOK_URL` で再実行 → live Products × 3 / Prices × 6 / Portal / Webhook 作成 → `gh variable set` で Price ID を一括投入 → `wrangler secret put` で live 値に上書き → 空コミット push で CI 再デプロイ
+2. **test → live 移行ハマりどころ（恒久対応済み）** — `tenant_plans.stripe_customer_id` に残った test 時代の customer ID が live key で `No such customer` エラー。`UPDATE tenant_plans SET plan='free', stripe_customer_id=NULL, stripe_subscription_id=NULL, current_period_start=NULL, current_period_end=NULL` で全テナントリセットして解消
+3. **5-4n ブランド統一完了** — "Lead Ace" → "LeadAce" を 29 ファイルで置換（frontend / LP / 認証メールテンプレ / OG SVG + PNG / 法的ドキュメント / plugin README / deploy.md / MCP OAuth ログイン / setup-stripe の BUSINESS_HEADLINE）。`leadace.ai` / `LEADACE_MCP_URL` / `leadace.theme` 等の識別子、LP/メールのロゴ wordmark（JetBrains Mono lowercase）は意図的に保持。OG PNG は `magick -density 288` で再生成して 3 箇所にコピー
+4. **5-4o Cookie 同意バナー実装完了** — LP + app 両方に配置。app 側は Svelte コンポーネント、LP 側は vanilla JS inline。同一 localStorage キー `leadace.cookie_consent` で管理。`/privacy §6` を Strictly necessary / Preferences / Third parties の 3 区分に詳細化、`#cookies` アンカー追加
+5. **フェーズ6 完了** — 旧 `aitit-inc/claude-plugins` から lead-ace 関連を削除（`plugins/lead-ace/` + marketplace.json + README/CLAUDE.md の記述）。移行案内は意図的に省略
 
 ### 次セッション開始時にやること
 
