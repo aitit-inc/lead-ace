@@ -70,7 +70,8 @@
   <EmptyState message="No responses yet" />
 {:else}
   <div class="space-y-0">
-    <div class="grid grid-cols-[120px_70px_1fr_80px_100px] gap-4 px-3 py-2 text-xs font-medium text-text-muted">
+    <!-- Header (desktop only) -->
+    <div class="hidden md:grid grid-cols-[120px_70px_1fr_80px_100px] gap-4 px-3 py-2 text-xs font-medium text-text-muted">
       <span>Date</span>
       <span>Channel</span>
       <span>Prospect / Content</span>
@@ -79,8 +80,9 @@
     </div>
 
     {#each responses as r}
+      <!-- Desktop row -->
       <button
-        class="grid w-full grid-cols-[120px_70px_1fr_80px_100px] gap-4 px-3 py-2.5 text-left text-sm hover:bg-surface transition-colors rounded"
+        class="hidden md:grid w-full grid-cols-[120px_70px_1fr_80px_100px] gap-4 px-3 py-2.5 text-left text-sm hover:bg-surface transition-colors rounded"
         onclick={() => (expandedId = expandedId === r.id ? null : r.id)}
       >
         <span class="text-text-secondary text-xs font-mono">{formatDate(r.receivedAt)}</span>
@@ -96,9 +98,29 @@
         <span class="text-xs text-text-secondary self-center">{formatType(r.responseType)}</span>
       </button>
 
+      <!-- Mobile card -->
+      <button
+        class="flex md:hidden w-full flex-col gap-1 px-3 py-3 text-left hover:bg-surface transition-colors rounded"
+        onclick={() => (expandedId = expandedId === r.id ? null : r.id)}
+      >
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 min-w-0">
+            <ChannelBadge channel={r.channel} />
+            <span class="text-[11px] text-text-muted font-mono truncate">{formatDate(r.receivedAt)}</span>
+          </div>
+          <SentimentBadge sentiment={r.sentiment} />
+        </div>
+        <p class="text-xs text-text-muted truncate">
+          {r.prospectName}
+          {#if r.outreachSubject}&mdash; re: {r.outreachSubject}{/if}
+        </p>
+        <p class="text-sm text-text line-clamp-2">{truncate(r.content, 140)}</p>
+        <span class="text-[11px] text-text-secondary uppercase tracking-wide">{formatType(r.responseType)}</span>
+      </button>
+
       {#if expandedId === r.id}
         <div class="mx-3 mb-2 rounded bg-surface px-4 py-3">
-          <p class="text-xs text-text whitespace-pre-wrap">{r.content}</p>
+          <p class="text-xs text-text whitespace-pre-wrap break-words">{r.content}</p>
         </div>
       {/if}
     {/each}

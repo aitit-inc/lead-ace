@@ -274,7 +274,7 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         {#each TIERS as tier}
           {@const price = billingPeriod === 'monthly' ? tier.monthlyPrice : tier.yearlyPrice}
           {@const suffix = billingPeriod === 'monthly' ? '/month' : '/year'}
@@ -308,17 +308,17 @@
 
   {#if $activeProject}
     <div class="rounded-lg border border-accent/20 p-4">
-      <div class="flex items-center justify-between">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <p class="text-sm font-medium text-text">Delete project</p>
           <p class="text-xs text-text-secondary mt-0.5">
-            Permanently delete <span class="font-medium">{projectName ?? $activeProject}</span> and all its data (prospects, outreach logs, responses, evaluations).
+            Permanently delete <span class="font-medium break-words">{projectName ?? $activeProject}</span> and all its data (prospects, outreach logs, responses, evaluations).
           </p>
         </div>
         <button
           onclick={() => (showDeleteDialog = true)}
           disabled={deleting}
-          class="rounded px-3 py-1.5 text-xs font-medium text-accent border border-accent/30 hover:bg-accent hover:text-white transition-colors disabled:opacity-50"
+          class="rounded px-3 py-1.5 text-xs font-medium text-accent border border-accent/30 hover:bg-accent hover:text-white transition-colors disabled:opacity-50 self-start sm:self-auto"
         >
           Delete
         </button>

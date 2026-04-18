@@ -11,6 +11,7 @@
 
   let { children } = $props();
   let showCreate = $state(false);
+  let drawerOpen = $state(false);
 
   onMount(() => {
     plan.load();
@@ -34,18 +35,49 @@
     activeProject.set(null);
     goto('/login');
   }
+
+  // Close drawer on route change so nav taps dismiss the overlay automatically.
+  $effect(() => {
+    void page.url.pathname;
+    drawerOpen = false;
+  });
 </script>
 
 <div class="flex h-screen">
+  <!-- Drawer backdrop (mobile only, visible when open) -->
+  {#if drawerOpen}
+    <button
+      type="button"
+      class="fixed inset-0 z-20 bg-black/40 md:hidden"
+      aria-label="Close menu"
+      onclick={() => (drawerOpen = false)}
+    ></button>
+  {/if}
+
   <!-- Sidebar -->
-  <aside class="flex w-48 flex-col justify-between border-r border-border bg-white px-3 py-5">
+  <aside
+    class="fixed inset-y-0 left-0 z-30 flex w-64 flex-col justify-between border-r border-border bg-white px-3 py-5 transition-transform md:static md:w-48 md:translate-x-0 {drawerOpen
+      ? 'translate-x-0'
+      : '-translate-x-full'}"
+    aria-hidden={!drawerOpen}
+  >
     <div>
-      <h1 class="font-mono text-base font-semibold text-text mb-8 px-2">Lead Ace</h1>
+      <div class="mb-8 flex items-center justify-between px-2">
+        <h1 class="font-mono text-base font-semibold text-text">Lead Ace</h1>
+        <button
+          type="button"
+          class="md:hidden -mr-1 p-1 text-text-muted hover:text-text"
+          aria-label="Close menu"
+          onclick={() => (drawerOpen = false)}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
       <nav class="space-y-0.5">
         {#each nav as item}
           <a
             href={item.href}
-            class="block rounded px-2 py-1.5 text-sm transition-colors {isActive(item.href)
+            class="block rounded px-2 py-2 text-sm transition-colors {isActive(item.href)
               ? 'bg-warm text-text font-medium'
               : 'text-text-secondary hover:text-text hover:bg-surface'}"
           >
@@ -103,13 +135,24 @@
       />
     {/if}
     <!-- Header -->
-    <header class="flex items-center justify-between border-b border-border px-6 py-3">
-      <ProjectSwitcher />
-      <span class="text-xs text-text-muted">{$auth.user?.email ?? ''}</span>
+    <header class="flex items-center gap-3 border-b border-border px-4 py-3 md:px-6">
+      <button
+        type="button"
+        class="-ml-1 p-1 text-text-muted hover:text-text md:hidden"
+        aria-label="Open menu"
+        aria-expanded={drawerOpen}
+        onclick={() => (drawerOpen = true)}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+      </button>
+      <div class="min-w-0 flex-1">
+        <ProjectSwitcher />
+      </div>
+      <span class="hidden text-xs text-text-muted sm:inline">{$auth.user?.email ?? ''}</span>
     </header>
 
     <!-- Content -->
-    <main class="flex-1 overflow-y-auto px-6 py-5">
+    <main class="flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-5">
       {#if $activeProject || page.url.pathname === '/settings'}
         {@render children()}
       {:else}

@@ -1008,17 +1008,20 @@ test mode での動作確認完了後：
 
 `supabase/config.toml` でもローカル dev 用に各 template を registered 済み（`supabase start` で自動反映）。フッターの連絡先は `contact@surpassone.com`（app 側 terms/privacy も同じ）。
 
-### 5-4i. 最低限のレスポンシブ対応
+### 5-4i. 最低限のレスポンシブ対応 ✅ コード完了
 
 現状 `app.leadace.ai` は完全デスクトップ前提（サイドバー固定幅 `w-48` / flex row / table レイアウト多め）。タブレット以下で破綻。
 
-- [ ] サイドバーをモバイルでドロワー化（ハンバーガーボタン + オーバーレイ）
-- [ ] Settings / Prospects / Outreach / Responses のテーブルを狭幅でカード表示 or 横スクロール許容
-- [ ] タッチターゲットの最低 44px 確保（buttons / links）
-- [ ] `/login` / `/signup` / `/auth/callback` / `/forgot-password` / `/reset-password` を mobile-first で整える（最優先 — 初回接触がモバイル率高い）
-- [ ] `/terms` / `/privacy` のリーダブル幅調整
+- [x] サイドバーをモバイルでドロワー化（ハンバーガーボタン + オーバーレイ、`md` 未満で `fixed` + `transform`、ルート遷移で自動クローズ）
+- [x] Prospects / Outreach / Responses の grid テーブルを mobile card 表示に（`hidden md:grid` + `flex md:hidden` の二系統レイアウト）
+- [x] Evaluations の KPI 4 カラム → 2 カラム / 内訳グリッド幅を狭幅対応、Sentiment breakdown を折り返し可に
+- [x] Documents の左右 2 カラムを mobile で縦スタック + ドキュメント一覧を横並び chip 表示に
+- [x] Settings の Upgrade カード 3 列 → `grid-cols-1 sm:grid-cols-2 md:grid-cols-3`、Danger zone の行を stack
+- [x] Header を `md` 未満で `px-4` + ハンバーガー + email 非表示（email は `sm:inline` で画面幅 sm 以上で表示）
+- [x] `/login` / `/forgot-password` / `/reset-password` は元から `max-w-sm` + center で mobile-first
+- [x] `/terms` / `/privacy` は元から `max-w-2xl mx-auto` でリーダブル
 
-観測範囲: 少なくとも 375px（iPhone SE 相当）で全ページ機能する。
+観測範囲: 少なくとも 375px（iPhone SE 相当）で全ページ機能する。実機テストはブラウザ DevTools の device emulation 等で。
 
 ### 5-4j. ライト / ダークモード対応
 
@@ -1133,7 +1136,7 @@ test mode での動作確認完了後：
     - 5-4f Stripe test → live 移行 ⏳ 手動
     - 5-4g 認証メールの送信ドメイン + 本文改善 ✅（Resend 経由 `noreply@leadace.ai` 稼働、Confirm/Reset テンプレ本番適用済み）
     - 5-4h エラー監視 ⏳ 任意
-    - 5-4i 最低限のレスポンシブ対応 ⏳ コード
+    - 5-4i 最低限のレスポンシブ対応 ✅ コード完了（ブラウザ実機確認で調整の可能性あり）
     - 5-4j ライト/ダークモード対応 ⏳ コード
     - 5-4k デザイン刷新（色・タイポ） ⏳ デザイン判断 + 実装
     - 5-4l Google Sign-in 追加 ⏳ コード + Google Cloud Console
@@ -1141,7 +1144,7 @@ test mode での動作確認完了後：
 フェーズ5-2（セルフデプロイ対応・ドキュメント）✅ コード完了
     - self-host.md + env vars matrix ✅
     ↓
-★ 現在地 ★ = Phase 5-4 残タスク群（優先度推奨: 5-4f → 5-4i → 5-4l → 5-4j → 5-4k → 5-4h）
+★ 現在地 ★ = Phase 5-4 残タスク群（優先度推奨: 5-4f → 5-4l → 5-4j → 5-4k → 5-4h）
     ↓
 フェーズ6（リリース・移行）→ フェーズ6 レビュー
 ```

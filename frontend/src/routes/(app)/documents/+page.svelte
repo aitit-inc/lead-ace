@@ -80,14 +80,14 @@
 {:else if documents.length === 0}
   <EmptyState message="No documents yet. Run /strategy to create business and strategy documents." />
 {:else}
-  <div class="flex gap-6">
-    <!-- Document list -->
-    <div class="w-48 shrink-0">
-      <div class="space-y-1">
+  <div class="flex flex-col md:flex-row gap-4 md:gap-6">
+    <!-- Document list (horizontal chips on mobile, vertical list on desktop) -->
+    <div class="md:w-48 md:shrink-0">
+      <div class="flex flex-wrap gap-2 md:flex-col md:gap-1">
         {#each documents as doc}
           <button
             onclick={() => selectDoc(doc.slug)}
-            class="w-full text-left px-3 py-2 rounded text-sm transition-colors
+            class="text-left px-3 py-2 rounded text-sm transition-colors md:w-full
               {selectedSlug === doc.slug
                 ? 'bg-warm text-text font-medium'
                 : 'text-text-secondary hover:text-text hover:bg-surface'}"

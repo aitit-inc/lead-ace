@@ -74,8 +74,8 @@
   <EmptyState message="No prospects found" />
 {:else}
   <div class="space-y-0">
-    <!-- Header -->
-    <div class="grid grid-cols-[1fr_140px_70px_50px_100px] gap-4 px-3 py-2 text-xs font-medium text-text-muted">
+    <!-- Header (desktop only) -->
+    <div class="hidden md:grid grid-cols-[1fr_140px_70px_50px_100px] gap-4 px-3 py-2 text-xs font-medium text-text-muted">
       <span>Name / Organization</span>
       <span>Channels</span>
       <span>Status</span>
@@ -84,8 +84,9 @@
     </div>
 
     {#each prospects as p}
+      <!-- Desktop row -->
       <button
-        class="grid w-full grid-cols-[1fr_140px_70px_50px_100px] gap-4 px-3 py-2.5 text-left text-sm hover:bg-surface transition-colors rounded"
+        class="hidden md:grid w-full grid-cols-[1fr_140px_70px_50px_100px] gap-4 px-3 py-2.5 text-left text-sm hover:bg-surface transition-colors rounded"
         onclick={() => (expandedId = expandedId === p.ppId ? null : p.ppId)}
       >
         <div class="min-w-0">
@@ -100,11 +101,30 @@
         </span>
       </button>
 
+      <!-- Mobile card -->
+      <button
+        class="flex md:hidden w-full flex-col gap-1 px-3 py-3 text-left hover:bg-surface transition-colors rounded"
+        onclick={() => (expandedId = expandedId === p.ppId ? null : p.ppId)}
+      >
+        <div class="flex items-start justify-between gap-2">
+          <p class="min-w-0 flex-1 truncate text-sm text-text">{p.name}</p>
+          <span class="shrink-0"><StatusBadge status={p.status} /></span>
+        </div>
+        <p class="text-xs text-text-muted truncate">{p.organizationName}</p>
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] text-text-muted">
+          <span>{channelLabel(p)}</span>
+          <span aria-hidden="true">·</span>
+          <span>P{p.priority}</span>
+          <span aria-hidden="true">·</span>
+          <span>{new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+        </div>
+      </button>
+
       {#if expandedId === p.ppId}
         <div class="mx-3 mb-2 rounded bg-surface px-4 py-3 text-xs space-y-1.5">
-          <p><span class="text-text-muted">Website:</span> <a href={p.websiteUrl} target="_blank" class="text-accent hover:underline">{p.websiteUrl}</a></p>
-          {#if p.email}<p><span class="text-text-muted">Email:</span> <span class="font-mono">{p.email}</span></p>{/if}
-          {#if p.contactFormUrl}<p><span class="text-text-muted">Form:</span> <a href={p.contactFormUrl} target="_blank" class="text-accent hover:underline">{p.contactFormUrl}</a></p>{/if}
+          <p class="break-words"><span class="text-text-muted">Website:</span> <a href={p.websiteUrl} target="_blank" class="text-accent hover:underline">{p.websiteUrl}</a></p>
+          {#if p.email}<p class="break-all"><span class="text-text-muted">Email:</span> <span class="font-mono">{p.email}</span></p>{/if}
+          {#if p.contactFormUrl}<p class="break-all"><span class="text-text-muted">Form:</span> <a href={p.contactFormUrl} target="_blank" class="text-accent hover:underline">{p.contactFormUrl}</a></p>{/if}
           {#if p.contactName}<p><span class="text-text-muted">Contact:</span> {p.contactName}{#if p.overview} &mdash; {p.overview}{/if}</p>{/if}
           <p><span class="text-text-muted">Match reason:</span> {p.matchReason}</p>
           {#if p.notes}<p><span class="text-text-muted">Notes:</span> {p.notes}</p>{/if}

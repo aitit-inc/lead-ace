@@ -48,7 +48,7 @@
     <h3 class="text-xs font-medium text-text-muted uppercase tracking-wider mb-4">Current Metrics</h3>
 
     <!-- Top numbers -->
-    <div class="grid grid-cols-4 gap-6 mb-6">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-6">
       <div>
         <p class="text-2xl font-mono font-semibold text-text">{stats.metrics.totalOutreach}</p>
         <p class="text-xs text-text-muted mt-0.5">Total outreach</p>
@@ -75,13 +75,13 @@
     {#if stats.metrics.channelResponseRate.length > 0}
       <div class="mb-6">
         <p class="text-xs font-medium text-text-secondary mb-2">By channel</p>
-        <div class="grid grid-cols-[1fr_80px_80px_80px] gap-2 text-xs">
+        <div class="grid grid-cols-[1fr_60px_70px_60px] md:grid-cols-[1fr_80px_80px_80px] gap-2 text-xs">
           <span class="text-text-muted">Channel</span>
           <span class="text-text-muted text-right">Sent</span>
-          <span class="text-text-muted text-right">Responses</span>
+          <span class="text-text-muted text-right">Resp.</span>
           <span class="text-text-muted text-right">Rate</span>
           {#each stats.metrics.channelResponseRate as ch}
-            <span class="text-text font-mono">{ch.channel}</span>
+            <span class="text-text font-mono truncate">{ch.channel}</span>
             <span class="text-text-secondary text-right font-mono">{ch.total}</span>
             <span class="text-text-secondary text-right font-mono">{ch.responses}</span>
             <span class="text-text text-right font-mono">{pct(ch.responses, ch.total)}</span>
@@ -94,10 +94,10 @@
     {#if stats.metrics.priorityResponseRate.length > 0}
       <div class="mb-6">
         <p class="text-xs font-medium text-text-secondary mb-2">By priority</p>
-        <div class="grid grid-cols-[1fr_80px_80px_80px] gap-2 text-xs">
+        <div class="grid grid-cols-[1fr_60px_70px_60px] md:grid-cols-[1fr_80px_80px_80px] gap-2 text-xs">
           <span class="text-text-muted">Priority</span>
           <span class="text-text-muted text-right">Sent</span>
-          <span class="text-text-muted text-right">Responses</span>
+          <span class="text-text-muted text-right">Resp.</span>
           <span class="text-text-muted text-right">Rate</span>
           {#each stats.metrics.priorityResponseRate as pr}
             <span class="text-text font-mono">P{pr.priority}</span>
@@ -113,7 +113,7 @@
     {#if stats.metrics.sentimentBreakdown.length > 0}
       <div>
         <p class="text-xs font-medium text-text-secondary mb-2">Sentiment breakdown</p>
-        <div class="flex gap-4 text-xs">
+        <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
           {#each stats.metrics.sentimentBreakdown as s}
             <span class="font-mono">
               <span class="text-text-muted">{s.sentiment}/{s.responseType}:</span>
