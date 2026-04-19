@@ -109,6 +109,9 @@ export const tenantMembers = pgTable('tenant_members', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   primaryKey({ columns: [table.tenantId, table.userId] }),
+  // 1 user = 1 tenant (current product design). DB-enforced to prevent race conditions
+  // in auth middleware auto-provisioning. Remove if/when teams (many users → 1 tenant) ship.
+  unique('uq_tenant_members_user').on(table.userId),
   index('idx_tenant_members_user').on(table.userId),
 ])
 

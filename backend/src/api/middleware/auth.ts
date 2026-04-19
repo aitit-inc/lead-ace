@@ -32,13 +32,28 @@ export const authMiddleware = createMiddleware<{ Bindings: Env; Variables: Varia
     if (membership) {
       c.set('tenantId', membership.tenantId)
     } else {
-      // Auto-provision tenant for new users
+      // Auto-provision tenant for new users.
+      // Wrapped in a transaction so a UNIQUE(user_id) violation on tenant_members
+      // (race against a concurrent first request) rolls back the tenant/plan rows too.
+      // On conflict, re-select the existing membership and use that tenantId.
       const tenantId = generateId()
       const now = new Date()
-      await db.insert(tenants).values({ id: tenantId, name: 'My Workspace', createdAt: now })
-      await db.insert(tenantMembers).values({ tenantId, userId, role: 'owner', createdAt: now })
-      await db.insert(tenantPlans).values({ tenantId, plan: 'free', createdAt: now, updatedAt: now })
-      c.set('tenantId', tenantId)
+      try {
+        await db.transaction(async (tx) => {
+          await tx.insert(tenants).values({ id: tenantId, name: 'My Workspace', createdAt: now })
+          await tx.insert(tenantPlans).values({ tenantId, plan: 'free', createdAt: now, updatedAt: now })
+          await tx.insert(tenantMembers).values({ tenantId, userId, role: 'owner', createdAt: now })
+        })
+        c.set('tenantId', tenantId)
+      } catch (e) {
+        const [existing] = await db
+          .select({ tenantId: tenantMembers.tenantId })
+          .from(tenantMembers)
+          .where(eq(tenantMembers.userId, userId))
+          .limit(1)
+        if (!existing) throw e
+        c.set('tenantId', existing.tenantId)
+      }
     }
 
     // Store raw db for downstream middleware (rlsMiddleware wraps it in a transaction)
