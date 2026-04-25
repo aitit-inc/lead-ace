@@ -73,7 +73,7 @@
 
       <dt class="font-medium text-text">動作環境</dt>
       <dd>
-        PC（macOS / Windows / Linux）、最新版の主要 Web ブラウザ、および Anthropic 社が提供する Claude Code が動作する環境。
+        PC（macOS）、最新版の主要 Web ブラウザ、および Anthropic 社が提供する Claude Code が動作する環境。
       </dd>
     </dl>
   </div>
