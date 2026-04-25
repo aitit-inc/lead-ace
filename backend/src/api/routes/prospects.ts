@@ -74,12 +74,12 @@ prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async 
     return c.json({ error: 'Project not found' }, 404)
   }
 
-  // Free plan: lifetime prospect limit
+  // Free plan: lifetime prospect limit (null = unlimited / paid tiers; skip the check)
   const tp = await getTenantPlan(db, tenantId)
   const limits = getPlanLimits(tp.plan)
 
   let prospectBudget: number | null = null
-  if (!tp.isUnlimited && limits.maxProspects !== null) {
+  if (limits.maxProspects !== null) {
     const currentCount = await countTenantProspects(db, tenantId)
     prospectBudget = Math.max(0, limits.maxProspects - currentCount)
     if (prospectBudget === 0) {

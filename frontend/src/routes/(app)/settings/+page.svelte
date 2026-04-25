@@ -184,13 +184,13 @@
         <div>
           <p class="text-xs text-text-muted uppercase tracking-wider mb-1">Current plan</p>
           <p class="text-xl font-semibold text-text capitalize">
-            {p.isUnlimited ? 'Unlimited' : p.plan}
-            {#if !p.isUnlimited && p.plan === 'free'}
+            {p.plan}
+            {#if p.plan === 'free'}
               <span class="ml-1 text-xs font-normal text-text-muted">(trial)</span>
             {/if}
           </p>
         </div>
-        {#if !p.isUnlimited && p.plan !== 'free'}
+        {#if p.plan === 'starter' || p.plan === 'pro' || p.plan === 'scale'}
           <button
             onclick={handlePortal}
             disabled={portalLoading}
@@ -201,7 +201,7 @@
         {/if}
       </div>
 
-      {#if !p.isUnlimited && p.plan !== 'free'}
+      {#if p.plan === 'starter' || p.plan === 'pro' || p.plan === 'scale'}
         <p class="text-xs text-text-muted mb-5 -mt-2">
           Change plan, update payment method, view invoices, or cancel via the
           Stripe Customer Portal.
@@ -211,7 +211,7 @@
       <div class="grid grid-cols-2 gap-6">
         <div>
           <p class="text-xs text-text-muted mb-1">
-            Outreach ({p.isUnlimited ? 'unlimited' : p.limits.isLifetime ? 'lifetime' : 'this month'})
+            Outreach ({p.plan === 'unlimited' ? 'unlimited' : p.limits.isLifetime ? 'lifetime' : 'this month'})
           </p>
           <p class="font-mono text-lg text-text">
             {formatQuota(p.outreach.used, p.outreach.limit)}
@@ -250,7 +250,7 @@
       </div>
     </div>
 
-    {#if !p.isUnlimited && p.plan === 'free'}
+    {#if p.plan === 'free'}
       <div class="flex items-center justify-between mb-4">
         <p class="text-xs font-medium text-text-secondary">Upgrade</p>
         <div class="inline-flex rounded border border-border text-xs">

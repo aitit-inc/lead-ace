@@ -59,6 +59,75 @@ function planFromMetadata(metadata: Record<string, string> | undefined): 'starte
 }
 
 // ---------------------------------------------------------------------------
+// Stripe API helper
+// ---------------------------------------------------------------------------
+
+async function stripeApi(
+  method: 'GET' | 'POST' | 'DELETE',
+  path: string,
+  body: Record<string, string> | null,
+  secretKey: string,
+): Promise<{ ok: boolean; data: Record<string, unknown> }> {
+  const res = await fetch(`https://api.stripe.com/v1${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${secretKey}`,
+      ...(body ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}),
+    },
+    body: body ? new URLSearchParams(body).toString() : undefined,
+  })
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+  return { ok: res.ok, data }
+}
+
+// Cancel a Stripe subscription immediately and refund the latest paid charge.
+// Used when we detect a critical configuration error (e.g. missing plan metadata)
+// after a successful Checkout — the user paid but we cannot deliver, so we
+// undo the charge. Best-effort: each step logs CRITICAL on failure but never
+// throws (the webhook must always return 200 to stop Stripe from retrying).
+async function cancelAndRefund(
+  subscriptionId: string,
+  sub: Record<string, unknown> | null,
+  secretKey: string,
+  context: string,
+): Promise<void> {
+  const cancel = await stripeApi('DELETE', `/subscriptions/${subscriptionId}`, null, secretKey)
+  if (!cancel.ok) {
+    console.error(`CRITICAL ${context}: failed to cancel subscription`, { subscriptionId, error: cancel.data })
+  } else {
+    console.error(`CRITICAL ${context}: subscription canceled`, { subscriptionId })
+  }
+
+  let invoiceId = (sub?.['latest_invoice'] as string | null | undefined) ?? null
+  if (!invoiceId) {
+    const fetched = await stripeApi('GET', `/subscriptions/${subscriptionId}`, null, secretKey)
+    if (fetched.ok) invoiceId = (fetched.data['latest_invoice'] as string | null) ?? null
+  }
+  if (!invoiceId) {
+    console.error(`CRITICAL ${context}: no invoice on subscription, nothing to refund`, { subscriptionId })
+    return
+  }
+
+  const inv = await stripeApi('GET', `/invoices/${invoiceId}`, null, secretKey)
+  if (!inv.ok) {
+    console.error(`CRITICAL ${context}: failed to fetch invoice`, { invoiceId, error: inv.data })
+    return
+  }
+  const chargeId = inv.data['charge'] as string | null
+  if (!chargeId) {
+    console.error(`CRITICAL ${context}: no charge on invoice (likely $0 trial); skipping refund`, { invoiceId })
+    return
+  }
+
+  const refund = await stripeApi('POST', '/refunds', { charge: chargeId }, secretKey)
+  if (!refund.ok) {
+    console.error(`CRITICAL ${context}: refund failed`, { chargeId, error: refund.data })
+  } else {
+    console.error(`CRITICAL ${context}: refund issued`, { chargeId, refundId: refund.data['id'] })
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Router (no auth middleware — uses Stripe signature verification)
 // ---------------------------------------------------------------------------
 
@@ -110,6 +179,23 @@ stripeWebhookRouter.post('/stripe/webhook', async (c) => {
 
       const tenantId = member.tenantId
 
+      // Guard: never overwrite an internal 'unlimited' tier with a paid plan.
+      // Unlimited tenants are not expected to go through Checkout (UI hides Upgrade),
+      // but if they somehow do, we abort so their special status is preserved.
+      const [existingPlan] = await db
+        .select({ plan: tenantPlans.plan })
+        .from(tenantPlans)
+        .where(eq(tenantPlans.tenantId, tenantId))
+        .limit(1)
+
+      if (existingPlan?.plan === 'unlimited') {
+        console.error(
+          'CRITICAL checkout.session.completed: tenant is on unlimited plan, refusing to overwrite',
+          { tenantId, userId, subscriptionId },
+        )
+        break
+      }
+
       // Retrieve subscription to get plan from price metadata
       const subRes = await fetch(`https://api.stripe.com/v1/subscriptions/${subscriptionId}`, {
         headers: { Authorization: `Bearer ${c.env.STRIPE_SECRET_KEY}` },
@@ -117,7 +203,21 @@ stripeWebhookRouter.post('/stripe/webhook', async (c) => {
       const sub = (await subRes.json()) as Record<string, unknown>
       const items = sub['items'] as { data: Array<{ price: { metadata: Record<string, string> } }> } | undefined
       const priceMetadata = items?.data?.[0]?.price?.metadata
-      const plan = planFromMetadata(priceMetadata) ?? 'starter'
+      const plan = planFromMetadata(priceMetadata)
+
+      // CRITICAL: a Checkout session completed against a Price with no valid
+      // `plan` metadata means our Stripe configuration is broken (setup-stripe.ts
+      // would have set this; someone edited it in the Dashboard or the wrong
+      // Price ID was used). The user has paid but we cannot map them to a tier,
+      // so we cancel and refund rather than guessing or silently upgrading.
+      if (!plan) {
+        console.error(
+          'CRITICAL checkout.session.completed: missing or invalid plan metadata on price; cancelling subscription and refunding charge',
+          { tenantId, userId, subscriptionId, priceMetadata },
+        )
+        await cancelAndRefund(subscriptionId, sub, c.env.STRIPE_SECRET_KEY, 'checkout.session.completed')
+        break
+      }
 
       const periodStart = sub['current_period_start'] as number | undefined
       const periodEnd = sub['current_period_end'] as number | undefined
@@ -157,13 +257,24 @@ stripeWebhookRouter.post('/stripe/webhook', async (c) => {
 
       // Find tenant by subscription ID
       const [row] = await db
-        .select({ tenantId: tenantPlans.tenantId })
+        .select({ tenantId: tenantPlans.tenantId, plan: tenantPlans.plan })
         .from(tenantPlans)
         .where(eq(tenantPlans.stripeSubscriptionId, subscriptionId))
         .limit(1)
 
       if (!row) {
         console.error('subscription.updated: no tenant found for subscription', subscriptionId)
+        break
+      }
+
+      // Guard: never demote an internal 'unlimited' tier (defensive — a tenant
+      // on this tier should not have a Stripe subscription, but if one is ever
+      // attached, refuse to overwrite their special status).
+      if (row.plan === 'unlimited') {
+        console.error(
+          'CRITICAL subscription.updated: tenant on unlimited plan has Stripe subscription; refusing to update',
+          { tenantId: row.tenantId, subscriptionId },
+        )
         break
       }
 
@@ -174,7 +285,19 @@ stripeWebhookRouter.post('/stripe/webhook', async (c) => {
       const periodStart = sub['current_period_start'] as number | undefined
       const periodEnd = sub['current_period_end'] as number | undefined
 
-      // If subscription is no longer active, downgrade to free
+      // CRITICAL: an active subscription with missing plan metadata means our
+      // Stripe configuration drifted (someone edited the Price metadata in the
+      // Dashboard). Don't auto-cancel a running subscription mid-period — leave
+      // the existing DB row intact and alert via logs for operator action.
+      if ((status === 'active' || status === 'trialing') && !plan) {
+        console.error(
+          'CRITICAL subscription.updated: active subscription with missing plan metadata; not modifying DB (operator must fix Price metadata)',
+          { tenantId: row.tenantId, subscriptionId, status, priceMetadata },
+        )
+        break
+      }
+
+      // If subscription is no longer active, downgrade to free.
       const activePlan = (status === 'active' || status === 'trialing') && plan ? plan : 'free'
 
       await db
@@ -195,12 +318,32 @@ stripeWebhookRouter.post('/stripe/webhook', async (c) => {
       const sub = event.data.object
       const subscriptionId = sub['id'] as string
 
+      const [row] = await db
+        .select({ tenantId: tenantPlans.tenantId, plan: tenantPlans.plan })
+        .from(tenantPlans)
+        .where(eq(tenantPlans.stripeSubscriptionId, subscriptionId))
+        .limit(1)
+
+      if (!row) {
+        console.error('subscription.deleted: no tenant found for subscription', subscriptionId)
+        break
+      }
+
+      // Guard: never demote unlimited tenants (see subscription.updated).
+      if (row.plan === 'unlimited') {
+        console.error(
+          'CRITICAL subscription.deleted: tenant on unlimited plan has Stripe subscription; refusing to downgrade to free',
+          { tenantId: row.tenantId, subscriptionId },
+        )
+        break
+      }
+
       await db
         .update(tenantPlans)
         .set({ plan: 'free', updatedAt: new Date() })
-        .where(eq(tenantPlans.stripeSubscriptionId, subscriptionId))
+        .where(eq(tenantPlans.tenantId, row.tenantId))
 
-      console.log(`Subscription ${subscriptionId} deleted, downgraded to free`)
+      console.log(`Subscription ${subscriptionId} deleted, tenant ${row.tenantId} downgraded to free`)
       break
     }
 

@@ -54,11 +54,11 @@ projectsRouter.post('/', zValidator('json', createProjectSchema), async (c) => {
     return c.json({ error: 'Project name already exists' }, 409)
   }
 
-  // Check project limit based on tenant plan
+  // Check project limit based on tenant plan (null = unlimited tier; skip the check)
   const tp = await getTenantPlan(db, tenantId)
   const limits = getPlanLimits(tp.plan)
 
-  if (!tp.isUnlimited && limits.maxProjects !== null) {
+  if (limits.maxProjects !== null) {
     const [projectCount] = await db
       .select({ count: count() })
       .from(projects)

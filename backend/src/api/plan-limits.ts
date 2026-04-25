@@ -6,7 +6,10 @@ import type { createDb } from '../db/connection'
 // Plan tier definitions
 // ---------------------------------------------------------------------------
 
-type PlanTier = 'free' | 'starter' | 'pro' | 'scale'
+// 'unlimited' is a special internal-only tier with no Stripe price. It is set
+// manually in the DB (`UPDATE tenant_plans SET plan = 'unlimited'`) for staff /
+// complimentary accounts. The Stripe webhook must never overwrite this tier.
+type PlanTier = 'free' | 'starter' | 'pro' | 'scale' | 'unlimited'
 
 interface PlanLimits {
   maxProjects: number | null // null = unlimited
@@ -20,6 +23,7 @@ const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   starter: { maxProjects: 1, maxOutreachPerMonth: 1500, maxProspects: null, isLifetime: false },
   pro: { maxProjects: 5, maxOutreachPerMonth: 10000, maxProspects: null, isLifetime: false },
   scale: { maxProjects: null, maxOutreachPerMonth: null, maxProspects: null, isLifetime: false },
+  unlimited: { maxProjects: null, maxOutreachPerMonth: null, maxProspects: null, isLifetime: false },
 }
 
 export function getPlanLimits(plan: PlanTier): PlanLimits {
@@ -36,28 +40,25 @@ export async function getTenantPlan(db: Db, tenantId: string): Promise<{
   plan: PlanTier
   currentPeriodStart: Date | null
   currentPeriodEnd: Date | null
-  isUnlimited: boolean
 }> {
   const [row] = await db
     .select({
       plan: tenantPlans.plan,
       currentPeriodStart: tenantPlans.currentPeriodStart,
       currentPeriodEnd: tenantPlans.currentPeriodEnd,
-      isUnlimited: tenantPlans.isUnlimited,
     })
     .from(tenantPlans)
     .where(eq(tenantPlans.tenantId, tenantId))
     .limit(1)
 
   if (!row) {
-    return { plan: 'free', currentPeriodStart: null, currentPeriodEnd: null, isUnlimited: false }
+    return { plan: 'free', currentPeriodStart: null, currentPeriodEnd: null }
   }
 
   return {
     plan: row.plan,
     currentPeriodStart: row.currentPeriodStart,
     currentPeriodEnd: row.currentPeriodEnd,
-    isUnlimited: row.isUnlimited,
   }
 }
 
@@ -110,17 +111,12 @@ export async function countTenantProspects(db: Db, tenantId: string): Promise<nu
 export async function getRemainingOutreachQuota(
   db: Db,
   tenantId: string,
-): Promise<{ remaining: number | null; limit: number | null; used: number; plan: PlanTier; isUnlimited: boolean }> {
+): Promise<{ remaining: number | null; limit: number | null; used: number; plan: PlanTier }> {
   const tp = await getTenantPlan(db, tenantId)
   const limits = getPlanLimits(tp.plan)
 
-  if (tp.isUnlimited) {
-    const used = await countSentOutreach(db, tenantId, tp.plan, tp.currentPeriodStart)
-    return { remaining: null, limit: null, used, plan: tp.plan, isUnlimited: true }
-  }
-
   if (limits.maxOutreachPerMonth === null) {
-    return { remaining: null, limit: null, used: 0, plan: tp.plan, isUnlimited: false }
+    return { remaining: null, limit: null, used: 0, plan: tp.plan }
   }
 
   const used = await countSentOutreach(db, tenantId, tp.plan, tp.currentPeriodStart)
@@ -131,6 +127,5 @@ export async function getRemainingOutreachQuota(
     limit: limits.maxOutreachPerMonth,
     used,
     plan: tp.plan,
-    isUnlimited: false,
   }
 }

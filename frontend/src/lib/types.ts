@@ -99,7 +99,7 @@ export interface ProjectStats {
   dataSufficiency: { sufficient: boolean; totalSent: number; daysSinceLastSend: number | null };
 }
 
-export type PlanTier = 'free' | 'starter' | 'pro' | 'scale';
+export type PlanTier = 'free' | 'starter' | 'pro' | 'scale' | 'unlimited';
 
 export interface QuotaUsage {
   used: number;
@@ -109,7 +109,6 @@ export interface QuotaUsage {
 
 export interface PlanInfo {
   plan: PlanTier;
-  isUnlimited?: boolean;
   limits: {
     maxProjects: number | null;
     maxOutreachPerMonth: number | null;
