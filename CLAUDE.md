@@ -117,6 +117,8 @@ Confirmed by testing on 2026-04-07: the BAD pattern was refused and the OK patte
 
 **Never write migration SQL by hand.** `backend/src/db/schema.ts` is the single source of truth.
 
+**Never edit a migration SQL file after it has been applied** (local, staging, or prod). Once a `drizzle/NNNN_*.sql` file has been applied anywhere, treat it as immutable history — if behavior needs to change, generate a NEW migration. Editing applied files causes the committed file and the actual DB state to drift, and the bookkeeping table (`drizzle.__drizzle_migrations`) records hashes that no longer match. Recovery requires manual SQL surgery on prod.
+
 Local dev flow:
 
 ```bash
