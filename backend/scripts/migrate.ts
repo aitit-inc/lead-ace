@@ -55,13 +55,45 @@ async function main() {
     // `created_at` is compared. Hashes are stored but not used to gate re-runs,
     // so historical SQL edits (after a migration has already been applied) do
     // not retrigger the migration on later CI runs.
-    const lastApplied = await sql<{ created_at: string | number | null }[]>`
-      SELECT created_at FROM drizzle.__drizzle_migrations
-      ORDER BY created_at DESC LIMIT 1
+    const recordedRows = await sql<{ hash: string; created_at: string | number | null }[]>`
+      SELECT hash, created_at FROM drizzle.__drizzle_migrations
+      ORDER BY created_at ASC
     `
-    const lastAppliedMillis = lastApplied[0]?.created_at != null
-      ? Number(lastApplied[0].created_at)
-      : null
+    const recordedByMillis = new Map<number, string>()
+    let lastAppliedMillis: number | null = null
+    for (const row of recordedRows) {
+      if (row.created_at == null) continue
+      const millis = Number(row.created_at)
+      recordedByMillis.set(millis, row.hash)
+      if (lastAppliedMillis === null || millis > lastAppliedMillis) {
+        lastAppliedMillis = millis
+      }
+    }
+
+    // Drift detection (warn-only). The committed .sql file should never be
+    // edited after it has been applied to a DB; if the recorded hash does not
+    // match the file's current content hash, something violated that rule
+    // somewhere upstream and the DB state is no longer fully described by the
+    // repo. We do not fail here so historical drift (e.g. legacy manual prod
+    // patches) does not block deploys.
+    const driftFixSql: string[] = []
+    for (const migration of migrations) {
+      const recordedHash = recordedByMillis.get(migration.folderMillis)
+      if (recordedHash && recordedHash !== migration.hash) {
+        console.warn(
+          `⚠ drift: folderMillis=${migration.folderMillis} recorded=${recordedHash.slice(0, 12)}… file=${migration.hash.slice(0, 12)}…`,
+        )
+        driftFixSql.push(
+          `UPDATE drizzle.__drizzle_migrations SET hash = '${migration.hash}' WHERE created_at = ${migration.folderMillis};`,
+        )
+      }
+    }
+    if (driftFixSql.length > 0) {
+      console.warn(
+        `⚠ ${driftFixSql.length} migration(s) drifted between repo and DB. Run the following in Supabase SQL Editor (or against the same DB) once you have confirmed the .sql files are authoritative:`,
+      )
+      for (const stmt of driftFixSql) console.warn(`    ${stmt}`)
+    }
 
     let appliedCount = 0
     for (const migration of migrations) {
