@@ -8,7 +8,7 @@
     "deploy:api": "wrangler deploy --config wrangler.api.jsonc",
     "deploy:mcp": "wrangler deploy --config wrangler.mcp.jsonc",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "tsx scripts/migrate.ts",
     "db:studio": "drizzle-kit studio",
     "typecheck": "tsc --noEmit"
   },
