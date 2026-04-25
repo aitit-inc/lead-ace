@@ -67,6 +67,28 @@ DATABASE_URL="<Session Pooler URL>" npm run db:migrate
 DATABASE_URL="<Session Pooler URL>" npx tsx scripts/seed-master-documents.ts  # 初回 seed のみ
 ```
 
+### ⚠️ Postgres enum に新しい値を追加するときの罠
+
+drizzle-orm の Postgres dialect は **複数の pending migration を 1 つのトランザクションでラップ**する（`session.transaction(async tx => { for migration ... })`）。一方 Postgres は `ALTER TYPE ... ADD VALUE` で追加した enum 値を **同じトランザクション内では使用できない**（`unsafe use of new value of enum type` エラー）。
+
+そのため、enum に新しい値を追加する migration と、その値を `UPDATE` 等で参照する migration を **同じ push に乗せると CI で必ず失敗する**（ローカルで `npm run db:migrate` を 2 回別々に走らせると別 TX になって偶然成功するので気付きづらい）。
+
+**推奨運用:**
+1. 1 回目の push: `ALTER TYPE ADD VALUE` だけを含む migration
+2. CI が成功したことを確認
+3. 2 回目の push: 新しい値を使う migration（データ移行・`UPDATE` 等）
+
+**もし両方とも push してしまった場合（recovery）:**
+1. CI は失敗するが TX 全体が rollback されるため本番 DB は変更前の状態のまま
+2. Supabase Dashboard → SQL Editor で `ALTER TYPE` だけ手動実行
+3. drizzle の追跡テーブルに該当 migration を applied として登録:
+   ```sql
+   INSERT INTO drizzle.__drizzle_migrations (hash, created_at)
+   VALUES ('<hash from drizzle/meta/_journal.json>', <when from journal>);
+   ```
+   ハッシュは `npm run db:migrate` 実行後のローカル DB から `SELECT hash FROM drizzle.__drizzle_migrations` で取得するか、drizzle-orm の内部計算ロジックを参照
+4. 空コミットを push して CI を再起動 → 残りの migration だけが pending として処理される
+
 ---
 
 ## 3. Stripe セットアップ ⚠️ ✅ test mode 完了（live は §5〜§8 検証後に再実行）
