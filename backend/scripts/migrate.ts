@@ -51,14 +51,23 @@ async function main() {
       )
     `)
 
-    const applied = await sql<{ hash: string }[]>`
-      SELECT hash FROM drizzle.__drizzle_migrations
+    // Match drizzle-kit's idempotency check: only the highest applied
+    // `created_at` is compared. Hashes are stored but not used to gate re-runs,
+    // so historical SQL edits (after a migration has already been applied) do
+    // not retrigger the migration on later CI runs.
+    const lastApplied = await sql<{ created_at: string | number | null }[]>`
+      SELECT created_at FROM drizzle.__drizzle_migrations
+      ORDER BY created_at DESC LIMIT 1
     `
-    const appliedHashes = new Set(applied.map((row) => row.hash))
+    const lastAppliedMillis = lastApplied[0]?.created_at != null
+      ? Number(lastApplied[0].created_at)
+      : null
 
     let appliedCount = 0
     for (const migration of migrations) {
-      if (appliedHashes.has(migration.hash)) continue
+      if (lastAppliedMillis !== null && lastAppliedMillis >= migration.folderMillis) {
+        continue
+      }
 
       console.log(
         `Applying ${migration.hash.slice(0, 12)}… (folderMillis=${migration.folderMillis})`,
