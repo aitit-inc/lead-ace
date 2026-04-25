@@ -141,4 +141,4 @@ plugin/
   `master_documents` and is fetched at runtime via `get_master_document`
 
 For local development and self-hosting, see the repository
-[CLAUDE.md](../../CLAUDE.md) and [plugin/docs/deploy.md](../docs/deploy.md).
+[CLAUDE.md](../CLAUDE.md) and [docs/deploy.md](../docs/deploy.md).

@@ -7,9 +7,10 @@ Repository for LeadAce — an autonomous sales automation Claude Code plugin by 
 ```
 .claude-plugin/marketplace.json  # Marketplace definition (source: "./plugin/")
 plugin/                          # Claude Code plugin
-backend/                         # Web API Server + MCP Server (added in Phase 2)
-frontend/                        # Web frontend (added in Phase 4)
-docker-compose.yml               # Local development environment (added in Phase 2)
+backend/                         # Web API Server + MCP Server
+frontend/                        # Web frontend
+docs/                            # Project-wide docs (deploy runbook, self-host, tasks)
+docker-compose.yml               # Local development environment
 ```
 
 ## Plugin Structure
@@ -21,9 +22,19 @@ plugin/
 ├── .mcp.json             # MCP server configuration (LeadAce backend)
 ├── skills/                # Slash commands (each subdirectory has SKILL.md)
 ├── scripts/               # Local utility tools (fetch_url.py)
-├── references/            # Shared reference documents
-└── docs/                  # Design documents
+└── references/            # Shared reference documents
 ```
+
+Project-wide design docs, runbooks, and task tracking live in the top-level `docs/` directory, not under `plugin/`. Anything that is not specifically about the plugin's runtime structure (Workers, Pages, Stripe, Supabase, session-level task tracking, architecture history, etc.) belongs there.
+
+## Task Tracking
+
+Project task management lives in [docs/tasks.local.md](docs/tasks.local.md). It is gitignored, but it is the source of truth for:
+- Current production state snapshot
+- Pending / actionable tasks (期限あり / 任意 / 将来構想)
+- "Don't do" decisions and brainstorming notes
+
+**Always read it at the start of a session before suggesting work.** Update it as tasks complete, scope changes, or new tasks emerge — keeping it current is part of the work, not a separate cleanup pass. Carry-over items between sessions go at the top under "次セッション開始時の確認事項" so the next session immediately sees what's pending.
 
 ## Development Policy
 
@@ -56,7 +67,7 @@ Subscription is managed via Stripe. The API enforces limits based on user plan.
 - **Outreach actions** = `record_outreach` with `status: "sent"`. Failed attempts do not count.
 - **Quota enforcement**: `get_outbound_targets` returns `min(requested, remainingQuota, availableTargets)`. When quota is 0, returns empty list with upgrade message. `record_outreach` also guards as a safety net.
 - **Billing**: Stripe Checkout for new subscriptions, Stripe Customer Portal for upgrades/downgrades/cancellation. No billing UI in our app.
-- **Self-host**: code is open source on GitHub. Users run their own Supabase + Cloudflare deploy (see [plugin/docs/self-host.md](plugin/docs/self-host.md)). No quota enforcement difference — the same plan-limits code runs; defaults to Free.
+- **Self-host**: code is open source on GitHub. Users run their own Supabase + Cloudflare deploy (see [docs/self-host.md](docs/self-host.md)). No quota enforcement difference — the same plan-limits code runs; defaults to Free.
 
 ## Multi-Tenancy
 
@@ -130,7 +141,7 @@ npm run db:migrate
 # 4. Commit schema.ts + drizzle/ together
 ```
 
-For **production** DB: `db:migrate` runs automatically via the `migrate-db` job in `.github/workflows/deploy.yml` on every `main` push (idempotent — drizzle tracks applied migrations). The job uses the `DATABASE_URL_SESSION_POOLER` secret (**Session Pooler**, port 5432). Transaction Pooler (port 6543) breaks DDL like `CREATE ROLE` and must not be used here. For manual / emergency apply or the initial `master_documents` seed, see [plugin/docs/deploy.md §2](plugin/docs/deploy.md).
+For **production** DB: `db:migrate` runs automatically via the `migrate-db` job in `.github/workflows/deploy.yml` on every `main` push (idempotent — drizzle tracks applied migrations). The job uses the `DATABASE_URL_SESSION_POOLER` secret (**Session Pooler**, port 5432). Transaction Pooler (port 6543) breaks DDL like `CREATE ROLE` and must not be used here. For manual / emergency apply or the initial `master_documents` seed, see [docs/deploy.md §2](docs/deploy.md).
 
 ### TypeScript Rules (backend/)
 

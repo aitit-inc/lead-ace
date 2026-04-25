@@ -66,9 +66,9 @@ verifier).
 
 Follow the production runbook end-to-end:
 
-- [plugin/docs/deploy.md](./deploy.md) — Cloudflare + Supabase production
+- [docs/deploy.md](./deploy.md) — Cloudflare + Supabase production
   setup (Workers, Pages, KV namespace, custom domains, Stripe, GitHub Actions).
-- [CLAUDE.md](../../CLAUDE.md) — repository conventions, plan tiers, RLS, and
+- [CLAUDE.md](../CLAUDE.md) — repository conventions, plan tiers, RLS, and
   the schema-change workflow.
 
 You will need:
@@ -126,6 +126,6 @@ self-host:
 - Insert a `tenant_plans` row with `plan = 'pro'` (or higher) for your tenant
   via Drizzle Studio (`npm run db:studio`).
 
-Note: the [LICENSE](../../LICENSE) covers what you can and cannot do with the
+Note: the [LICENSE](../LICENSE) covers what you can and cannot do with the
 code. Self-hosting for your own use is allowed; redistributing as a hosted
 service to others is not.

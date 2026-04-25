@@ -87,7 +87,7 @@ This plugin is provided under a proprietary license by SurpassOne Inc.
 
 - **Free trial:** 1 project, 30 prospect registrations and 10 outreach actions (lifetime)
 - **Paid plans** start at $29/month. Manage your subscription from the web app.
-- **Self-host:** see [plugin/docs/self-host.md](plugin/docs/self-host.md) — running for your
+- **Self-host:** see [docs/self-host.md](docs/self-host.md) — running for your
   own use is allowed; redistributing as a hosted service to others is not.
 
 ---
@@ -102,16 +102,16 @@ plugin/                          # Claude Code plugin
 ├── .mcp.json                    # MCP server config (uses LEADACE_MCP_URL)
 ├── skills/                      # Slash commands (each directory has SKILL.md)
 ├── scripts/fetch_url.py         # Local web fetch helper
-├── references/                  # Shared reference docs
-└── docs/                        # Design docs, deploy runbook, self-host guide
+└── references/                  # Shared reference docs
 backend/                         # API + MCP servers (Cloudflare Workers, Hono, Drizzle)
 frontend/                        # Web app (SvelteKit, Cloudflare Pages)
+docs/                            # Project-wide docs (deploy runbook, self-host, architecture)
 docker-compose.yml               # Bare Postgres for non-Supabase local dev
 ```
 
 - Plugin conventions and the schema-change workflow: [CLAUDE.md](CLAUDE.md)
-- Production deploy runbook: [plugin/docs/deploy.md](plugin/docs/deploy.md)
-- Self-hosting and local dev: [plugin/docs/self-host.md](plugin/docs/self-host.md)
+- Production deploy runbook: [docs/deploy.md](docs/deploy.md)
+- Self-hosting and local dev: [docs/self-host.md](docs/self-host.md)
 
 ### Quick start (local dev)
 
