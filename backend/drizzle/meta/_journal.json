@@ -64,6 +64,13 @@
       "when": 1777181300000,
       "tag": "0008_gmail_credentials_security",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1777199500000,
+      "tag": "0009_grant_app_rls_extensions",
+      "breakpoints": true
     }
   ]
 }
