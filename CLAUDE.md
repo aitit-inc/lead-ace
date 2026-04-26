@@ -178,7 +178,5 @@ See `README.md` -> For Developers for full details.
 `cd frontend && npm run check`
 
 ## Release
-Bump the version in `plugin/.claude-plugin/plugin.json`, then commit and push.
-Unless specified otherwise, increment z in x.y.z (each number can be two or more digits, e.g. 0.3.9 -> 0.3.10).
-When bumping the version, first commit code changes, then make a separate commit for the version bump only.
-Use commit message: `chore: :bookmark: bump version to x.y.z`.
+
+See [.claude/rules/release.md](.claude/rules/release.md) for version bump procedure and deploy notes (auto-loaded when `plugin.json` is touched).

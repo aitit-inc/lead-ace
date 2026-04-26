@@ -71,7 +71,7 @@ project name you chose at `/setup`.
 
 | Command | Description |
 |---|---|
-| `/setup <name>` | Create a LeadAce project (cloud-managed) |
+| `/setup [name]` | Verify connections (MCP, Gmail, local tools) and create or pick a project |
 | `/strategy <name>` | Define sales and marketing strategy |
 | `/build-list <name>` | Build a prospect list via web search |
 | `/outbound <name>` | Reach out via email, form, or SNS DM |

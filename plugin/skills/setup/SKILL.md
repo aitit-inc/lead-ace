@@ -1,49 +1,102 @@
 ---
 name: setup
-description: "This skill should be used when the user asks to \"set up\", \"create a new project\", \"initialize\", \"start a project\", or wants to set up a new sales project. Creates a project on the server and sets up the local workspace."
-argument-hint: "<project-id>"
+description: "This skill should be used when the user asks to \"set up\", \"start\", \"initialize\", \"connect\", \"first time\", \"onboard\", or wants to start using LeadAce. Verifies the LeadAce connection (MCP, Gmail, local tools), lists or creates a project, and saves the environment status for downstream skills."
+argument-hint: "[project-name]"
 allowed-tools:
   - Bash
   - AskUserQuestion
+  - mcp__plugin_lead-ace_api__list_projects
   - mcp__plugin_lead-ace_api__setup_project
+  - mcp__plugin_lead-ace_api__get_gmail_status
+  - mcp__plugin_lead-ace_api__save_document
 ---
 
-# Setup - Project Initial Setup
+# Setup - First-time Onboarding & Environment Check
 
-A skill that creates a new LeadAce sales project. Registers the project on the server.
+A skill that verifies all LeadAce connections (cloud MCP, Gmail SaaS, local tools), surfaces what is and is not available, picks or creates a project, and stores the environment status so that subsequent skills (`/strategy`, `/build-list`, `/outbound`, `/daily-cycle`, etc.) can rely on it without re-asking.
+
+Run this skill the first time you use LeadAce, and re-run it whenever your local tools or Gmail connection status change.
 
 ## Steps
 
-### 1. Verify Arguments
+### 1. Verify MCP Connection
 
-- Project directory name: `$0` (required. Example: `product-a-sales`)
+Call `mcp__plugin_lead-ace_api__list_projects`. A successful response proves three things at once: the MCP server is reachable, the OAuth token is valid, and the user is authenticated.
 
-Return an error if `$0` is empty.
+If the call fails, abort and instruct the user:
+- If the error mentions network/unreachable -> "Cannot reach the LeadAce MCP server. Check network access to https://mcp.leadace.ai (or the value of `LEADACE_MCP_URL` for self-hosters)."
+- If the error mentions auth/401 -> "MCP authentication failed. Sign in again at https://app.leadace.ai, then re-run /setup; the plugin will re-prompt the OAuth flow."
+
+Display the existing projects (name + id) returned by the call; an empty list is fine.
 
 ### 2. Environment Check
 
-Run the following command to verify availability of required local tools:
+Run automatic detection and ask the user only what cannot be detected.
 
+#### 2-1. Gmail SaaS connection (auto)
+Call `mcp__plugin_lead-ace_api__get_gmail_status`. Record `connected` (boolean) and `email` (when connected).
+
+If not connected, instruct the user: "Sign in at https://app.leadace.ai with Google (Settings -> Connect Google) to enable email sending, then re-run /setup. Without this, no emails can be sent." This does not abort the skill -- the user can still proceed with form-only or SNS-only outreach.
+
+#### 2-2. playwright-cli (auto)
 ```bash
 playwright-cli --version 2>&1
 ```
+Record whether the command exists. Required for form submission in /outbound.
 
-Inform the user of the dependencies:
-- **Gmail send (SaaS)**: Email sending uses the user's connected Gmail (gmail.send scope) via the LeadAce backend. The Google account must be connected in the web app at https://app.leadace.ai (Settings → Connect Google). Without it, no emails can be sent.
-- **Gmail MCP** (`gmail_search_messages` etc., claude.ai built-in): Required for reply checking in /check-results and draft creation. Without it, reply checking must be done manually
-- **playwright-cli**: Required for form submission in /outbound. If not installed, only prospects with email addresses or SNS channels will be targeted
-- **Claude in Chrome**: Required for SNS DM sending in /outbound and SNS reply checking in /check-results. Without it, SNS channel cannot be used
+#### 2-3. Gmail MCP (claude.ai built-in) (ask)
+Use AskUserQuestion to ask: "Have you connected the Gmail MCP in claude.ai? (Required for reply checking in /check-results and draft creation.)" — options: `yes` / `no` / `unsure`.
 
-### 3. Create Project on Server
+#### 2-4. Claude in Chrome extension (ask)
+Use AskUserQuestion to ask: "Are you using the Claude in Chrome extension? (Required for SNS DM sending in /outbound and SNS reply checking in /check-results.)" — options: `yes` / `no` / `unsure`.
 
-Call `mcp__plugin_lead-ace_api__setup_project` with `projectId: "$0"`.
+### 3. Pick or Create a Project
 
-Handle errors:
-- **Project limit reached** -> "Free plan allows 1 project. Delete the existing project with /delete-project or upgrade your plan." Then **abort**.
-- **Project ID already exists** -> "Project '$0' already exists. Continuing with local setup."
+If the user passed `$0` (a project name):
+- If it matches an existing project from step 1 -> use it as-is
+- If it does not exist -> call `mcp__plugin_lead-ace_api__setup_project` with `name: "$0"`
+  - On `Project limit reached` -> tell the user "Free plan allows 1 project. Delete the existing one with /delete-project or upgrade your plan." and **abort**.
 
-### 4. Completion Report
+If `$0` is empty:
+- If exactly one project exists -> use it.
+- If multiple exist -> ask the user via AskUserQuestion which one to use, with one option per project plus a `Create new` option.
+- If none exist or the user picks `Create new` -> ask the user for a project name in plain text (do not use AskUserQuestion for free-text input), then call `setup_project` with `name: <answer>`.
 
-Report the following:
-- Project registration status
-- Guide the user to run `/strategy` as the next step
+Hold the chosen project name in `PROJECT_NAME` for the remaining steps.
+
+### 4. Save Environment Status
+
+Build a markdown document summarizing the environment, then save it via `mcp__plugin_lead-ace_api__save_document` with `projectId: PROJECT_NAME` and `slug: "env_status"`. This is the source of truth that `/strategy` and other skills read — do not skip this step.
+
+Document template:
+
+```markdown
+# Environment & Tool Status
+
+Captured: <YYYY-MM-DD HH:MM> via /setup.
+
+| Capability | Status | Detail |
+|---|---|---|
+| LeadAce MCP | connected | (verified by list_projects) |
+| Gmail send (SaaS) | connected / not connected | <email when connected> |
+| playwright-cli (forms) | available / missing | <version when available> |
+| Gmail MCP (replies) | yes / no / unsure | answered via AskUserQuestion |
+| Claude in Chrome (SNS) | yes / no / unsure | answered via AskUserQuestion |
+
+## Channel availability implied by the above
+
+- Email: <available / unavailable — Gmail SaaS connection required>
+- Form submission: <available / unavailable — playwright-cli required>
+- SNS DM: <available / unavailable — Claude in Chrome required>
+- Reply checking: <automated via Gmail MCP / manual fallback>
+```
+
+### 5. Completion Report
+
+Print a short, scannable summary:
+- Project in use (`PROJECT_NAME`)
+- The capability table (same as the saved doc)
+- An explicit list of any missing capabilities and what each blocks
+- Next step: "Run `/strategy PROJECT_NAME` to define your sales and marketing strategy."
+
+If the Gmail SaaS connection was missing, surface that as the most prominent fix-it line, since it is the most common reason `/outbound` fails later.

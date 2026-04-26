@@ -307,6 +307,25 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
     },
   )
 
+  // --- get_gmail_status ---
+  server.tool(
+    'get_gmail_status',
+    'Check whether the current user has connected their Google account (gmail.send scope) via the LeadAce web app. Returns the connected Gmail address or an indication that Gmail is not connected.',
+    {},
+    async () => {
+      const { ok, data } = await callApi('GET', '/auth/google-credentials/status', null, apiUrl, authHeader)
+      if (!ok) {
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      const result = data as { connected: boolean; email?: string; grantedAt?: string; updatedAt?: string }
+      const text = result.connected
+        ? `Gmail connected as ${result.email} (granted: ${result.grantedAt}, last refreshed: ${result.updatedAt}).`
+        : 'Gmail not connected. Have the user sign in at https://app.leadace.ai (Settings → Connect Google).'
+      return { content: [{ type: 'text' as const, text }] }
+    },
+  )
+
   // --- send_email ---
   server.tool(
     'send_email',

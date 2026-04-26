@@ -25,26 +25,17 @@ A skill that collects business and service information from the user and generat
 
 - Project ID: `$0` (required)
 
-Call `mcp__plugin_lead-ace_api__list_projects` and verify that `$0` exists. If not, guide the user to run `/setup`.
+Call `mcp__plugin_lead-ace_api__list_projects` and verify that `$0` exists. If not, guide the user to run `/setup $0`.
 
-### 2. Environment Check
+### 2. Load Environment Status
 
-Run the following command to check available local tools:
+Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "env_status"` to get the environment snapshot saved by `/setup`.
 
-```bash
-playwright-cli --version 2>&1
-```
+If the document is missing, abort with: "No environment status recorded for this project. Please run `/setup $0` first — it verifies Gmail / playwright / Chrome availability and saves the status that this skill relies on."
 
-Report results to the user and reflect in the "Environment & Tool Status" section of SALES_STRATEGY.md (when generating in step 7):
+Hold the parsed env status in memory; it is reused in step 4 (channel choices) and step 7 (the "Environment & Tool Status" section of SALES_STRATEGY.md). Do **not** re-ask the user about Gmail / playwright / Chrome here — that is `/setup`'s responsibility.
 
-- **Gmail (SaaS, gmail.send)**: Cannot verify via bash. Ask user "Have you connected your Google account in the LeadAce web app (Settings → Connect Google)?" Without it, email sending is unavailable.
-- **Gmail MCP** (claude.ai built-in): Cannot verify via bash. Ask user "Have you connected the Gmail MCP in claude.ai?" Required for reply checking in /check-results
-- **playwright-cli**: Check with `playwright-cli --version`. Required for form submission
-- **Claude in Chrome**: Cannot verify via bash. Ask user "Are you using the Claude in Chrome extension?" Required for SNS DMs
-
-**In update mode:** If the "Environment & Tool Status" section already exists in SALES_STRATEGY.md, only re-check tools verifiable via bash (playwright-cli), and skip re-asking about Gmail / Gmail MCP / Claude in Chrome (users can report changes themselves if any).
-
-**Impact of results on channel selection:**
+**Impact of results on channel selection (apply throughout the rest of the skill):**
 - No Gmail SaaS connection -> Email sending not possible. Forms or SNS DMs only
 - No Gmail MCP -> Reply checking in /check-results becomes manual
 - No playwright-cli -> Form submission not possible. Email and SNS DMs only
@@ -58,7 +49,7 @@ Retrieve existing documents via MCP:
 Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "business"`.
 Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "sales_strategy"`.
 
-If the tool returns a "Project not found" error, instruct the user to run `/setup` first and **abort**.
+If either call returns a "Project not found" error, instruct the user to run `/setup $0` first and **abort**.
 
 **Mode determination:**
 - **Initial mode**: Neither document exists (both return "not found") -> Execute all steps in step 4 in sequence
@@ -226,7 +217,7 @@ Also retrieve the following master documents via `mcp__plugin_lead-ace_api__get_
 - **`tpl_targeting_guide`**: Target persona refinement, competitive analysis perspectives, USP articulation, channel selection criteria, KPI reverse calculation tree, search keyword design patterns
 - **`tpl_email_templates`**: Email template selection based on target industry. Auto-select the optimal pattern based on user's industry information and customize to business info (USP, track record, pricing). Do not use templates as-is -- always add flesh based on user-specific information
 
-**Reflect environment information:** Record the environment check results from step 2 in the "Environment & Tool Status" section. If any tools are unavailable, also reflect in the "Sales Channels" section (e.g., if Gmail SaaS connection is unavailable, exclude email sending; if Chrome unavailable, exclude SNS)
+**Reflect environment information:** Copy the environment status loaded in step 2 (from the `env_status` doc) into the "Environment & Tool Status" section verbatim — do not re-check or re-ask. If any tools are unavailable, also reflect in the "Sales Channels" section (e.g., if Gmail SaaS connection is unavailable, exclude email sending; if Chrome unavailable, exclude SNS).
 
 Save via `mcp__plugin_lead-ace_api__save_document` with `projectId: "$0"`, `slug: "sales_strategy"`, and the full markdown content.
 
