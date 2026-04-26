@@ -28,39 +28,36 @@ To update later:
 /plugin update lead-ace@lead-ace
 ```
 
-### Connect to the LeadAce MCP Server
+### Sign in to LeadAce
 
 LeadAce stores all project data and templates in the cloud. The plugin talks
-to the cloud through an MCP server. After installing the plugin, configure the
-server URL once per machine:
+to the cloud through an MCP server that ships bundled with the plugin — no
+separate `claude mcp add` step is needed.
 
 1. **Sign up or log in** at https://app.leadace.ai (Free tier requires no card).
-2. **Set the MCP server URL.** In your shell profile (`~/.zshrc`, `~/.bashrc`,
-   or your IDE's terminal env):
-
-   ```bash
-   export LEADACE_MCP_URL=https://mcp.leadace.ai/mcp
-   ```
-
-   Restart Claude Code so the plugin's `.mcp.json` picks up the variable.
-3. **Authorize the connection.** The first time the plugin calls a LeadAce
+2. **Authorize the connection.** The first time the plugin calls a LeadAce
    tool, Claude Code opens a browser window to https://mcp.leadace.ai for OAuth
    sign-in (uses the same email and password as the web app). Approve the
    request; the token is cached locally for subsequent runs.
 
 #### Self-hosting
 
-If you run the backend yourself (`docker compose up`), point at your local URL
-instead:
+If you run the backend yourself, override the MCP URL by exporting
+`LEADACE_MCP_URL` in your shell profile before launching Claude Code:
 
 ```bash
 export LEADACE_MCP_URL=http://localhost:8788/mcp
 ```
 
+The default `https://mcp.leadace.ai/mcp` is only used when this variable is
+unset.
+
 #### Troubleshooting
 
-- **`MCP server unreachable`** — check that `LEADACE_MCP_URL` is exported in
-  the shell that launched Claude Code, and that you can `curl ${LEADACE_MCP_URL%/mcp}/health`.
+- **`MCP server unreachable`** — verify network access to
+  `https://mcp.leadace.ai` (or your self-hosted URL). For self-hosting, also
+  check that `LEADACE_MCP_URL` is exported in the shell that launched Claude
+  Code.
 - **Browser asks to sign in repeatedly** — the cached token expired or was
   cleared. Re-running any LeadAce command kicks off a fresh OAuth flow.
 - **`401 Unauthorized` from a tool** — your Supabase session may have expired.

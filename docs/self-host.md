@@ -113,7 +113,7 @@ service, with your data living on your own Supabase project.
 
 | Variable | Description |
 |---|---|
-| `LEADACE_MCP_URL` | URL of the MCP server (e.g. `https://mcp.leadace.ai/mcp` or `http://localhost:8788/mcp`). |
+| `LEADACE_MCP_URL` | Optional. Overrides the MCP server URL. Defaults to `https://mcp.leadace.ai/mcp` (the hosted service). Set to `http://localhost:8788/mcp` for local dev, or to your self-hosted Worker URL in production. |
 
 ## Quotas and licensing when self-hosting
 

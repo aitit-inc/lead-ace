@@ -28,17 +28,12 @@ To update later:
 /plugin update lead-ace@lead-ace
 ```
 
-### Connecting to LeadAce
+### Sign in to LeadAce
 
-After installing the plugin, set the MCP server URL once:
-
-```bash
-export LEADACE_MCP_URL=https://mcp.leadace.ai/mcp
-```
-
-Restart Claude Code. The first time the plugin calls a LeadAce tool, your
-browser opens for OAuth sign-in to Supabase. See
-[plugin/README.md](plugin/README.md) for details and troubleshooting.
+The first time the plugin calls a LeadAce tool, your browser opens for OAuth
+sign-in to Supabase (the same email and password as the web app). The token is
+cached locally for subsequent runs. See [plugin/README.md](plugin/README.md)
+for details and troubleshooting.
 
 ### Usage
 
