@@ -307,6 +307,80 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
     },
   )
 
+  // --- send_email ---
+  server.tool(
+    'send_email',
+    'Send an email via the user\'s connected Gmail account WITHOUT recording an outreach log. Use for internal notifications (e.g. daily-cycle start/wrap-up emails). For prospect outreach use send_email_and_record instead.',
+    {
+      to: z.array(z.string().email()).min(1),
+      subject: z.string().min(1),
+      body: z.string().min(1),
+      cc: z.array(z.string().email()).optional(),
+      bcc: z.array(z.string().email()).optional(),
+      inReplyTo: z.string().optional(),
+    },
+    async (input) => {
+      const { ok, data } = await callApi('POST', '/auth/send-email', input, apiUrl, authHeader)
+      if (!ok) {
+        const err = data as { error: string; detail?: string }
+        const msg = err.detail ? `${err.error}: ${err.detail}` : err.error
+        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true }
+      }
+      const result = data as { messageId: string; threadId: string }
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Email sent (Gmail messageId: ${result.messageId}, threadId: ${result.threadId}).`,
+          },
+        ],
+      }
+    },
+  )
+
+  // --- send_email_and_record ---
+  server.tool(
+    'send_email_and_record',
+    'Send an email via the user\'s connected Gmail account and record the outreach log atomically. Replaces the old gog send + record_outreach flow.',
+    {
+      projectId: z.string().describe('Project name or ID'),
+      prospectId: z.number().int(),
+      to: z.array(z.string().email()).min(1),
+      subject: z.string().min(1),
+      body: z.string().min(1),
+      cc: z.array(z.string().email()).optional(),
+      bcc: z.array(z.string().email()).optional(),
+      inReplyTo: z.string().optional().describe('Gmail Message-Id header for threading'),
+    },
+    async (input) => {
+      const resolved = await resolveProjectId(input.projectId, apiUrl, authHeader)
+      if (!resolved.id) {
+        return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+      }
+      const { ok, data } = await callApi(
+        'POST',
+        '/outreach/send-and-record',
+        { ...input, projectId: resolved.id },
+        apiUrl,
+        authHeader,
+      )
+      if (!ok) {
+        const err = data as { error: string; detail?: string }
+        const msg = err.detail ? `${err.error}: ${err.detail}` : err.error
+        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true }
+      }
+      const result = data as { outreachId: number; messageId: string; threadId: string }
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Email sent (Gmail messageId: ${result.messageId}, threadId: ${result.threadId}). Outreach logged (id: ${result.outreachId}).`,
+          },
+        ],
+      }
+    },
+  )
+
   // --- update_prospect_status ---
   server.tool(
     'update_prospect_status',

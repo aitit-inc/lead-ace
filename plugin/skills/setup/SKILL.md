@@ -22,23 +22,17 @@ Return an error if `$0` is empty.
 
 ### 2. Environment Check
 
-Run the following command to verify availability of required tools:
+Run the following command to verify availability of required local tools:
 
 ```bash
-which gog 2>&1 && gog version 2>&1; echo "---"; playwright-cli --version 2>&1
+playwright-cli --version 2>&1
 ```
 
-Inform the user of the results:
-
-**If gog is unavailable:**
-Email auto-sending is not possible. If Gmail MCP is available, drafts can be created but sending will be manual.
-
-**For Gmail MCP / playwright-cli / Claude in Chrome:**
-Inform the user of the following dependencies:
-- **Gmail MCP** (`gmail_search_messages` etc.): Required for reply checking in /check-results and draft creation. Without it, reply checking must be done manually
-- **playwright-cli**: Required for form submission in /outbound. If not installed, only prospects with email addresses will be targeted
+Inform the user of the dependencies:
+- **Gmail send (SaaS)**: Email sending uses the user's connected Gmail (gmail.send scope) via the LeadAce backend. The Google account must be connected in the web app at https://app.leadace.ai (Settings → Connect Google). Without it, no emails can be sent.
+- **Gmail MCP** (`gmail_search_messages` etc., claude.ai built-in): Required for reply checking in /check-results and draft creation. Without it, reply checking must be done manually
+- **playwright-cli**: Required for form submission in /outbound. If not installed, only prospects with email addresses or SNS channels will be targeted
 - **Claude in Chrome**: Required for SNS DM sending in /outbound and SNS reply checking in /check-results. Without it, SNS channel cannot be used
-- **If both gog and Gmail MCP are unavailable**: Email sending and draft creation are both impossible, making the outbound feature effectively unusable -- state this clearly
 
 ### 3. Create Project on Server
 

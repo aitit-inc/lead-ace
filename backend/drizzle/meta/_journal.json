@@ -50,6 +50,20 @@
       "when": 1777107444652,
       "tag": "0006_vengeful_molten_man",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1777181255151,
+      "tag": "0007_naive_nightcrawler",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1777181300000,
+      "tag": "0008_gmail_credentials_security",
+      "breakpoints": true
     }
   ]
 }

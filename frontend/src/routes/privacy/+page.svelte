@@ -1,6 +1,6 @@
 <script lang="ts">
   import Logo from '$lib/components/Logo.svelte';
-  const lastUpdated = '2026-04-18';
+  const lastUpdated = '2026-04-26';
 </script>
 
 <svelte:head>
@@ -25,8 +25,15 @@
       <h2 class="text-base font-semibold text-text">1. Information we collect</h2>
       <ul class="mt-2 list-disc pl-5 space-y-1">
         <li>
-          <strong>Account data:</strong> email address, hashed password (managed by Supabase Auth),
-          and timestamps of sign-in/sign-out events.
+          <strong>Account data:</strong> email address and profile information returned by Google
+          Sign-In (managed by Supabase Auth), plus timestamps of sign-in/sign-out events.
+        </li>
+        <li>
+          <strong>Google OAuth credentials:</strong> a Gmail
+          <code class="font-mono text-xs">gmail.send</code> refresh token, encrypted at rest with
+          pgcrypto and stored only to send outbound email on your behalf when you trigger an
+          outreach action. We do not request, store, or read inbox contents — reply checking is
+          performed locally through claude.ai's Gmail MCP.
         </li>
         <li>
           <strong>Subscription and billing data:</strong> plan tier, billing period, Stripe
@@ -49,7 +56,7 @@
       <ul class="mt-2 list-disc pl-5 space-y-1">
         <li>Provide and operate the service, including authentication and quota enforcement.</li>
         <li>Process payments and prevent fraud (via Stripe).</li>
-        <li>Send transactional email (account confirmation, password reset, billing receipts).</li>
+        <li>Send transactional email (billing receipts and service notifications).</li>
         <li>Investigate and respond to security or abuse incidents.</li>
         <li>Improve reliability and performance using aggregated, non-identifying telemetry.</li>
       </ul>
@@ -60,7 +67,51 @@
     </section>
 
     <section>
-      <h2 class="text-base font-semibold text-text">3. Sub-processors</h2>
+      <h2 class="text-base font-semibold text-text">3. Use of Google user data</h2>
+      <p class="mt-2">
+        LeadAce's use and transfer of information received from Google APIs to any other app will
+        adhere to the
+        <a
+          href="https://developers.google.com/terms/api-services-user-data-policy"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="underline">Google API Services User Data Policy</a
+        >, including the
+        <strong>Limited Use</strong> requirements.
+      </p>
+      <ul class="mt-2 list-disc pl-5 space-y-1">
+        <li>
+          <strong>Scopes requested:</strong>
+          <code class="font-mono text-xs">openid</code>, <code class="font-mono text-xs">profile</code>,
+          <code class="font-mono text-xs">email</code>, and
+          <code class="font-mono text-xs">https://www.googleapis.com/auth/gmail.send</code>.
+        </li>
+        <li>
+          <strong>How we use Gmail data:</strong> the
+          <code class="font-mono text-xs">gmail.send</code> scope is used solely to send outbound
+          email composed by you (or by the LeadAce skill on your behalf, at your direction) from
+          your connected Gmail address.
+        </li>
+        <li>
+          <strong>What we never do:</strong> we do not read your inbox, list messages, modify
+          labels, create drafts, or delete email; we do not transfer Google user data to third
+          parties for advertising or any unrelated purpose; we do not use Google user data to train
+          AI/ML models; we do not allow humans to read Google user data except (i) with your
+          explicit consent, (ii) for narrowly-scoped security investigations, or (iii) where
+          required by law.
+        </li>
+        <li>
+          <strong>Revocation:</strong> you can disconnect Gmail at any time from
+          <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer" class="underline"
+            >Google Account → Third-party apps</a
+          >; the encrypted refresh token in our database is then unusable and will be deleted on
+          your next account interaction or after 30 days, whichever comes first.
+        </li>
+      </ul>
+    </section>
+
+    <section>
+      <h2 class="text-base font-semibold text-text">4. Sub-processors</h2>
       <p class="mt-2">We rely on the following providers to operate the service:</p>
       <ul class="mt-2 list-disc pl-5 space-y-1">
         <li><strong>Supabase</strong> — authentication and PostgreSQL database hosting.</li>
@@ -74,7 +125,7 @@
     </section>
 
     <section>
-      <h2 class="text-base font-semibold text-text">4. Data retention</h2>
+      <h2 class="text-base font-semibold text-text">5. Data retention</h2>
       <p class="mt-2">
         We retain account and application data for as long as your account is active. After
         account deletion, we delete or de-identify your data within 30 days, except where retention
@@ -83,7 +134,7 @@
     </section>
 
     <section>
-      <h2 class="text-base font-semibold text-text">5. Your rights</h2>
+      <h2 class="text-base font-semibold text-text">6. Your rights</h2>
       <p class="mt-2">
         Depending on your jurisdiction, you may have rights to access, correct, export, or delete
         your personal data, and to object to or restrict certain processing. You can exercise most
@@ -94,7 +145,7 @@
     </section>
 
     <section id="cookies">
-      <h2 class="text-base font-semibold text-text">6. Cookies and local storage</h2>
+      <h2 class="text-base font-semibold text-text">7. Cookies and local storage</h2>
       <p class="mt-2">
         We use only first-party browser storage that is strictly necessary to operate the service,
         plus storage to remember preferences you have set yourself. We do not use analytics,
@@ -140,7 +191,7 @@
     </section>
 
     <section>
-      <h2 class="text-base font-semibold text-text">7. Security</h2>
+      <h2 class="text-base font-semibold text-text">8. Security</h2>
       <p class="mt-2">
         We rely on industry-standard transport encryption (TLS), database-level row-level security
         for tenant isolation, and OAuth/JWT-based authentication. No system is perfectly secure;
@@ -150,7 +201,7 @@
     </section>
 
     <section>
-      <h2 class="text-base font-semibold text-text">8. International transfers</h2>
+      <h2 class="text-base font-semibold text-text">9. International transfers</h2>
       <p class="mt-2">
         Our infrastructure is hosted in the Asia-Pacific region. Where data is transferred across
         borders, we rely on the safeguards offered by our sub-processors. [Legal review needed for
@@ -159,7 +210,7 @@
     </section>
 
     <section>
-      <h2 class="text-base font-semibold text-text">9. Changes</h2>
+      <h2 class="text-base font-semibold text-text">10. Changes</h2>
       <p class="mt-2">
         We will post material changes to this policy at this URL and notify you by email or
         in-product banner before they take effect.
@@ -167,7 +218,7 @@
     </section>
 
     <section>
-      <h2 class="text-base font-semibold text-text">10. Contact</h2>
+      <h2 class="text-base font-semibold text-text">11. Contact</h2>
       <p class="mt-2">
         SurpassOne Inc.<br />
         <a href="mailto:contact@surpassone.com" class="underline">contact@surpassone.com</a>

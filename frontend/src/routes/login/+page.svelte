@@ -1,62 +1,41 @@
 <script lang="ts">
-  import { page } from '$app/state';
   import { supabase } from '$lib/auth';
   import Logo from '$lib/components/Logo.svelte';
 
-  let mode = $state<'signin' | 'signup'>(
-    page.url.searchParams.get('mode') === 'signup' ? 'signup' : 'signin',
-  );
-  let email = $state('');
-  let password = $state('');
   let error = $state('');
-  let info = $state('');
   let loading = $state(false);
 
-  async function handleSubmit(e: Event) {
-    e.preventDefault();
-    error = '';
-    info = '';
-    loading = true;
-    if (mode === 'signin') {
-      const { error: err } = await supabase.auth.signInWithPassword({ email, password });
-      if (err) error = err.message;
-    } else {
-      const redirectTo = `${window.location.origin}/auth/callback`;
-      const { data, error: err } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { emailRedirectTo: redirectTo },
-      });
-      if (err) {
-        error = err.message;
-      } else if (data.session) {
-        // Email confirmation disabled — user is signed in immediately
-      } else {
-        info = 'Check your email to confirm your account.';
-      }
-    }
-    loading = false;
-  }
+  // gmail.send is the Sensitive scope LeadAce needs to send outbound emails on
+  // the user's behalf. We always request it at sign-in time so the same flow
+  // works for first-time sign-up and returning users.
+  const GOOGLE_SCOPES = [
+    'openid',
+    'profile',
+    'email',
+    'https://www.googleapis.com/auth/gmail.send',
+  ].join(' ');
 
   async function handleGoogle() {
     error = '';
-    info = '';
     loading = true;
     const { error: err } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        scopes: GOOGLE_SCOPES,
+        queryParams: {
+          // access_type=offline + prompt=consent forces Google to issue a
+          // refresh_token that the backend can use to mint short-lived access
+          // tokens for Gmail API calls.
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
     });
     if (err) {
       error = err.message;
       loading = false;
     }
-    // On success the browser is redirected to Google; no further UI update needed.
-  }
-
-  function toggleMode() {
-    mode = mode === 'signin' ? 'signup' : 'signin';
-    error = '';
-    info = '';
   }
 </script>
 
@@ -66,9 +45,7 @@
       <Logo size={32} class="text-accent" />
       <h1 class="font-mono text-2xl font-semibold text-text">LeadAce</h1>
     </div>
-    <p class="text-text-muted text-sm mb-8">
-      {mode === 'signin' ? 'Sign in to your account' : 'Create an account'}
-    </p>
+    <p class="text-text-muted text-sm mb-8">Sign in with your Google account</p>
 
     <button
       type="button"
@@ -94,80 +71,17 @@
           d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A9 9 0 0 0 9 0 9 9 0 0 0 .96 4.96l3.01 2.32C4.68 5.16 6.66 3.58 9 3.58z"
         />
       </svg>
-      Continue with Google
+      {loading ? 'Redirecting…' : 'Continue with Google'}
     </button>
 
-    <div class="my-5 flex items-center gap-3 text-[11px] text-text-muted">
-      <span class="h-px flex-1 bg-text/10"></span>
-      <span>or</span>
-      <span class="h-px flex-1 bg-text/10"></span>
-    </div>
+    {#if error}
+      <p class="text-danger text-xs mt-4">{error}</p>
+    {/if}
 
-    <form onsubmit={handleSubmit} class="space-y-4">
-      <div>
-        <label for="email" class="block text-xs font-medium text-text-secondary mb-1">Email</label>
-        <input
-          id="email"
-          type="email"
-          bind:value={email}
-          required
-          autocomplete="email"
-          class="w-full rounded-md bg-surface px-3 py-2 text-sm text-text outline-none focus:ring-2 focus:ring-accent/30 placeholder:text-text-muted"
-          placeholder="you@example.com"
-        />
-      </div>
-      <div>
-        <label for="password" class="block text-xs font-medium text-text-secondary mb-1">
-          Password
-        </label>
-        <input
-          id="password"
-          type="password"
-          bind:value={password}
-          required
-          minlength={8}
-          autocomplete={mode === 'signin' ? 'current-password' : 'new-password'}
-          class="w-full rounded-md bg-surface px-3 py-2 text-sm text-text outline-none focus:ring-2 focus:ring-accent/30"
-          placeholder={mode === 'signup' ? 'At least 8 characters' : 'Password'}
-        />
-      </div>
-
-      {#if error}
-        <p class="text-danger text-xs">{error}</p>
-      {/if}
-      {#if info}
-        <p class="text-text-secondary text-xs">{info}</p>
-      {/if}
-
-      <button
-        type="submit"
-        disabled={loading}
-        class="w-full rounded-md bg-text py-2 text-sm font-medium text-page transition-colors hover:bg-text/90 disabled:opacity-50"
-      >
-        {loading
-          ? mode === 'signin'
-            ? 'Signing in...'
-            : 'Creating account...'
-          : mode === 'signin'
-            ? 'Sign in'
-            : 'Create account'}
-      </button>
-    </form>
-
-    <div class="mt-6 flex items-center justify-between text-xs">
-      <button
-        type="button"
-        onclick={toggleMode}
-        class="text-text-muted hover:text-text transition-colors"
-      >
-        {mode === 'signin' ? 'Create an account' : 'Sign in instead'}
-      </button>
-      {#if mode === 'signin'}
-        <a href="/forgot-password" class="text-text-muted hover:text-text transition-colors">
-          Forgot password?
-        </a>
-      {/if}
-    </div>
+    <p class="mt-6 text-[11px] text-text-muted">
+      LeadAce will request permission to send email on your behalf via Gmail (gmail.send). We never
+      read or modify your inbox; reply checking is done locally via the Gmail MCP in claude.ai.
+    </p>
 
     <p class="mt-10 text-[11px] text-text-muted text-center">
       By continuing, you agree to the

@@ -29,24 +29,24 @@ Call `mcp__plugin_lead-ace_api__list_projects` and verify that `$0` exists. If n
 
 ### 2. Environment Check
 
-Run the following command to check available tools:
+Run the following command to check available local tools:
 
 ```bash
-which gog 2>&1 && gog version 2>&1; echo "---"; playwright-cli --version 2>&1
+playwright-cli --version 2>&1
 ```
 
 Report results to the user and reflect in the "Environment & Tool Status" section of SALES_STRATEGY.md (when generating in step 7):
 
-- **gog**: Available / unavailable -> if unavailable, affects channel options (email auto-sending not possible, only draft creation)
-- **Gmail MCP**: Cannot verify via bash. Ask user "Have you configured Gmail MCP in Claude Code?"
+- **Gmail (SaaS, gmail.send)**: Cannot verify via bash. Ask user "Have you connected your Google account in the LeadAce web app (Settings → Connect Google)?" Without it, email sending is unavailable.
+- **Gmail MCP** (claude.ai built-in): Cannot verify via bash. Ask user "Have you connected the Gmail MCP in claude.ai?" Required for reply checking in /check-results
 - **playwright-cli**: Check with `playwright-cli --version`. Required for form submission
 - **Claude in Chrome**: Cannot verify via bash. Ask user "Are you using the Claude in Chrome extension?" Required for SNS DMs
 
-**In update mode:** If the "Environment & Tool Status" section already exists in SALES_STRATEGY.md, only re-check tools verifiable via bash (gog, playwright-cli), and skip re-asking about Gmail MCP / Claude in Chrome (users can report changes themselves if any).
+**In update mode:** If the "Environment & Tool Status" section already exists in SALES_STRATEGY.md, only re-check tools verifiable via bash (playwright-cli), and skip re-asking about Gmail / Gmail MCP / Claude in Chrome (users can report changes themselves if any).
 
 **Impact of results on channel selection:**
-- No gog + Gmail MCP available -> Email is draft-only (manual sending)
-- No gog + No Gmail MCP -> Neither email sending nor draft creation is possible. Forms or SNS DMs only
+- No Gmail SaaS connection -> Email sending not possible. Forms or SNS DMs only
+- No Gmail MCP -> Reply checking in /check-results becomes manual
 - No playwright-cli -> Form submission not possible. Email and SNS DMs only
 - No Claude in Chrome -> SNS DMs not possible. Email and forms only
 - No tools at all -> Outbound is effectively unusable -- make constraints clear when setting up channels in steps 3-6
@@ -226,7 +226,7 @@ Also retrieve the following master documents via `mcp__plugin_lead-ace_api__get_
 - **`tpl_targeting_guide`**: Target persona refinement, competitive analysis perspectives, USP articulation, channel selection criteria, KPI reverse calculation tree, search keyword design patterns
 - **`tpl_email_templates`**: Email template selection based on target industry. Auto-select the optimal pattern based on user's industry information and customize to business info (USP, track record, pricing). Do not use templates as-is -- always add flesh based on user-specific information
 
-**Reflect environment information:** Record the environment check results from step 2 in the "Environment & Tool Status" section. If any tools are unavailable, also reflect in the "Sales Channels" section (e.g., if gog unavailable, exclude email auto-sending; if Chrome unavailable, exclude forms and SNS)
+**Reflect environment information:** Record the environment check results from step 2 in the "Environment & Tool Status" section. If any tools are unavailable, also reflect in the "Sales Channels" section (e.g., if Gmail SaaS connection is unavailable, exclude email sending; if Chrome unavailable, exclude SNS)
 
 Save via `mcp__plugin_lead-ace_api__save_document` with `projectId: "$0"`, `slug: "sales_strategy"`, and the full markdown content.
 

@@ -7,6 +7,9 @@ export type Env = {
   ENVIRONMENT: string
   STRIPE_SECRET_KEY: string
   STRIPE_WEBHOOK_SECRET: string
+  GOOGLE_CLIENT_ID: string
+  GOOGLE_CLIENT_SECRET: string
+  GMAIL_TOKEN_ENCRYPTION_KEY: string
 }
 
 export type Variables = {

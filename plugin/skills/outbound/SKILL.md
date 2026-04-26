@@ -14,6 +14,7 @@ allowed-tools:
   - mcp__claude_in_chrome__form_input
   - mcp__claude_in_chrome__computer
   - mcp__plugin_lead-ace_api__get_outbound_targets
+  - mcp__plugin_lead-ace_api__send_email_and_record
   - mcp__plugin_lead-ace_api__record_outreach
   - mcp__plugin_lead-ace_api__update_prospect_status
   - mcp__plugin_lead-ace_api__get_document
@@ -84,30 +85,23 @@ Retrieve email guidelines via `mcp__plugin_lead-ace_api__get_master_document` wi
 - **Precision mode**: Refer to each prospect's `overview` and `matchReason`, and write the entire body tailored to the recipient -- not just the opening. Reference specific numbers, achievements, and initiatives of the target company. Generic openers like "I visited your website" alone are insufficient
 - **Volume mode**: Use the SALES_STRATEGY.md email template as a base, adjusting the opening (why you're reaching out) and the problem statement in 2 places based on `overview` / `matchReason`. The solution through CTA can follow the template structure as-is
 
-**Send email via gog CLI, then record via MCP:**
+**Send email via MCP (Gmail API):**
 
-1. Write the email body (including signature) to a temp file:
-   ```bash
-   cat > /tmp/email_body.txt << 'EMAILEOF'
-   <body including signature>
-   EMAILEOF
-   ```
+Call `mcp__plugin_lead-ace_api__send_email_and_record` with:
+- `projectId: "$0"`
+- `prospectId`: the prospect's id
+- `to`: array with the recipient address
+- `subject`: subject line
+- `body`: complete body including signature
 
-2. Send the email:
-   ```bash
-   gog send --account "<sender email address>" --to "<recipient>" --subject "<subject>" --body-file /tmp/email_body.txt
-   ```
+The MCP tool sends the email through the user's connected Gmail (gmail.send scope) and records the outreach log atomically. On success it returns `{ outreachId, messageId, threadId }`. On failure (`error: "Send failed"`, status 502) the outreach is still logged with `status: "failed"`, so do not retry record_outreach manually.
 
-3. **Immediately after sending**, record the result via MCP:
-   - On success: call `mcp__plugin_lead-ace_api__record_outreach` with `projectId: "$0"`, `prospectId`, `channel: "email"`, `subject`, `body`, `status: "sent"`
-   - On failure: call `mcp__plugin_lead-ace_api__record_outreach` with `status: "failed"` and `errorMessage`
-
-**Important:** Always record outreach immediately after each send attempt. Do not batch recordings. If `gog send` succeeds but the MCP recording fails, retry the MCP call once.
+If the tool returns `error: "Gmail not connected"` or `"Gmail token revoked"` (status 412), abort all email sending for this run and surface the message — the user must reconnect Gmail in the web app's Settings.
 
 **Note:**
-- The body passed to gog must be the complete content including the signature
+- The body must be the complete content including the signature
 - Gmail MCP (`gmail_create_draft`) can only create drafts -- it cannot send
-- If specifying a sender alias, add `--from "<alias>"`
+- Sender alias support is not yet available; emails always send from the user's primary Gmail address
 
 ### 4. Contact Form Submission
 
@@ -164,7 +158,7 @@ For prospects where approach failed due to a **structural reason** making future
 
 **Cases where `inactive` should NOT be set (keep as `new`):**
 - Temporary network error or timeout
-- System-side issues such as gog send authentication errors
+- System-side issues such as Gmail token revocation or quota exhaustion
 
 ### 7. Additional Outreach When Target Not Met
 

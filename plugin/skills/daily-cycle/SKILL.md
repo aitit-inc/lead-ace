@@ -11,6 +11,8 @@ allowed-tools:
   - mcp__plugin_lead-ace_api__get_prospect_identifiers
   - mcp__plugin_lead-ace_api__add_prospects
   - mcp__plugin_lead-ace_api__get_recent_outreach
+  - mcp__plugin_lead-ace_api__send_email
+  - mcp__plugin_lead-ace_api__send_email_and_record
   - mcp__plugin_lead-ace_api__record_outreach
   - mcp__plugin_lead-ace_api__record_response
   - mcp__plugin_lead-ace_api__update_prospect_status
@@ -65,7 +67,7 @@ Use this information to inform subsequent steps when relevant. For example:
 
 ### 3. Start Notification Email
 
-Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "sales_strategy"` to get the notification recipient email from the "Notification Settings" section and the sender email from the "Sender Information" section. Skip if notification is "none" or not set.
+Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "sales_strategy"` to get the notification recipient email from the "Notification Settings" section. Skip if notification is "none" or not set. (The sender is the user's connected Gmail address — no manual sender lookup needed.)
 
 Compose the email body concisely using only information already on hand -- no additional queries:
 - Execution date and time (result from step 1)
@@ -73,11 +75,9 @@ Compose the email body concisely using only information already on hand -- no ad
 - Outbound target count (`$1`)
 - Results from previous cycle (1-2 lines extracted from DAILY_CYCLE_REPORT.md in step 2; omit for first run)
 
-```bash
-gog send --account "<sender>" --to "<recipient>" --subject "daily-cycle started: $0" --body "<body>"
-```
+Call `mcp__plugin_lead-ace_api__send_email` with the notification recipient as `to`, subject `"daily-cycle started: $0"`, and the body. (Use `send_email`, not `send_email_and_record` — this notification is not prospect outreach and should not be logged.)
 
-If sending fails, continue the cycle (errors will be reported in the wrap-up report).
+If sending fails (e.g. Gmail not connected), continue the cycle (errors will be reported in the wrap-up report).
 
 ### 4. check-results (sub-agent)
 
@@ -184,7 +184,7 @@ Report progress after each batch summary (e.g., "outbound: 10/30 completed").
 
 **Success rate check between batches:** After each batch completes, check the success rate (successes / processed). If rate is below 30%, stop remaining batches and autonomously decide and execute the following:
 - Failure reason is insufficient contacts (many inactive) -> prioritize step 8 build-list and replenish prospects with contact info
-- Failure reason is a system issue (gog send auth error, etc.) -> abort all outbound and report the issue in the completion report
+- Failure reason is a system issue (Gmail token revocation / quota exhaustion / API errors) -> abort all outbound and report the issue in the completion report
 - Failure reason is form incompatibility, etc. -> continue remaining batches with only email-available prospects
 
 **Retry when target not met:** After all outbound batches complete, tally each batch's results. If total successes < specified count:
@@ -305,11 +305,6 @@ outbound: (summary)
 build-list: (summary)
 ```
 
-```bash
-cat > /tmp/daily_report.txt << 'REPORTEOF'
-<report body>
-REPORTEOF
-gog send --account "<sender email>" --to "<recipient email>" --subject "daily-cycle completed: $0" --body-file /tmp/daily_report.txt
-```
+Call `mcp__plugin_lead-ace_api__send_email` with the notification recipient as `to`, subject `"daily-cycle completed: $0"`, and the report body. (Use `send_email`, not `send_email_and_record` — this is an internal report, not prospect outreach.)
 
 Sub-agent's return to main: Briefly report the KPI update status and notification email send status.

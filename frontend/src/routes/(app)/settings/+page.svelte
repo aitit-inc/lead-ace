@@ -5,8 +5,50 @@
   import { del, get, post } from '$lib/api';
   import { activeProject } from '$lib/stores/project';
   import { plan } from '$lib/stores/plan';
+  import { supabase } from '$lib/auth';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import type { PlanTier, Project } from '$lib/types';
+
+  let gmailStatus = $state<
+    | { state: 'loading' }
+    | { state: 'connected'; email: string; updatedAt: string }
+    | { state: 'disconnected' }
+    | { state: 'error'; message: string }
+  >({ state: 'loading' });
+
+  async function loadGmailStatus() {
+    try {
+      const data = await get<{
+        connected: boolean;
+        email?: string;
+        updatedAt?: string;
+      }>('/auth/google-credentials/status');
+      gmailStatus = data.connected
+        ? {
+            state: 'connected',
+            email: data.email ?? '',
+            updatedAt: data.updatedAt ?? '',
+          }
+        : { state: 'disconnected' };
+    } catch (e) {
+      gmailStatus = {
+        state: 'error',
+        message: e instanceof Error ? e.message : 'Failed to load Gmail status',
+      };
+    }
+  }
+
+  async function reconnectGmail() {
+    const { error: err } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        scopes: 'openid profile email https://www.googleapis.com/auth/gmail.send',
+        queryParams: { access_type: 'offline', prompt: 'consent' },
+      },
+    });
+    if (err) gmailStatus = { state: 'error', message: err.message };
+  }
 
   let showDeleteDialog = $state(false);
   let deleting = $state(false);
@@ -94,6 +136,7 @@
 
   onMount(() => {
     plan.load();
+    void loadGmailStatus();
     const status = page.url.searchParams.get('checkout');
     if (status === 'success') {
       message = 'Subscription activated. Waiting for confirmation…';
@@ -168,6 +211,53 @@
 {#if message}
   <div class="mb-6 rounded bg-surface px-4 py-3 text-sm text-text">{message}</div>
 {/if}
+
+<!-- Gmail Connection -->
+<section class="mb-10">
+  <h3 class="text-xs font-medium text-text-muted uppercase tracking-wider mb-4">
+    Gmail Connection
+  </h3>
+  <div class="rounded-md border border-border p-5">
+    {#if gmailStatus.state === 'loading'}
+      <p class="text-text-muted text-sm">Loading…</p>
+    {:else if gmailStatus.state === 'connected'}
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="text-text text-sm">
+            Connected as <span class="font-mono">{gmailStatus.email}</span>
+          </p>
+          <p class="text-text-muted text-xs mt-1">
+            LeadAce can send email on your behalf via Gmail (gmail.send only). Reply checking
+            stays local through claude.ai's Gmail MCP.
+          </p>
+        </div>
+        <button
+          type="button"
+          onclick={reconnectGmail}
+          class="text-xs text-text-muted hover:text-text underline whitespace-nowrap"
+        >
+          Reconnect
+        </button>
+      </div>
+    {:else if gmailStatus.state === 'disconnected'}
+      <div>
+        <p class="text-danger text-sm mb-3">Gmail is not connected.</p>
+        <p class="text-text-muted text-xs mb-4">
+          Outbound email sending is disabled until you reconnect your Google account.
+        </p>
+        <button
+          type="button"
+          onclick={reconnectGmail}
+          class="rounded-md border border-border bg-page px-3 py-1.5 text-xs font-medium text-text hover:bg-surface"
+        >
+          Connect Gmail
+        </button>
+      </div>
+    {:else}
+      <p class="text-danger text-sm">{gmailStatus.message}</p>
+    {/if}
+  </div>
+</section>
 
 <!-- Plan -->
 <section class="mb-10">

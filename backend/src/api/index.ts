@@ -10,6 +10,7 @@ import { evaluationsRouter } from './routes/evaluations'
 import { documentsRouter } from './routes/documents'
 import { masterDocumentsRouter } from './routes/master-documents'
 import { billingRouter } from './routes/billing'
+import { authRouter } from './routes/auth'
 import { stripeWebhookRouter } from './routes/stripe-webhook'
 import type { Env, Variables } from './types'
 
@@ -34,6 +35,7 @@ app.route('/api', evaluationsRouter)
 app.route('/api', documentsRouter)
 app.route('/api', masterDocumentsRouter)
 app.route('/api', billingRouter)
+app.route('/api', authRouter)
 
 app.onError((err, c) => {
   console.error(err)

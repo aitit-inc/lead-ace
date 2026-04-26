@@ -1,6 +1,7 @@
 import {
   boolean,
   check,
+  customType,
   index,
   integer,
   jsonb,
@@ -14,6 +15,13 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
+
+// Postgres bytea column for storing pgcrypto-encrypted blobs.
+const bytea = customType<{ data: Uint8Array; driverData: Uint8Array }>({
+  dataType() {
+    return 'bytea'
+  },
+})
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -113,6 +121,25 @@ export const tenantMembers = pgTable('tenant_members', {
   // in auth middleware auto-provisioning. Remove if/when teams (many users → 1 tenant) ship.
   unique('uq_tenant_members_user').on(table.userId),
   index('idx_tenant_members_user').on(table.userId),
+])
+
+// Gmail OAuth refresh tokens for `gmail.send` SaaS sending.
+// Per (tenant, user) pair. refresh_token is pgp_sym_encrypt'd at write time
+// using the GMAIL_TOKEN_ENCRYPTION_KEY worker secret; the DB only ever sees
+// the encrypted bytea blob.
+export const gmailCredentials = pgTable('gmail_credentials', {
+  tenantId: text('tenant_id')
+    .notNull()
+    .references(() => tenants.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull(),
+  refreshToken: bytea('refresh_token').notNull(),
+  scope: text('scope').notNull(),
+  email: text('email').notNull(),
+  grantedAt: timestamp('granted_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.tenantId, table.userId] }),
+  index('idx_gmail_credentials_tenant').on(table.tenantId),
 ])
 
 export const tenantPlans = pgTable('tenant_plans', {

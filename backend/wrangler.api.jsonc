@@ -13,6 +13,9 @@
   //   SUPABASE_URL
   //   STRIPE_SECRET_KEY
   //   STRIPE_WEBHOOK_SECRET
+  //   GOOGLE_CLIENT_ID            (Google Cloud Console → OAuth Client → Web application)
+  //   GOOGLE_CLIENT_SECRET        (paired with GOOGLE_CLIENT_ID, used for refresh_token exchange)
+  //   GMAIL_TOKEN_ENCRYPTION_KEY  (random 32+ char passphrase; used as pgp_sym_encrypt key)
   "env": {
     "production": {
       "name": "lead-ace-api",
