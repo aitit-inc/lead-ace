@@ -82,6 +82,7 @@ jobs:
         working-directory: frontend
     env:
       VITE_API_URL: ${{ vars.VITE_API_URL }}
+      VITE_MCP_URL: ${{ vars.VITE_MCP_URL }}
       VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
       VITE_STRIPE_PRICE_STARTER_MONTHLY: ${{ vars.VITE_STRIPE_PRICE_STARTER_MONTHLY }}

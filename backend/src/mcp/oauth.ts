@@ -1,22 +1,35 @@
 /**
  * MCP OAuth 2.1 Authorization Server for LeadAce.
  *
- * Implements the OAuth endpoints required by the MCP spec:
+ * Endpoints:
  * - /.well-known/oauth-authorization-server  (metadata)
  * - /.well-known/oauth-protected-resource    (resource metadata)
- * - /authorize  (GET: login page, POST: handle login)
- * - /token      (POST: code exchange + refresh)
- * - /register   (POST: dynamic client registration)
+ * - /authorize           GET → redirect to the frontend consent page
+ * - /authorize/session   GET → consent page reads OAuth params here
+ * - /authorize/finalize  POST → frontend completes the flow with a verified
+ *                                Supabase session, gets back a redirect URL
+ * - /token               POST (authorization_code | refresh_token)
+ * - /register            POST (RFC 7591 dynamic client registration)
  *
- * Delegates actual authentication to Supabase Auth.
- * Auth codes and registered clients live in Cloudflare KV so state survives
- * across Worker isolates. KV's native TTL handles expiry; we still stamp an
- * expiresAt for defense-in-depth on the read path.
+ * The user authenticates via Google on app.leadace.ai (Supabase). The
+ * frontend then posts the resulting Supabase tokens to /authorize/finalize,
+ * we re-issue them through the OAuth code flow so MCP clients can use a
+ * Bearer token. State lives in Cloudflare KV; native TTL handles expiry.
  */
+
+import { verifySupabaseJwt } from '../auth/verify-jwt'
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+interface AuthSession {
+  clientId: string
+  codeChallenge: string
+  redirectUri: string
+  state: string
+  expiresAt: number
+}
 
 interface AuthCode {
   clientId: string
@@ -40,10 +53,12 @@ interface RegisteredClient {
 // KV storage helpers
 // ---------------------------------------------------------------------------
 
-const AUTH_CODE_TTL_SECONDS = 600       // 10 minutes (KV minimum is 60)
+const AUTH_CODE_TTL_SECONDS = 600        // 10 minutes (KV minimum is 60)
+const AUTH_SESSION_TTL_SECONDS = 600     // 10 minutes
 const CLIENT_TTL_SECONDS = 60 * 60 * 24 * 30 // 30 days
 
 const codeKey = (code: string) => `code:${code}`
+const sessionKey = (id: string) => `session:${id}`
 const clientKey = (id: string) => `client:${id}`
 
 async function getAuthCode(kv: KVNamespace, code: string): Promise<AuthCode | null> {
@@ -56,6 +71,22 @@ async function putAuthCode(kv: KVNamespace, code: string, data: AuthCode): Promi
 
 async function deleteAuthCode(kv: KVNamespace, code: string): Promise<void> {
   await kv.delete(codeKey(code))
+}
+
+async function getAuthSession(kv: KVNamespace, id: string): Promise<AuthSession | null> {
+  return await kv.get<AuthSession>(sessionKey(id), 'json')
+}
+
+async function putAuthSession(kv: KVNamespace, id: string, data: AuthSession): Promise<void> {
+  await kv.put(sessionKey(id), JSON.stringify(data), { expirationTtl: AUTH_SESSION_TTL_SECONDS })
+}
+
+async function deleteAuthSession(kv: KVNamespace, id: string): Promise<void> {
+  await kv.delete(sessionKey(id))
+}
+
+async function getRegisteredClient(kv: KVNamespace, id: string): Promise<RegisteredClient | null> {
+  return await kv.get<RegisteredClient>(clientKey(id), 'json')
 }
 
 async function putRegisteredClient(kv: KVNamespace, id: string, client: RegisteredClient): Promise<void> {
@@ -145,98 +176,140 @@ export async function handleRegister(request: Request, kv: KVNamespace): Promise
 }
 
 // ---------------------------------------------------------------------------
-// Authorization endpoint
+// /authorize GET → redirect to the frontend consent page
 // ---------------------------------------------------------------------------
 
-export function handleAuthorizeGet(request: Request, baseUrl: string): Response {
-  const url = new URL(request.url)
-  const params = url.searchParams
+function htmlError(message: string, status: number): Response {
+  const safe = message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return new Response(
+    `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>LeadAce — Authorization error</title>
+<style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#F4F2F0;color:#333}p{max-width:420px;padding:24px;font-size:14px;line-height:1.5}</style>
+</head><body><p>${safe}</p></body></html>`,
+    { status, headers: { 'Content-Type': 'text/html; charset=utf-8' } },
+  )
+}
 
-  const loginParams: LoginParams = {
-    state: params.get('state') ?? '',
-    codeChallenge: params.get('code_challenge') ?? '',
-    redirectUri: params.get('redirect_uri') ?? '',
-    clientId: params.get('client_id') ?? '',
+export async function handleAuthorizeGet(
+  request: Request,
+  kv: KVNamespace,
+  frontendUrl: string,
+): Promise<Response> {
+  const params = new URL(request.url).searchParams
+
+  const codeChallenge = params.get('code_challenge')
+  const redirectUri = params.get('redirect_uri')
+  const codeChallengeMethod = params.get('code_challenge_method')
+
+  if (!codeChallenge || !redirectUri) {
+    return htmlError('Missing code_challenge or redirect_uri. Run /setup again.', 400)
+  }
+  if (codeChallengeMethod && codeChallengeMethod !== 'S256') {
+    return htmlError('Only S256 code_challenge_method is supported.', 400)
   }
 
-  return new Response(loginPageHtml(baseUrl, loginParams), {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+  const sessionId = generateId()
+  await putAuthSession(kv, sessionId, {
+    clientId: params.get('client_id') ?? '',
+    codeChallenge,
+    redirectUri,
+    state: params.get('state') ?? '',
+    expiresAt: Date.now() + AUTH_SESSION_TTL_SECONDS * 1000,
+  })
+
+  const consentUrl = new URL('/mcp-authorize', frontendUrl)
+  consentUrl.searchParams.set('session', sessionId)
+  return Response.redirect(consentUrl.toString(), 302)
+}
+
+// ---------------------------------------------------------------------------
+// /authorize/session GET → consent page reads display info
+// ---------------------------------------------------------------------------
+
+export async function handleAuthorizeSessionInfo(
+  request: Request,
+  kv: KVNamespace,
+): Promise<Response> {
+  const sessionId = new URL(request.url).searchParams.get('session')
+  if (!sessionId) {
+    return Response.json({ error: 'invalid_request' }, { status: 400 })
+  }
+  const session = await getAuthSession(kv, sessionId)
+  if (!session || session.expiresAt < Date.now()) {
+    return Response.json({ error: 'invalid_session' }, { status: 404 })
+  }
+
+  let clientName: string | undefined
+  if (session.clientId) {
+    const registered = await getRegisteredClient(kv, session.clientId)
+    clientName = registered?.client_name
+  }
+
+  return Response.json({
+    clientId: session.clientId,
+    clientName: clientName ?? null,
+    redirectUri: session.redirectUri,
+    state: session.state,
   })
 }
 
-export async function handleAuthorizePost(
+// ---------------------------------------------------------------------------
+// /authorize/finalize POST → frontend completes the flow
+// ---------------------------------------------------------------------------
+
+export async function handleAuthorizeFinalize(
   request: Request,
   kv: KVNamespace,
+  jwtSecret: string,
   supabaseUrl: string,
-  supabaseAnonKey: string,
 ): Promise<Response> {
-  let body: Record<string, string>
+  let body: { session?: string; access_token?: string; refresh_token?: string }
   try {
-    const ct = request.headers.get('Content-Type') ?? ''
-    if (ct.includes('application/json')) {
-      body = await request.json() as Record<string, string>
-    } else {
-      const fd = await request.formData()
-      body = Object.fromEntries(fd.entries()) as Record<string, string>
-    }
+    body = await request.json() as { session?: string; access_token?: string; refresh_token?: string }
   } catch {
     return Response.json({ error: 'invalid_request' }, { status: 400 })
   }
 
-  const { email, password, state, code_challenge, redirect_uri, client_id } = body
-
-  if (!email || !password || !code_challenge || !redirect_uri) {
-    return Response.json({ error: 'invalid_request', error_description: 'Missing required fields' }, { status: 400 })
+  const sessionId = body.session
+  const accessToken = body.access_token
+  const refreshToken = body.refresh_token
+  if (!sessionId || !accessToken || !refreshToken) {
+    return Response.json(
+      { error: 'invalid_request', error_description: 'session, access_token, refresh_token are required' },
+      { status: 400 },
+    )
   }
 
-  // Authenticate with Supabase Auth
-  let authData: { access_token: string; refresh_token: string }
-  try {
-    const authRes = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: supabaseAnonKey,
-      },
-      body: JSON.stringify({ email, password }),
-    })
-
-    if (!authRes.ok) {
-      const errText = await authRes.text()
-      let errMsg = 'Invalid credentials'
-      try {
-        const errJson = JSON.parse(errText) as Record<string, string>
-        errMsg = errJson['error_description'] ?? errJson['msg'] ?? errMsg
-      } catch { /* not JSON */ }
-      return Response.json({
-        error: 'access_denied',
-        error_description: errMsg,
-      }, { status: 401 })
-    }
-
-    authData = await authRes.json() as { access_token: string; refresh_token: string }
-  } catch (e) {
-    return Response.json({
-      error: 'server_error',
-      error_description: `Supabase auth failed: ${e instanceof Error ? e.message : 'unknown error'}`,
-    }, { status: 500 })
+  const userId = await verifySupabaseJwt(accessToken, jwtSecret, supabaseUrl)
+  if (!userId) {
+    return Response.json(
+      { error: 'invalid_token', error_description: 'Supabase access_token failed verification' },
+      { status: 401 },
+    )
   }
 
-  // Generate authorization code
+  const session = await getAuthSession(kv, sessionId)
+  if (!session || session.expiresAt < Date.now()) {
+    return Response.json(
+      { error: 'invalid_session', error_description: 'Authorization session expired or unknown' },
+      { status: 404 },
+    )
+  }
+
   const code = generateId()
   await putAuthCode(kv, code, {
-    clientId: client_id ?? '',
-    codeChallenge: code_challenge,
-    redirectUri: redirect_uri,
-    supabaseAccessToken: authData.access_token,
-    supabaseRefreshToken: authData.refresh_token,
+    clientId: session.clientId,
+    codeChallenge: session.codeChallenge,
+    redirectUri: session.redirectUri,
+    supabaseAccessToken: accessToken,
+    supabaseRefreshToken: refreshToken,
     expiresAt: Date.now() + AUTH_CODE_TTL_SECONDS * 1000,
   })
 
-  // Return redirect URL as JSON (login page JS will navigate)
-  const redirectUrl = new URL(redirect_uri)
+  await deleteAuthSession(kv, sessionId)
+
+  const redirectUrl = new URL(session.redirectUri)
   redirectUrl.searchParams.set('code', code)
-  if (state) redirectUrl.searchParams.set('state', state)
+  if (session.state) redirectUrl.searchParams.set('state', session.state)
 
   return Response.json({ redirect: redirectUrl.toString() })
 }
@@ -288,18 +361,15 @@ async function handleAuthCodeGrant(body: Record<string, string>, kv: KVNamespace
     return Response.json({ error: 'invalid_grant', error_description: 'Invalid or expired authorization code' }, { status: 400 })
   }
 
-  // Verify redirect_uri matches
   if (redirect_uri && redirect_uri !== stored.redirectUri) {
     return Response.json({ error: 'invalid_grant', error_description: 'redirect_uri mismatch' }, { status: 400 })
   }
 
-  // PKCE verification
   const pkceValid = await verifyPkce(code_verifier, stored.codeChallenge)
   if (!pkceValid) {
     return Response.json({ error: 'invalid_grant', error_description: 'PKCE verification failed' }, { status: 400 })
   }
 
-  // Consume the code (one-time use)
   await deleteAuthCode(kv, code)
 
   return Response.json({
@@ -341,85 +411,4 @@ async function handleRefreshGrant(
     token_type: 'Bearer',
     expires_in: data.expires_in ?? 3600,
   })
-}
-
-// ---------------------------------------------------------------------------
-// Login page HTML
-// ---------------------------------------------------------------------------
-
-interface LoginParams {
-  state: string
-  codeChallenge: string
-  redirectUri: string
-  clientId: string
-}
-
-function escapeAttr(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
-
-function loginPageHtml(baseUrl: string, p: LoginParams): string {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>LeadAce — Sign In</title>
-  <style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:Geist,Inter,-apple-system,system-ui,sans-serif;background:#F4F2F0;color:#333;display:flex;align-items:center;justify-content:center;min-height:100vh;-webkit-font-smoothing:antialiased}
-    .c{width:100%;max-width:340px;padding:0 20px}
-    h1{font-size:20px;font-weight:600;margin-bottom:4px;letter-spacing:-0.01em}
-    .sub{color:#948D8A;font-size:13px;margin-bottom:28px}
-    label{display:block;font-size:11px;font-weight:500;color:#676162;margin-bottom:4px}
-    input[type=email],input[type=password]{width:100%;padding:8px 12px;font-size:13px;color:#333;background:#EBE8E6;border:1px solid transparent;border-radius:4px;outline:none;margin-bottom:14px;font-family:inherit}
-    input:focus{border-color:#E87462;box-shadow:0 0 0 2px rgba(232,116,98,.15)}
-    .err{color:#C05248;font-size:12px;margin-bottom:12px;display:none}
-    button{width:100%;padding:9px;font-size:13px;font-weight:500;color:#F4F2F0;background:#333;border:none;border-radius:6px;cursor:pointer;transition:background .15s;font-family:inherit}
-    button:hover{background:#1a1a1a}
-    button:disabled{opacity:.5;cursor:default}
-  </style>
-</head>
-<body>
-<div class="c">
-  <h1>LeadAce</h1>
-  <p class="sub">Sign in to authorize Claude Code</p>
-  <form id="f">
-    <label for="e">Email</label>
-    <input id="e" type="email" required placeholder="you@example.com" autofocus/>
-    <label for="p">Password</label>
-    <input id="p" type="password" required/>
-    <p id="err" class="err"></p>
-    <button type="submit" id="btn">Sign in</button>
-  </form>
-</div>
-<script>
-document.getElementById('f').addEventListener('submit',async e=>{
-  e.preventDefault();
-  const btn=document.getElementById('btn'),err=document.getElementById('err');
-  btn.disabled=true;btn.textContent='Signing in...';err.style.display='none';
-  try{
-    const r=await fetch('${baseUrl}/authorize',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        email:document.getElementById('e').value,
-        password:document.getElementById('p').value,
-        state:"${escapeAttr(p.state)}",
-        code_challenge:"${escapeAttr(p.codeChallenge)}",
-        redirect_uri:"${escapeAttr(p.redirectUri)}",
-        client_id:"${escapeAttr(p.clientId)}"
-      })
-    });
-    const d=await r.json();
-    if(!r.ok)throw new Error(d.error_description||d.error||'Login failed');
-    if(d.redirect)window.location.href=d.redirect;
-  }catch(x){
-    err.textContent=x.message;err.style.display='block';
-    btn.disabled=false;btn.textContent='Sign in';
-  }
-});
-</script>
-</body>
-</html>`
 }

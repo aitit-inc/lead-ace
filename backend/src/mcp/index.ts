@@ -7,7 +7,8 @@ import {
   handleResourceMetadata,
   handleRegister,
   handleAuthorizeGet,
-  handleAuthorizePost,
+  handleAuthorizeSessionInfo,
+  handleAuthorizeFinalize,
   handleToken,
 } from './oauth'
 
@@ -17,6 +18,7 @@ type Env = {
   SUPABASE_URL: string
   SUPABASE_ANON_KEY: string
   ENVIRONMENT: string
+  FRONTEND_URL: string
   MCP_OAUTH_STORE: KVNamespace
 }
 
@@ -737,13 +739,18 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     return withCors(await handleRegister(request, env.MCP_OAUTH_STORE))
   }
 
-  if (path === '/authorize') {
-    if (request.method === 'GET') {
-      return handleAuthorizeGet(request, baseUrl)
-    }
-    if (request.method === 'POST') {
-      return withCors(await handleAuthorizePost(request, env.MCP_OAUTH_STORE, env.SUPABASE_URL, env.SUPABASE_ANON_KEY))
-    }
+  if (path === '/authorize' && request.method === 'GET') {
+    return await handleAuthorizeGet(request, env.MCP_OAUTH_STORE, env.FRONTEND_URL)
+  }
+
+  if (path === '/authorize/session' && request.method === 'GET') {
+    return withCors(await handleAuthorizeSessionInfo(request, env.MCP_OAUTH_STORE))
+  }
+
+  if (path === '/authorize/finalize' && request.method === 'POST') {
+    return withCors(
+      await handleAuthorizeFinalize(request, env.MCP_OAUTH_STORE, env.SUPABASE_JWT_SECRET, env.SUPABASE_URL),
+    )
   }
 
   if (path === '/token' && request.method === 'POST') {

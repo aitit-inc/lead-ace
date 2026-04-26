@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { page } from '$app/state';
   import { supabase } from '$lib/auth';
+  import { isSafeRelativePath } from '$lib/redirect';
   import Logo from '$lib/components/Logo.svelte';
 
   let error = $state('');
@@ -18,10 +20,15 @@
   async function handleGoogle() {
     error = '';
     loading = true;
+    const next = page.url.searchParams.get('next');
+    const callbackUrl = new URL('/auth/callback', window.location.origin);
+    if (next && isSafeRelativePath(next)) {
+      callbackUrl.searchParams.set('next', next);
+    }
     const { error: err } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: callbackUrl.toString(),
         scopes: GOOGLE_SCOPES,
         queryParams: {
           // access_type=offline + prompt=consent forces Google to issue a

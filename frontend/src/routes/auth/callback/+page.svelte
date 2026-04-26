@@ -1,11 +1,18 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import { auth } from '$lib/stores/auth';
   import { supabase } from '$lib/auth';
   import { post, ApiError } from '$lib/api';
+  import { isSafeRelativePath } from '$lib/redirect';
 
   let status = $state<'pending' | 'saving' | 'error'>('pending');
   let errorMessage = $state('');
+
+  function nextTarget(): string {
+    const next = page.url.searchParams.get('next');
+    return next && isSafeRelativePath(next) ? next : '/prospects';
+  }
 
   // After Google OAuth completes, the Supabase session contains
   // provider_refresh_token (only on the immediate sign-in event, not on
@@ -33,7 +40,7 @@
     if (!refreshToken || !email) {
       // Restored session (refresh after first sign-in) — credentials already
       // saved in a previous callback. Just route to the app.
-      goto('/prospects', { replaceState: true });
+      goto(nextTarget(), { replaceState: true });
       return;
     }
 
@@ -43,7 +50,7 @@
         scope: scope ?? 'openid profile email https://www.googleapis.com/auth/gmail.send',
         email,
       });
-      goto('/prospects', { replaceState: true });
+      goto(nextTarget(), { replaceState: true });
     } catch (e) {
       if (e instanceof ApiError && e.status === 400) {
         // gmail.send scope not granted — sign the user out and ask them to retry

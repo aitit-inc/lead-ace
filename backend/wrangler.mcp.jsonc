@@ -5,9 +5,10 @@
   "compatibility_flags": ["nodejs_compat"],
   "account_id": "0633d5a3f3b6d8d4cb5b2c7fcf453494", // Leo.uno@surpassone.com's Account
   "vars": {
-    "ENVIRONMENT": "development"
+    "ENVIRONMENT": "development",
+    "FRONTEND_URL": "http://localhost:5173"
   },
-  // Secrets (set via wrangler secret or .dev.vars.mcp):
+  // Secrets (set via wrangler secret or .dev.vars):
   //   WEB_API_URL         (e.g. http://localhost:8787 for local dev, https://api.leadace.ai for prod)
   //   SUPABASE_JWT_SECRET (optional — JWKS used when SUPABASE_URL is set)
   //   SUPABASE_URL
@@ -23,7 +24,8 @@
     "production": {
       "name": "lead-ace-mcp",
       "vars": {
-        "ENVIRONMENT": "production"
+        "ENVIRONMENT": "production",
+        "FRONTEND_URL": "https://app.leadace.ai"
       },
       "routes": [
         {
