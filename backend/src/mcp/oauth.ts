@@ -57,40 +57,25 @@ const AUTH_CODE_TTL_SECONDS = 600        // 10 minutes (KV minimum is 60)
 const AUTH_SESSION_TTL_SECONDS = 600     // 10 minutes
 const CLIENT_TTL_SECONDS = 60 * 60 * 24 * 30 // 30 days
 
-const codeKey = (code: string) => `code:${code}`
-const sessionKey = (id: string) => `session:${id}`
-const clientKey = (id: string) => `client:${id}`
-
-async function getAuthCode(kv: KVNamespace, code: string): Promise<AuthCode | null> {
-  return await kv.get<AuthCode>(codeKey(code), 'json')
+function kvJson<T>(prefix: string, ttlSeconds: number) {
+  const k = (id: string) => `${prefix}:${id}`
+  return {
+    get: (kv: KVNamespace, id: string) => kv.get<T>(k(id), 'json'),
+    put: (kv: KVNamespace, id: string, value: T) =>
+      kv.put(k(id), JSON.stringify(value), { expirationTtl: ttlSeconds }),
+    del: (kv: KVNamespace, id: string) => kv.delete(k(id)),
+  }
 }
 
-async function putAuthCode(kv: KVNamespace, code: string, data: AuthCode): Promise<void> {
-  await kv.put(codeKey(code), JSON.stringify(data), { expirationTtl: AUTH_CODE_TTL_SECONDS })
-}
+const authCodes = kvJson<AuthCode>('code', AUTH_CODE_TTL_SECONDS)
+const authSessions = kvJson<AuthSession>('session', AUTH_SESSION_TTL_SECONDS)
+const registeredClients = kvJson<RegisteredClient>('client', CLIENT_TTL_SECONDS)
 
-async function deleteAuthCode(kv: KVNamespace, code: string): Promise<void> {
-  await kv.delete(codeKey(code))
-}
-
-async function getAuthSession(kv: KVNamespace, id: string): Promise<AuthSession | null> {
-  return await kv.get<AuthSession>(sessionKey(id), 'json')
-}
-
-async function putAuthSession(kv: KVNamespace, id: string, data: AuthSession): Promise<void> {
-  await kv.put(sessionKey(id), JSON.stringify(data), { expirationTtl: AUTH_SESSION_TTL_SECONDS })
-}
-
-async function deleteAuthSession(kv: KVNamespace, id: string): Promise<void> {
-  await kv.delete(sessionKey(id))
-}
-
-async function getRegisteredClient(kv: KVNamespace, id: string): Promise<RegisteredClient | null> {
-  return await kv.get<RegisteredClient>(clientKey(id), 'json')
-}
-
-async function putRegisteredClient(kv: KVNamespace, id: string, client: RegisteredClient): Promise<void> {
-  await kv.put(clientKey(id), JSON.stringify(client), { expirationTtl: CLIENT_TTL_SECONDS })
+function oauthError(code: string, status: number, description?: string): Response {
+  return Response.json(
+    description ? { error: code, error_description: description } : { error: code },
+    { status },
+  )
 }
 
 function generateId(): string {
@@ -154,7 +139,7 @@ export async function handleRegister(request: Request, kv: KVNamespace): Promise
   try {
     body = await request.json() as Record<string, unknown>
   } catch {
-    return Response.json({ error: 'invalid_request' }, { status: 400 })
+    return oauthError('invalid_request', 400)
   }
 
   const clientId = generateId()
@@ -167,7 +152,7 @@ export async function handleRegister(request: Request, kv: KVNamespace): Promise
     token_endpoint_auth_method: (body['token_endpoint_auth_method'] as string) ?? 'none',
   }
 
-  await putRegisteredClient(kv, clientId, client)
+  await registeredClients.put(kv, clientId, client)
 
   return Response.json({
     ...client,
@@ -208,7 +193,7 @@ export async function handleAuthorizeGet(
   }
 
   const sessionId = generateId()
-  await putAuthSession(kv, sessionId, {
+  await authSessions.put(kv, sessionId, {
     clientId: params.get('client_id') ?? '',
     codeChallenge,
     redirectUri,
@@ -231,22 +216,18 @@ export async function handleAuthorizeSessionInfo(
 ): Promise<Response> {
   const sessionId = new URL(request.url).searchParams.get('session')
   if (!sessionId) {
-    return Response.json({ error: 'invalid_request' }, { status: 400 })
+    return oauthError('invalid_request', 400)
   }
-  const session = await getAuthSession(kv, sessionId)
+  const session = await authSessions.get(kv, sessionId)
   if (!session || session.expiresAt < Date.now()) {
-    return Response.json({ error: 'invalid_session' }, { status: 404 })
+    return oauthError('invalid_session', 404)
   }
 
-  let clientName: string | undefined
-  if (session.clientId) {
-    const registered = await getRegisteredClient(kv, session.clientId)
-    clientName = registered?.client_name
-  }
+  const registered = session.clientId ? await registeredClients.get(kv, session.clientId) : null
 
   return Response.json({
     clientId: session.clientId,
-    clientName: clientName ?? null,
+    clientName: registered?.client_name ?? null,
     redirectUri: session.redirectUri,
     state: session.state,
   })
@@ -266,37 +247,27 @@ export async function handleAuthorizeFinalize(
   try {
     body = await request.json() as { session?: string; access_token?: string; refresh_token?: string }
   } catch {
-    return Response.json({ error: 'invalid_request' }, { status: 400 })
+    return oauthError('invalid_request', 400)
   }
 
-  const sessionId = body.session
-  const accessToken = body.access_token
-  const refreshToken = body.refresh_token
+  const { session: sessionId, access_token: accessToken, refresh_token: refreshToken } = body
   if (!sessionId || !accessToken || !refreshToken) {
-    return Response.json(
-      { error: 'invalid_request', error_description: 'session, access_token, refresh_token are required' },
-      { status: 400 },
-    )
+    return oauthError('invalid_request', 400, 'session, access_token, refresh_token are required')
   }
 
-  const userId = await verifySupabaseJwt(accessToken, jwtSecret, supabaseUrl)
+  const [userId, session] = await Promise.all([
+    verifySupabaseJwt(accessToken, jwtSecret, supabaseUrl),
+    authSessions.get(kv, sessionId),
+  ])
   if (!userId) {
-    return Response.json(
-      { error: 'invalid_token', error_description: 'Supabase access_token failed verification' },
-      { status: 401 },
-    )
+    return oauthError('invalid_token', 401, 'Supabase access_token failed verification')
   }
-
-  const session = await getAuthSession(kv, sessionId)
   if (!session || session.expiresAt < Date.now()) {
-    return Response.json(
-      { error: 'invalid_session', error_description: 'Authorization session expired or unknown' },
-      { status: 404 },
-    )
+    return oauthError('invalid_session', 404, 'Authorization session expired or unknown')
   }
 
   const code = generateId()
-  await putAuthCode(kv, code, {
+  await authCodes.put(kv, code, {
     clientId: session.clientId,
     codeChallenge: session.codeChallenge,
     redirectUri: session.redirectUri,
@@ -305,7 +276,7 @@ export async function handleAuthorizeFinalize(
     expiresAt: Date.now() + AUTH_CODE_TTL_SECONDS * 1000,
   })
 
-  await deleteAuthSession(kv, sessionId)
+  await authSessions.del(kv, sessionId)
 
   const redirectUrl = new URL(session.redirectUri)
   redirectUrl.searchParams.set('code', code)
@@ -334,7 +305,7 @@ export async function handleToken(
       body = Object.fromEntries(fd.entries()) as Record<string, string>
     }
   } catch {
-    return Response.json({ error: 'invalid_request' }, { status: 400 })
+    return oauthError('invalid_request', 400)
   }
 
   const grantType = body['grant_type']
@@ -346,31 +317,31 @@ export async function handleToken(
     return handleRefreshGrant(body, supabaseUrl, supabaseAnonKey)
   }
 
-  return Response.json({ error: 'unsupported_grant_type' }, { status: 400 })
+  return oauthError('unsupported_grant_type', 400)
 }
 
 async function handleAuthCodeGrant(body: Record<string, string>, kv: KVNamespace): Promise<Response> {
   const { code, code_verifier, redirect_uri } = body
 
   if (!code || !code_verifier) {
-    return Response.json({ error: 'invalid_request', error_description: 'code and code_verifier required' }, { status: 400 })
+    return oauthError('invalid_request', 400, 'code and code_verifier required')
   }
 
-  const stored = await getAuthCode(kv, code)
+  const stored = await authCodes.get(kv, code)
   if (!stored || stored.expiresAt < Date.now()) {
-    return Response.json({ error: 'invalid_grant', error_description: 'Invalid or expired authorization code' }, { status: 400 })
+    return oauthError('invalid_grant', 400, 'Invalid or expired authorization code')
   }
 
   if (redirect_uri && redirect_uri !== stored.redirectUri) {
-    return Response.json({ error: 'invalid_grant', error_description: 'redirect_uri mismatch' }, { status: 400 })
+    return oauthError('invalid_grant', 400, 'redirect_uri mismatch')
   }
 
   const pkceValid = await verifyPkce(code_verifier, stored.codeChallenge)
   if (!pkceValid) {
-    return Response.json({ error: 'invalid_grant', error_description: 'PKCE verification failed' }, { status: 400 })
+    return oauthError('invalid_grant', 400, 'PKCE verification failed')
   }
 
-  await deleteAuthCode(kv, code)
+  await authCodes.del(kv, code)
 
   return Response.json({
     access_token: stored.supabaseAccessToken,
@@ -387,7 +358,7 @@ async function handleRefreshGrant(
 ): Promise<Response> {
   const refreshToken = body['refresh_token']
   if (!refreshToken) {
-    return Response.json({ error: 'invalid_request', error_description: 'refresh_token required' }, { status: 400 })
+    return oauthError('invalid_request', 400, 'refresh_token required')
   }
 
   const res = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
@@ -400,7 +371,7 @@ async function handleRefreshGrant(
   })
 
   if (!res.ok) {
-    return Response.json({ error: 'invalid_grant', error_description: 'Refresh failed' }, { status: 400 })
+    return oauthError('invalid_grant', 400, 'Refresh failed')
   }
 
   const data = await res.json() as { access_token: string; refresh_token: string; expires_in?: number }

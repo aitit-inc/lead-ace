@@ -1,6 +1,7 @@
 import { supabase } from './auth';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8787';
+export const MCP_BASE = import.meta.env.VITE_MCP_URL ?? 'http://localhost:8788';
 
 export class ApiError extends Error {
   constructor(

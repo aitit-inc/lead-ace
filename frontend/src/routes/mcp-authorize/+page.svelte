@@ -3,9 +3,8 @@
   import { page } from '$app/state';
   import { auth } from '$lib/stores/auth';
   import { supabase } from '$lib/auth';
+  import { MCP_BASE } from '$lib/api';
   import Logo from '$lib/components/Logo.svelte';
-
-  const MCP_URL = import.meta.env.VITE_MCP_URL ?? 'http://localhost:8788';
 
   type Status = 'loading' | 'ready' | 'submitting' | 'success' | 'error';
   let status = $state<Status>('loading');
@@ -37,7 +36,7 @@
   async function loadSessionInfo() {
     try {
       const res = await fetch(
-        `${MCP_URL}/authorize/session?session=${encodeURIComponent(sessionId)}`,
+        `${MCP_BASE}/authorize/session?session=${encodeURIComponent(sessionId)}`,
       );
       if (res.status === 404) {
         throw new Error('Authorization request expired. Run /setup again to start a fresh one.');
@@ -72,7 +71,7 @@
       return;
     }
     try {
-      const res = await fetch(`${MCP_URL}/authorize/finalize`, {
+      const res = await fetch(`${MCP_BASE}/authorize/finalize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -107,22 +106,27 @@
         if (sessionState) url.searchParams.set('state', sessionState);
         window.location.href = url.toString();
         return;
-      } catch {
-        // Fall through to home navigation
-      }
+      } catch { /* invalid redirect_uri — go home below */ }
     }
     goto('/');
   }
+
+  let copiedTimer: ReturnType<typeof setTimeout> | null = null;
 
   async function copyRedirect() {
     try {
       await navigator.clipboard.writeText(finalRedirect);
       copied = true;
-      setTimeout(() => (copied = false), 2000);
+      if (copiedTimer) clearTimeout(copiedTimer);
+      copiedTimer = setTimeout(() => (copied = false), 2000);
     } catch {
       // Clipboard API unavailable — user can still select & copy manually.
     }
   }
+
+  $effect(() => () => {
+    if (copiedTimer) clearTimeout(copiedTimer);
+  });
 
   let displayClient = $derived(clientName?.trim() || 'Claude Code');
 </script>
