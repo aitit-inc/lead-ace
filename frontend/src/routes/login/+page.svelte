@@ -20,15 +20,20 @@
   async function handleGoogle() {
     error = '';
     loading = true;
+    // Persist `next` in sessionStorage instead of round-tripping through the
+    // OAuth redirect URL. Supabase's allowlist-based redirect validation can
+    // strip query params, which silently breaks deep-link returns. Storage
+    // is per-tab, so concurrent OAuth flows in different tabs do not collide.
     const next = page.url.searchParams.get('next');
-    const callbackUrl = new URL('/auth/callback', window.location.origin);
     if (next && isSafeRelativePath(next)) {
-      callbackUrl.searchParams.set('next', next);
+      sessionStorage.setItem('postLoginNext', next);
+    } else {
+      sessionStorage.removeItem('postLoginNext');
     }
     const { error: err } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: callbackUrl.toString(),
+        redirectTo: `${window.location.origin}/auth/callback`,
         scopes: GOOGLE_SCOPES,
         queryParams: {
           // access_type=offline + prompt=consent forces Google to issue a

@@ -7,12 +7,14 @@
 
   const MCP_URL = import.meta.env.VITE_MCP_URL ?? 'http://localhost:8788';
 
-  type Status = 'loading' | 'ready' | 'submitting' | 'error';
+  type Status = 'loading' | 'ready' | 'submitting' | 'success' | 'error';
   let status = $state<Status>('loading');
   let errorMessage = $state('');
   let clientName = $state<string | null>(null);
   let redirectUri = $state('');
   let sessionState = $state('');
+  let finalRedirect = $state('');
+  let copied = $state(false);
 
   let sessionId = $derived(page.url.searchParams.get('session') ?? '');
 
@@ -83,7 +85,14 @@
       if (!res.ok || !body.redirect) {
         throw new Error(body.error_description || body.error || 'Failed to authorize.');
       }
-      window.location.href = body.redirect;
+      finalRedirect = body.redirect;
+      status = 'success';
+      // Auto-navigate after a short pause so the user can see the success
+      // screen and copy the URL if Claude Code's loopback handler doesn't
+      // catch it (e.g. when the CLI prompts for a manual paste fallback).
+      setTimeout(() => {
+        window.location.href = finalRedirect;
+      }, 1500);
     } catch (e) {
       errorMessage = e instanceof Error ? e.message : 'Failed to authorize.';
       status = 'error';
@@ -105,6 +114,16 @@
     goto('/');
   }
 
+  async function copyRedirect() {
+    try {
+      await navigator.clipboard.writeText(finalRedirect);
+      copied = true;
+      setTimeout(() => (copied = false), 2000);
+    } catch {
+      // Clipboard API unavailable — user can still select & copy manually.
+    }
+  }
+
   let displayClient = $derived(clientName?.trim() || 'Claude Code');
 </script>
 
@@ -121,6 +140,40 @@
       <p class="text-text-muted text-sm mb-2">Authorization error</p>
       <p class="text-danger text-sm mb-6">{errorMessage}</p>
       <a href="/" class="text-text-muted hover:text-text text-xs underline">Back to LeadAce</a>
+    {:else if status === 'success'}
+      <p class="text-text-muted text-sm mb-2">Authorized</p>
+      <p class="text-text text-sm mb-4">
+        {displayClient} has access to your LeadAce account.
+      </p>
+      <p class="text-xs text-text-muted leading-relaxed mb-3">
+        Returning you to {displayClient}. You can close this tab once your terminal resumes.
+      </p>
+      <p class="text-xs text-text-muted leading-relaxed mb-2">
+        If your terminal is waiting for a URL instead of resuming automatically, copy this and
+        paste it back into the terminal:
+      </p>
+      <div class="flex items-center gap-2 mb-2">
+        <input
+          type="text"
+          readonly
+          value={finalRedirect}
+          class="flex-1 min-w-0 rounded border border-border bg-surface px-2 py-1 font-mono text-[11px] text-text"
+          onclick={(e) => (e.currentTarget as HTMLInputElement).select()}
+        />
+        <button
+          type="button"
+          onclick={copyRedirect}
+          class="shrink-0 rounded border border-border bg-page px-2 py-1 text-[11px] text-text hover:bg-surface"
+        >
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      <a
+        href={finalRedirect}
+        class="block text-xs text-text-muted hover:text-text underline"
+      >
+        Or click here to return now
+      </a>
     {:else}
       <p class="text-text-muted text-sm mb-6">
         Authorize <span class="font-medium text-text">{displayClient}</span> to access your LeadAce account

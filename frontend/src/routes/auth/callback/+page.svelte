@@ -1,6 +1,5 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { page } from '$app/state';
   import { auth } from '$lib/stores/auth';
   import { supabase } from '$lib/auth';
   import { post, ApiError } from '$lib/api';
@@ -10,7 +9,13 @@
   let errorMessage = $state('');
 
   function nextTarget(): string {
-    const next = page.url.searchParams.get('next');
+    let next: string | null = null;
+    try {
+      next = sessionStorage.getItem('postLoginNext');
+      sessionStorage.removeItem('postLoginNext');
+    } catch {
+      // sessionStorage unavailable (private browsing, etc.) — fall through.
+    }
     return next && isSafeRelativePath(next) ? next : '/prospects';
   }
 
