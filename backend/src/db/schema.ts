@@ -43,7 +43,7 @@ export const channelEnum = pgEnum('channel', [
   'sns_linkedin',
 ])
 
-export const outreachStatusEnum = pgEnum('outreach_status', ['sent', 'failed'])
+export const outreachStatusEnum = pgEnum('outreach_status', ['sent', 'failed', 'pending_review'])
 
 export const sentimentEnum = pgEnum('sentiment', ['positive', 'neutral', 'negative'])
 

@@ -22,6 +22,7 @@ allowed-tools:
   - mcp__plugin_lead-ace_api__update_prospect_status
   - mcp__plugin_lead-ace_api__get_document
   - mcp__plugin_lead-ace_api__get_master_document
+  - mcp__plugin_lead-ace_api__get_project_settings
 ---
 
 # Outbound - Outbound Sales Execution
@@ -37,10 +38,13 @@ For each prospect, sends a message via an available channel and records the resu
 - Project ID: `$0` (required)
 - Approach count: `$1` (default: 30)
 
-Load documents via MCP:
+Load documents and project settings via MCP:
 
 Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "business"`.
 Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "sales_strategy"`.
+Call `mcp__plugin_lead-ace_api__get_project_settings` with `projectId: "$0"`. Note the `outboundMode` value — it controls how step 3 sends emails:
+- `send` (default) → send immediately via the user's connected Gmail
+- `draft` → store the composed email as a LeadAce draft (the user reviews and sends it from https://app.leadace.ai/drafts)
 
 Pay particular attention to these sections in the sales_strategy document:
 - **Outreach mode**: `precision` (deep personalization) or `volume` (template-based semi-personalization). Default to `precision` if not set
@@ -88,7 +92,9 @@ Retrieve email guidelines via `mcp__plugin_lead-ace_api__get_master_document` wi
 - **Precision mode**: Refer to each prospect's `overview` and `matchReason`, and write the entire body tailored to the recipient -- not just the opening. Reference specific numbers, achievements, and initiatives of the target company. Generic openers like "I visited your website" alone are insufficient
 - **Volume mode**: Use the SALES_STRATEGY.md email template as a base, adjusting the opening (why you're reaching out) and the problem statement in 2 places based on `overview` / `matchReason`. The solution through CTA can follow the template structure as-is
 
-**Send email via MCP (Gmail API):**
+**Branch on `outboundMode` from step 1:**
+
+#### `send` mode (default) — send immediately
 
 Call `mcp__plugin_lead-ace_api__send_email_and_record` with:
 - `projectId: "$0"`
@@ -101,9 +107,22 @@ The MCP tool sends the email through the user's connected Gmail (gmail.send scop
 
 If the tool returns `error: "Gmail not connected"` or `"Gmail token revoked"` (status 412), abort all email sending for this run and surface the message — the user must reconnect Gmail in the web app's Settings.
 
-**Note:**
+#### `draft` mode — store a draft in LeadAce (no auto-send)
+
+Do **not** call any Gmail MCP. The draft is stored as an outreach log row that the user reviews and sends from the LeadAce web app (Drafts page). Sending happens through the SaaS backend's gmail.send, so the quota / stats / reply tracking stay accurate.
+
+Call `mcp__plugin_lead-ace_api__record_outreach` with:
+- `projectId: "$0"`
+- `prospectId`: the prospect's id
+- `channel: "email"`
+- `subject`: subject line
+- `body`: complete body including signature
+- `status: "pending_review"`
+
+`pending_review` does not count against the outreach quota — only actual sends do. The recipient is implicit (the prospect's primary email) and resolved at send time. cc / bcc are not yet supported in draft mode.
+
+**Notes (both modes):**
 - The body must be the complete content including the signature
-- Gmail MCP (`gmail_create_draft`) can only create drafts -- it cannot send
 - Sender alias support is not yet available; emails always send from the user's primary Gmail address
 
 ### 4. Contact Form Submission
@@ -178,5 +197,6 @@ After all prospects are processed, if successes (sent) fall short of the target 
 Report the following:
 - Number of prospects approached
 - Attempts and successes per channel, success rate (Email: X successes/Y attempts (XX%), Form: X successes/Y attempts (XX%), SNS: X successes/Y attempts (XX%))
+- In `draft` mode, also report drafts created (Drafts: N) and remind the user to review and send them at https://app.leadace.ai/drafts
 - Number of failures and reasons
-- Guide the user to run `/check-results` as the next step
+- Guide the user to run `/check-results` as the next step (or, in draft mode, after the user sends the reviewed drafts)

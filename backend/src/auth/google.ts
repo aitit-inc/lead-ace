@@ -152,3 +152,75 @@ export async function loadGmailRefreshToken(
   if (!row) return null
   return { refreshToken: row.refresh_token, email: row.email }
 }
+
+// Discriminated union so callers can map to HTTP status without re-implementing
+// the same error mapping in every route handler.
+export type GmailSendForUserResult =
+  | { ok: true; messageId: string; threadId: string; from: string }
+  | { ok: false; httpStatus: 412; error: 'Gmail not connected' | 'Gmail token revoked'; detail: string }
+  | { ok: false; httpStatus: 502; error: 'Send failed'; detail: string; from: string }
+
+export async function sendGmailForUser(
+  db: Db,
+  args: {
+    tenantId: string
+    userId: string
+    encryptionKey: string
+    clientId: string
+    clientSecret: string
+    to: string[]
+    cc?: string[]
+    bcc?: string[]
+    subject: string
+    body: string
+    inReplyTo?: string
+  },
+): Promise<GmailSendForUserResult> {
+  const creds = await loadGmailRefreshToken(db, args)
+  if (!creds) {
+    return {
+      ok: false,
+      httpStatus: 412,
+      error: 'Gmail not connected',
+      detail: 'Connect your Google account in Settings to enable email sending.',
+    }
+  }
+
+  let accessToken: string
+  try {
+    accessToken = await refreshGoogleAccessToken(creds.refreshToken, args.clientId, args.clientSecret)
+  } catch (e) {
+    if (e instanceof GoogleAuthError && (e.status === 400 || e.status === 401)) {
+      return {
+        ok: false,
+        httpStatus: 412,
+        error: 'Gmail token revoked',
+        detail: 'Reconnect your Google account in Settings.',
+      }
+    }
+    throw e
+  }
+
+  const rfc822 = buildRfc822({
+    from: creds.email,
+    to: args.to,
+    cc: args.cc,
+    bcc: args.bcc,
+    subject: args.subject,
+    body: args.body,
+    inReplyTo: args.inReplyTo,
+  })
+
+  try {
+    const result = await sendGmailMessage({ accessToken, rfc822 })
+    return { ok: true, messageId: result.id, threadId: result.threadId, from: creds.email }
+  } catch (e) {
+    return {
+      ok: false,
+      httpStatus: 502,
+      error: 'Send failed',
+      detail: e instanceof Error ? e.message : String(e),
+      from: creds.email,
+    }
+  }
+}

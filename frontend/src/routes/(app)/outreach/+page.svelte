@@ -1,7 +1,7 @@
 <script lang="ts">
   import { get } from '$lib/api';
   import { activeProject } from '$lib/stores/project';
-  import type { OutreachLog } from '$lib/types';
+  import type { OutreachLog, OutreachStatus } from '$lib/types';
   import ChannelBadge from '$lib/components/ChannelBadge.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
 
@@ -31,6 +31,17 @@
   function truncate(text: string, max = 80) {
     return text.length > max ? text.slice(0, max) + '...' : text;
   }
+
+  function statusDot(s: OutreachStatus): string {
+    switch (s) {
+      case 'sent':
+        return 'bg-success';
+      case 'pending_review':
+        return 'bg-text-muted';
+      case 'failed':
+        return 'bg-danger';
+    }
+  }
 </script>
 
 <h2 class="text-lg font-semibold text-text mb-4">Outreach Logs</h2>
@@ -59,11 +70,7 @@
         <span class="text-text-secondary text-xs font-mono">{formatDate(log.sentAt)}</span>
         <span><ChannelBadge channel={log.channel} /></span>
         <span>
-          <span
-            class="inline-block h-1.5 w-1.5 rounded-full {log.status === 'sent'
-              ? 'bg-success'
-              : 'bg-danger'}"
-          ></span>
+          <span class="inline-block h-1.5 w-1.5 rounded-full {statusDot(log.status)}"></span>
           <span class="text-xs text-text-secondary ml-1">{log.status}</span>
         </span>
         <span class="text-text truncate">
@@ -86,11 +93,7 @@
             <span class="text-[11px] text-text-muted font-mono truncate">{formatDate(log.sentAt)}</span>
           </div>
           <div class="flex items-center gap-1 shrink-0">
-            <span
-              class="inline-block h-1.5 w-1.5 rounded-full {log.status === 'sent'
-                ? 'bg-success'
-                : 'bg-danger'}"
-            ></span>
+            <span class="inline-block h-1.5 w-1.5 rounded-full {statusDot(log.status)}"></span>
             <span class="text-[11px] text-text-secondary">{log.status}</span>
           </div>
         </div>

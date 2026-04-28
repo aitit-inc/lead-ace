@@ -356,14 +356,15 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
   // --- record_outreach ---
   server.tool(
     'record_outreach',
-    'Record an outreach log entry after sending an email, form submission, or SNS DM. Updates prospect status to "contacted".',
+    'Record an outreach log entry after sending an email, form submission, or SNS DM. In draft mode use status "pending_review" to store the composed email for later review in the LeadAce web app. Marks the prospect "contacted" except on failure.',
     {
       projectId: z.string().describe('Project name or ID'),
       prospectId: z.number().int(),
       channel: z.enum(['email', 'form', 'sns_twitter', 'sns_linkedin']),
       subject: z.string().optional(),
       body: z.string(),
-      status: z.enum(['sent', 'failed']).default('sent'),
+      status: z.enum(['sent', 'failed', 'pending_review']).default('sent')
+        .describe('"sent" = delivered. "failed" = send error. "pending_review" = draft created (outbound_mode = draft).'),
       sentAt: z.string().datetime().optional().describe('ISO 8601 timestamp; defaults to now'),
       errorMessage: z.string().optional(),
     },
@@ -793,7 +794,7 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
     {
       projectId: z.string().describe('Project name or ID'),
       outboundMode: z.enum(OUTBOUND_MODES).optional()
-        .describe('"send" = send immediately. "draft" = create Gmail drafts only.'),
+        .describe('"send" = send immediately. "draft" = store as LeadAce drafts for review (user sends from app.leadace.ai/drafts).'),
       senderEmailAlias: z.email().nullable().optional()
         .describe('Gmail Send-As alias to use as From: address. null = primary Gmail.'),
       senderDisplayName: z.string().min(1).max(200).nullable().optional(),

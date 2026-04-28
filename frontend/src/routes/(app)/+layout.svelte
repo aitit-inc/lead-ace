@@ -22,6 +22,7 @@
   const nav = [
     { href: '/prospects', label: 'Prospects' },
     { href: '/outreach', label: 'Outreach' },
+    { href: '/drafts', label: 'Drafts' },
     { href: '/responses', label: 'Responses' },
     { href: '/evaluations', label: 'Evaluations' },
     { href: '/documents', label: 'Documents' },

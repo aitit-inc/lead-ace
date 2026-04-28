@@ -344,8 +344,10 @@
           <option value="draft">Create drafts only</option>
         </select>
         <p class="mt-1 text-xs text-text-muted">
-          Draft mode creates Gmail drafts via the Gmail MCP instead of sending. Outreach is
-          recorded with status <span class="font-mono">pending_review</span>.
+          In draft mode, <span class="font-mono">/outbound</span> stores composed messages here as
+          drafts (status <span class="font-mono">pending_review</span>) instead of sending. Review
+          and send each one from the <a href="/drafts" class="underline hover:text-text">Drafts</a>
+          page; sending counts toward your monthly outreach quota.
         </p>
       </div>
 

@@ -55,7 +55,7 @@ Call `mcp__plugin_lead-ace_api__get_gmail_status`. Record `connected` (boolean) 
 If not connected, instruct the user: "Sign in at https://app.leadace.ai with Google (Settings -> Connect Google) to enable email sending, then re-run /setup. Without this, no emails can be sent." This does not abort the skill -- the user can still proceed with form-only or SNS-only outreach.
 
 #### 2-2. Gmail MCP (claude.ai built-in) (ask)
-Use AskUserQuestion to ask: "Have you connected the Gmail MCP in claude.ai? (Required for reply checking in /check-results and draft creation.)" — options: `yes` / `no` / `unsure`.
+Use AskUserQuestion to ask: "Have you connected the Gmail MCP in claude.ai? (Required for reply checking in /check-results and for auto-drafting replies to positive responses.)" — options: `yes` / `no` / `unsure`.
 
 #### 2-3. Claude in Chrome extension (ask)
 Use AskUserQuestion to ask: "Are you using the Claude in Chrome extension? (Required for contact-form submission and SNS DMs in /outbound, plus SNS reply checking in /check-results.)" — options: `yes` / `no` / `unsure`.

@@ -1,16 +1,17 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { eq, and, desc } from 'drizzle-orm'
-import { projects, outreachLogs, projectProspects, channelEnum } from '../../db/schema'
-import { getRemainingOutreachQuota } from '../plan-limits'
+import { eq, and, desc, ne, sql } from 'drizzle-orm'
 import {
-  GoogleAuthError,
-  buildRfc822,
-  loadGmailRefreshToken,
-  refreshGoogleAccessToken,
-  sendGmailMessage,
-} from '../../auth/google'
+  outreachLogs,
+  outreachStatusEnum,
+  projectProspects,
+  prospects,
+  channelEnum,
+} from '../../db/schema'
+import { getRemainingOutreachQuota } from '../plan-limits'
+import { sendGmailForUser } from '../../auth/google'
+import { verifyProject } from '../project-helpers'
 import type { Env, Variables } from '../types'
 
 const recordOutreachSchema = z.object({
@@ -19,7 +20,7 @@ const recordOutreachSchema = z.object({
   channel: z.enum(channelEnum.enumValues),
   subject: z.string().optional(),
   body: z.string().min(1),
-  status: z.enum(['sent', 'failed']).default('sent'),
+  status: z.enum(outreachStatusEnum.enumValues).default('sent'),
   sentAt: z.string().datetime().optional(),
   errorMessage: z.string().optional(),
 })
@@ -32,18 +33,10 @@ outreachRouter.post('/outreach', zValidator('json', recordOutreachSchema), async
   const tenantId = c.get('tenantId')
   const db = c.get('db')
 
-  // Verify project ownership
-  const [project] = await db
-    .select({ id: projects.id })
-    .from(projects)
-    .where(and(eq(projects.id, input.projectId), eq(projects.tenantId, tenantId)))
-    .limit(1)
-
-  if (!project) {
+  if (!(await verifyProject(db, input.projectId, tenantId))) {
     return c.json({ error: 'Project not found' }, 404)
   }
 
-  // Quota guard: reject if outreach limit exceeded (only for successful sends)
   if (input.status === 'sent') {
     const quota = await getRemainingOutreachQuota(db, tenantId)
     if (quota.remaining !== null && quota.remaining <= 0) {
@@ -71,8 +64,9 @@ outreachRouter.post('/outreach', zValidator('json', recordOutreachSchema), async
     })
     .returning({ id: outreachLogs.id })
 
-  // If sent successfully, update project_prospects status to 'contacted'
-  if (input.status === 'sent' && log) {
+  // Drafts shouldn't be re-targeted by get_outbound_targets; only 'failed'
+  // keeps the prospect available for retry.
+  if ((input.status === 'sent' || input.status === 'pending_review') && log) {
     await db
       .update(projectProspects)
       .set({ status: 'contacted', updatedAt: new Date() })
@@ -80,7 +74,7 @@ outreachRouter.post('/outreach', zValidator('json', recordOutreachSchema), async
         and(
           eq(projectProspects.projectId, input.projectId),
           eq(projectProspects.prospectId, input.prospectId),
-          eq(projectProspects.status, 'new'), // only update if still 'new'
+          eq(projectProspects.status, 'new'),
         ),
       )
   }
@@ -110,17 +104,13 @@ outreachRouter.post(
     const userId = c.get('userId')
     const db = c.get('db')
 
-    const [project] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(and(eq(projects.id, input.projectId), eq(projects.tenantId, tenantId)))
-      .limit(1)
-
-    if (!project) {
+    const [verified, quota] = await Promise.all([
+      verifyProject(db, input.projectId, tenantId),
+      getRemainingOutreachQuota(db, tenantId),
+    ])
+    if (!verified) {
       return c.json({ error: 'Project not found' }, 404)
     }
-
-    const quota = await getRemainingOutreachQuota(db, tenantId)
     if (quota.remaining !== null && quota.remaining <= 0) {
       return c.json(
         {
@@ -131,43 +121,12 @@ outreachRouter.post(
       )
     }
 
-    const creds = await loadGmailRefreshToken(db, {
+    const result = await sendGmailForUser(db, {
       tenantId,
       userId,
       encryptionKey: c.env.GMAIL_TOKEN_ENCRYPTION_KEY,
-    })
-    if (!creds) {
-      return c.json(
-        {
-          error: 'Gmail not connected',
-          detail: 'Connect your Google account in Settings to enable email sending.',
-        },
-        412,
-      )
-    }
-
-    let accessToken: string
-    try {
-      accessToken = await refreshGoogleAccessToken(
-        creds.refreshToken,
-        c.env.GOOGLE_CLIENT_ID,
-        c.env.GOOGLE_CLIENT_SECRET,
-      )
-    } catch (e) {
-      if (e instanceof GoogleAuthError && (e.status === 400 || e.status === 401)) {
-        return c.json(
-          {
-            error: 'Gmail token revoked',
-            detail: 'Reconnect your Google account in Settings.',
-          },
-          412,
-        )
-      }
-      throw e
-    }
-
-    const rfc822 = buildRfc822({
-      from: creds.email,
+      clientId: c.env.GOOGLE_CLIENT_ID,
+      clientSecret: c.env.GOOGLE_CLIENT_SECRET,
       to: input.to,
       cc: input.cc,
       bcc: input.bcc,
@@ -176,15 +135,8 @@ outreachRouter.post(
       inReplyTo: input.inReplyTo,
     })
 
-    let messageId: string | null = null
-    let threadId: string | null = null
-    let sendError: string | null = null
-    try {
-      const result = await sendGmailMessage({ accessToken, rfc822 })
-      messageId = result.id
-      threadId = result.threadId
-    } catch (e) {
-      sendError = e instanceof Error ? e.message : String(e)
+    if (!result.ok && result.httpStatus === 412) {
+      return c.json({ error: result.error, detail: result.detail }, 412)
     }
 
     const sentAt = new Date()
@@ -197,13 +149,13 @@ outreachRouter.post(
         channel: 'email',
         subject: input.subject,
         body: input.body,
-        status: sendError ? 'failed' : 'sent',
+        status: result.ok ? 'sent' : 'failed',
         sentAt,
-        errorMessage: sendError,
+        errorMessage: result.ok ? null : result.detail,
       })
       .returning({ id: outreachLogs.id })
 
-    if (!sendError && log) {
+    if (result.ok && log) {
       await db
         .update(projectProspects)
         .set({ status: 'contacted', updatedAt: sentAt })
@@ -216,14 +168,16 @@ outreachRouter.post(
         )
     }
 
-    if (sendError) {
-      return c.json({ error: 'Send failed', detail: sendError, outreachId: log?.id }, 502)
+    if (!result.ok) {
+      return c.json({ error: result.error, detail: result.detail, outreachId: log?.id }, 502)
     }
-    return c.json({ outreachId: log?.id, messageId, threadId }, 201)
+    return c.json({ outreachId: log?.id, messageId: result.messageId, threadId: result.threadId }, 201)
   },
 )
 
-// GET /projects/:id/outreach/recent — recent outreach logs for check-results
+// GET /projects/:id/outreach/recent — recent sent/failed outreach logs for check-results.
+// Drafts (status='pending_review') are excluded so check-results doesn't mistake them
+// for actually-sent emails.
 outreachRouter.get('/projects/:id/outreach/recent', async (c) => {
   const projectId = c.req.param('id')
   const tenantId = c.get('tenantId')
@@ -231,13 +185,7 @@ outreachRouter.get('/projects/:id/outreach/recent', async (c) => {
   const limit = limitParam ? Math.min(parseInt(limitParam, 10), 200) : 100
   const db = c.get('db')
 
-  const [project] = await db
-    .select({ id: projects.id })
-    .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
-    .limit(1)
-
-  if (!project) {
+  if (!(await verifyProject(db, projectId, tenantId))) {
     return c.json({ error: 'Project not found' }, 404)
   }
 
@@ -253,9 +201,212 @@ outreachRouter.get('/projects/:id/outreach/recent', async (c) => {
       errorMessage: outreachLogs.errorMessage,
     })
     .from(outreachLogs)
-    .where(eq(outreachLogs.projectId, projectId))
+    .where(and(
+      eq(outreachLogs.projectId, projectId),
+      ne(outreachLogs.status, 'pending_review'),
+    ))
     .orderBy(desc(outreachLogs.sentAt))
     .limit(limit)
 
   return c.json({ logs })
+})
+
+// GET /projects/:id/drafts — list pending_review drafts for review
+outreachRouter.get('/projects/:id/drafts', async (c) => {
+  const projectId = c.req.param('id')
+  const tenantId = c.get('tenantId')
+  const db = c.get('db')
+
+  if (!(await verifyProject(db, projectId, tenantId))) {
+    return c.json({ error: 'Project not found' }, 404)
+  }
+
+  const drafts = await db
+    .select({
+      id: outreachLogs.id,
+      prospectId: outreachLogs.prospectId,
+      prospectName: prospects.name,
+      prospectEmail: prospects.email,
+      channel: outreachLogs.channel,
+      subject: outreachLogs.subject,
+      body: outreachLogs.body,
+      createdAt: outreachLogs.sentAt,
+    })
+    .from(outreachLogs)
+    .innerJoin(prospects, eq(prospects.id, outreachLogs.prospectId))
+    .where(and(
+      eq(outreachLogs.projectId, projectId),
+      eq(outreachLogs.status, 'pending_review'),
+    ))
+    .orderBy(desc(outreachLogs.sentAt))
+
+  return c.json({ drafts })
+})
+
+const editDraftSchema = z
+  .object({
+    subject: z.string().nullable().optional(),
+    body: z.string().min(1).optional(),
+  })
+  .strict()
+
+// PUT /outreach/drafts/:id — edit a pending_review draft's subject/body
+outreachRouter.put(
+  '/outreach/drafts/:id',
+  zValidator('json', editDraftSchema),
+  async (c) => {
+    const id = parseInt(c.req.param('id'), 10)
+    if (Number.isNaN(id)) return c.json({ error: 'Invalid id' }, 400)
+    const tenantId = c.get('tenantId')
+    const db = c.get('db')
+    const patch = c.req.valid('json')
+
+    const [updated] = await db
+      .update(outreachLogs)
+      .set({
+        ...(patch.subject !== undefined ? { subject: patch.subject } : {}),
+        ...(patch.body !== undefined ? { body: patch.body } : {}),
+      })
+      .where(and(
+        eq(outreachLogs.id, id),
+        eq(outreachLogs.tenantId, tenantId),
+        eq(outreachLogs.status, 'pending_review'),
+      ))
+      .returning({ id: outreachLogs.id })
+
+    if (!updated) {
+      return c.json({ error: 'Draft not found or already sent' }, 404)
+    }
+    return c.json({ id: updated.id })
+  },
+)
+
+// POST /outreach/drafts/:id/send — send a pending_review draft via gmail.send.
+// On gmail failure the row flips to status='failed'; the prospect stays
+// 'contacted' (re-outreach would create a new row).
+outreachRouter.post('/outreach/drafts/:id/send', async (c) => {
+  const id = parseInt(c.req.param('id'), 10)
+  if (Number.isNaN(id)) return c.json({ error: 'Invalid id' }, 400)
+  const tenantId = c.get('tenantId')
+  const userId = c.get('userId')
+  const db = c.get('db')
+
+  const [[draft], quota] = await Promise.all([
+    db
+      .select({
+        id: outreachLogs.id,
+        subject: outreachLogs.subject,
+        body: outreachLogs.body,
+        status: outreachLogs.status,
+        prospectEmail: prospects.email,
+        doNotContact: prospects.doNotContact,
+      })
+      .from(outreachLogs)
+      .innerJoin(prospects, eq(prospects.id, outreachLogs.prospectId))
+      .where(and(eq(outreachLogs.id, id), eq(outreachLogs.tenantId, tenantId)))
+      .limit(1),
+    getRemainingOutreachQuota(db, tenantId),
+  ])
+
+  if (!draft) return c.json({ error: 'Draft not found' }, 404)
+  if (draft.status !== 'pending_review') {
+    return c.json({ error: 'Draft already sent or not in review' }, 409)
+  }
+  if (!draft.prospectEmail) {
+    return c.json({ error: 'Prospect has no email address' }, 422)
+  }
+  if (draft.doNotContact) {
+    return c.json({ error: 'Prospect is on do-not-contact list' }, 422)
+  }
+  if (quota.remaining !== null && quota.remaining <= 0) {
+    return c.json(
+      {
+        error: 'Outreach limit reached',
+        detail: `Your ${quota.plan} plan allows ${quota.limit} outreach actions. Upgrade your plan to continue.`,
+      },
+      403,
+    )
+  }
+
+  const result = await sendGmailForUser(db, {
+    tenantId,
+    userId,
+    encryptionKey: c.env.GMAIL_TOKEN_ENCRYPTION_KEY,
+    clientId: c.env.GOOGLE_CLIENT_ID,
+    clientSecret: c.env.GOOGLE_CLIENT_SECRET,
+    to: [draft.prospectEmail],
+    subject: draft.subject ?? '',
+    body: draft.body,
+  })
+
+  if (!result.ok && result.httpStatus === 412) {
+    return c.json({ error: result.error, detail: result.detail }, 412)
+  }
+
+  await db
+    .update(outreachLogs)
+    .set({
+      status: result.ok ? 'sent' : 'failed',
+      sentAt: new Date(),
+      errorMessage: result.ok ? null : result.detail,
+    })
+    .where(eq(outreachLogs.id, draft.id))
+
+  if (!result.ok) {
+    return c.json({ error: result.error, detail: result.detail, outreachId: draft.id }, 502)
+  }
+  return c.json({ outreachId: draft.id, messageId: result.messageId, threadId: result.threadId })
+})
+
+// DELETE /outreach/drafts/:id — discard a pending_review draft.
+// If this was the only outreach for that prospect, revert prospect status to
+// 'new' so /outbound can pick it up again.
+outreachRouter.delete('/outreach/drafts/:id', async (c) => {
+  const id = parseInt(c.req.param('id'), 10)
+  if (Number.isNaN(id)) return c.json({ error: 'Invalid id' }, 400)
+  const tenantId = c.get('tenantId')
+  const db = c.get('db')
+
+  // Atomic delete-if-pending: either we delete a pending_review row (RETURNING
+  // the prospect/project) or no row matches and we surface 404/409 by inspecting
+  // why. We avoid the read-then-delete race that would otherwise let a concurrent
+  // /send and /delete both succeed.
+  const [deleted] = await db
+    .delete(outreachLogs)
+    .where(and(
+      eq(outreachLogs.id, id),
+      eq(outreachLogs.tenantId, tenantId),
+      eq(outreachLogs.status, 'pending_review'),
+    ))
+    .returning({
+      projectId: outreachLogs.projectId,
+      prospectId: outreachLogs.prospectId,
+    })
+
+  if (!deleted) {
+    const [exists] = await db
+      .select({ status: outreachLogs.status })
+      .from(outreachLogs)
+      .where(and(eq(outreachLogs.id, id), eq(outreachLogs.tenantId, tenantId)))
+      .limit(1)
+    if (!exists) return c.json({ error: 'Draft not found' }, 404)
+    return c.json({ error: 'Cannot discard a sent or failed message' }, 409)
+  }
+
+  // Revert prospect to 'new' iff no other outreach exists for this pair.
+  await db
+    .update(projectProspects)
+    .set({ status: 'new', updatedAt: new Date() })
+    .where(and(
+      eq(projectProspects.projectId, deleted.projectId),
+      eq(projectProspects.prospectId, deleted.prospectId),
+      eq(projectProspects.status, 'contacted'),
+      sql`NOT EXISTS (
+        SELECT 1 FROM ${outreachLogs}
+        WHERE ${outreachLogs.projectId} = ${deleted.projectId}
+          AND ${outreachLogs.prospectId} = ${deleted.prospectId}
+      )`,
+    ))
+
+  return c.json({ deleted: true })
 })

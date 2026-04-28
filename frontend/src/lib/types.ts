@@ -1,6 +1,6 @@
 export type ProspectStatus = 'new' | 'contacted' | 'responded' | 'converted' | 'rejected' | 'inactive';
 export type Channel = 'email' | 'form' | 'sns_twitter' | 'sns_linkedin';
-export type OutreachStatus = 'sent' | 'failed';
+export type OutreachStatus = 'sent' | 'failed' | 'pending_review';
 export type Sentiment = 'positive' | 'neutral' | 'negative';
 export type ResponseType = 'reply' | 'auto_reply' | 'bounce' | 'meeting_request' | 'rejection';
 export type OutboundMode = 'send' | 'draft';
@@ -50,6 +50,17 @@ export interface OutreachLog {
   status: OutreachStatus;
   sentAt: string;
   errorMessage: string | null;
+}
+
+export interface OutreachDraft {
+  id: number;
+  prospectId: number;
+  prospectName: string;
+  prospectEmail: string | null;
+  channel: Channel;
+  subject: string | null;
+  body: string;
+  createdAt: string;
 }
 
 export interface ResponseRecord {
