@@ -11,12 +11,20 @@
  * - /token               POST (authorization_code | refresh_token)
  * - /register            POST (RFC 7591 dynamic client registration)
  *
- * The user authenticates via Google on app.leadace.ai (Supabase). The
- * frontend then posts the resulting Supabase tokens to /authorize/finalize,
- * we re-issue them through the OAuth code flow so MCP clients can use a
- * Bearer token. State lives in Cloudflare KV; native TTL handles expiry.
+ * Token model: the frontend's Supabase session is used only at
+ * /authorize/finalize to verify the user's identity (extract `sub`).
+ * From there on we mint our own HS256 JWT access tokens (signed with
+ * SUPABASE_JWT_SECRET so the existing verifySupabaseJwt path still
+ * validates them) and opaque refresh tokens stored in KV. This keeps
+ * MCP sessions independent of the browser's Supabase session, so
+ * refresh-token rotation in one client cannot invalidate the other.
+ *
+ * Refresh tokens have a sliding 30-day TTL: every successful refresh
+ * re-puts the entry with a fresh TTL, so a regularly-active client
+ * never has to re-authenticate.
  */
 
+import { SignJWT } from 'jose'
 import { verifySupabaseJwt } from '../auth/verify-jwt'
 
 // ---------------------------------------------------------------------------
@@ -35,8 +43,12 @@ interface AuthCode {
   clientId: string
   codeChallenge: string
   redirectUri: string
-  supabaseAccessToken: string
-  supabaseRefreshToken: string
+  userId: string
+  expiresAt: number
+}
+
+interface McpRefresh {
+  userId: string
   expiresAt: number
 }
 
@@ -56,6 +68,9 @@ interface RegisteredClient {
 const AUTH_CODE_TTL_SECONDS = 600        // 10 minutes (KV minimum is 60)
 const AUTH_SESSION_TTL_SECONDS = 600     // 10 minutes
 const CLIENT_TTL_SECONDS = 60 * 60 * 24 * 30 // 30 days
+const REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30 // 30 days
+const REFRESH_TOKEN_RENEW_BEFORE_SECONDS = 60 * 60 * 24 * 7 // re-put when remaining < 7 days
+const ACCESS_TOKEN_TTL_SECONDS = 60 * 60 // 1 hour
 
 function kvJson<T>(prefix: string, ttlSeconds: number) {
   const k = (id: string) => `${prefix}:${id}`
@@ -70,6 +85,7 @@ function kvJson<T>(prefix: string, ttlSeconds: number) {
 const authCodes = kvJson<AuthCode>('code', AUTH_CODE_TTL_SECONDS)
 const authSessions = kvJson<AuthSession>('session', AUTH_SESSION_TTL_SECONDS)
 const registeredClients = kvJson<RegisteredClient>('client', CLIENT_TTL_SECONDS)
+const mcpRefreshes = kvJson<McpRefresh>('mcprefresh', REFRESH_TOKEN_TTL_SECONDS)
 
 function oauthError(code: string, status: number, description?: string): Response {
   return Response.json(
@@ -243,16 +259,16 @@ export async function handleAuthorizeFinalize(
   jwtSecret: string,
   supabaseUrl: string,
 ): Promise<Response> {
-  let body: { session?: string; access_token?: string; refresh_token?: string }
+  let body: { session?: string; access_token?: string }
   try {
-    body = await request.json() as { session?: string; access_token?: string; refresh_token?: string }
+    body = await request.json() as { session?: string; access_token?: string }
   } catch {
     return oauthError('invalid_request', 400)
   }
 
-  const { session: sessionId, access_token: accessToken, refresh_token: refreshToken } = body
-  if (!sessionId || !accessToken || !refreshToken) {
-    return oauthError('invalid_request', 400, 'session, access_token, refresh_token are required')
+  const { session: sessionId, access_token: accessToken } = body
+  if (!sessionId || !accessToken) {
+    return oauthError('invalid_request', 400, 'session and access_token are required')
   }
 
   const [userId, session] = await Promise.all([
@@ -271,8 +287,7 @@ export async function handleAuthorizeFinalize(
     clientId: session.clientId,
     codeChallenge: session.codeChallenge,
     redirectUri: session.redirectUri,
-    supabaseAccessToken: accessToken,
-    supabaseRefreshToken: refreshToken,
+    userId,
     expiresAt: Date.now() + AUTH_CODE_TTL_SECONDS * 1000,
   })
 
@@ -292,8 +307,7 @@ export async function handleAuthorizeFinalize(
 export async function handleToken(
   request: Request,
   kv: KVNamespace,
-  supabaseUrl: string,
-  supabaseAnonKey: string,
+  jwtSecret: string,
 ): Promise<Response> {
   let body: Record<string, string>
   try {
@@ -311,16 +325,20 @@ export async function handleToken(
   const grantType = body['grant_type']
 
   if (grantType === 'authorization_code') {
-    return handleAuthCodeGrant(body, kv)
+    return handleAuthCodeGrant(body, kv, jwtSecret)
   }
   if (grantType === 'refresh_token') {
-    return handleRefreshGrant(body, supabaseUrl, supabaseAnonKey)
+    return handleRefreshGrant(body, kv, jwtSecret)
   }
 
   return oauthError('unsupported_grant_type', 400)
 }
 
-async function handleAuthCodeGrant(body: Record<string, string>, kv: KVNamespace): Promise<Response> {
+async function handleAuthCodeGrant(
+  body: Record<string, string>,
+  kv: KVNamespace,
+  jwtSecret: string,
+): Promise<Response> {
   const { code, code_verifier, redirect_uri } = body
 
   if (!code || !code_verifier) {
@@ -331,6 +349,13 @@ async function handleAuthCodeGrant(body: Record<string, string>, kv: KVNamespace
   if (!stored || stored.expiresAt < Date.now()) {
     console.log('[oauth.code] invalid/expired code', { hasStored: !!stored, expired: stored ? stored.expiresAt < Date.now() : null })
     return oauthError('invalid_grant', 400, 'Invalid or expired authorization code')
+  }
+
+  // Defensive: every code we put now carries userId, but reject any without one
+  // rather than minting a JWT with sub=undefined.
+  if (!stored.userId) {
+    console.log('[oauth.code] missing userId on stored code', { clientId: stored.clientId })
+    return oauthError('invalid_grant', 400, 'Authorization code is no longer valid; please re-authorize')
   }
 
   if (redirect_uri && redirect_uri !== stored.redirectUri) {
@@ -344,30 +369,28 @@ async function handleAuthCodeGrant(body: Record<string, string>, kv: KVNamespace
 
   await authCodes.del(kv, code)
 
-  const accessFp = await fingerprint(stored.supabaseAccessToken)
-  const refreshFp = await fingerprint(stored.supabaseRefreshToken)
-  console.log('[oauth.code] exchanged', { accessFp, refreshFp, clientId: stored.clientId })
+  const accessToken = await mintAccessJwt(stored.userId, jwtSecret)
+  const refreshToken = generateId()
+  await mcpRefreshes.put(kv, refreshToken, {
+    userId: stored.userId,
+    expiresAt: Date.now() + REFRESH_TOKEN_TTL_SECONDS * 1000,
+  })
+
+  const refreshFp = await fingerprint(refreshToken)
+  console.log('[oauth.code] exchanged', { userId: stored.userId, refreshFp, clientId: stored.clientId })
 
   return Response.json({
-    access_token: stored.supabaseAccessToken,
-    refresh_token: stored.supabaseRefreshToken,
+    access_token: accessToken,
+    refresh_token: refreshToken,
     token_type: 'Bearer',
-    expires_in: 3600,
+    expires_in: ACCESS_TOKEN_TTL_SECONDS,
   })
-}
-
-// Hash a token for log correlation without leaking the secret value.
-async function fingerprint(token: string): Promise<string> {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))
-  return Array.from(new Uint8Array(buf).slice(0, 4))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
 }
 
 async function handleRefreshGrant(
   body: Record<string, string>,
-  supabaseUrl: string,
-  supabaseAnonKey: string,
+  kv: KVNamespace,
+  jwtSecret: string,
 ): Promise<Response> {
   const refreshToken = body['refresh_token']
   if (!refreshToken) {
@@ -376,51 +399,53 @@ async function handleRefreshGrant(
   }
 
   const inFp = await fingerprint(refreshToken)
-  const t0 = Date.now()
-
-  const res = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: supabaseAnonKey,
-    },
-    body: JSON.stringify({ refresh_token: refreshToken }),
-  })
-
-  const elapsed = Date.now() - t0
-
-  if (!res.ok) {
-    let supabaseErr: unknown = null
-    try {
-      supabaseErr = await res.json()
-    } catch {
-      supabaseErr = await res.text().catch(() => '<no body>')
-    }
-    console.log('[oauth.refresh] supabase rejected', {
-      inFp,
-      status: res.status,
-      elapsed,
-      supabaseErr,
-    })
+  const stored = await mcpRefreshes.get(kv, refreshToken)
+  if (!stored) {
+    console.log('[oauth.refresh] unknown refresh_token', { inFp })
     return oauthError('invalid_grant', 400, 'Refresh failed')
   }
 
-  const data = await res.json() as { access_token: string; refresh_token: string; expires_in?: number }
-  const outFp = await fingerprint(data.refresh_token)
-  const accessFp = await fingerprint(data.access_token)
-  console.log('[oauth.refresh] ok', {
-    inFp,
-    outFp,
-    accessFp,
-    rotated: outFp !== inFp,
-    expires_in: data.expires_in ?? 3600,
-    elapsed,
-  })
+  // Sliding window: only renew when remaining lifetime drops below
+  // REFRESH_TOKEN_RENEW_BEFORE_SECONDS. Avoids a KV write on every refresh
+  // (an active client refreshes ~24x/day; without this gate that's ~720
+  // writes/month per session that all set the same expiry).
+  const now = Date.now()
+  const renewed = stored.expiresAt - now < REFRESH_TOKEN_RENEW_BEFORE_SECONDS * 1000
+  if (renewed) {
+    await mcpRefreshes.put(kv, refreshToken, {
+      userId: stored.userId,
+      expiresAt: now + REFRESH_TOKEN_TTL_SECONDS * 1000,
+    })
+  }
+
+  const accessToken = await mintAccessJwt(stored.userId, jwtSecret)
+  console.log('[oauth.refresh] ok', { inFp, userId: stored.userId, renewed })
 
   return Response.json({
-    access_token: data.access_token,
-    refresh_token: data.refresh_token,
+    access_token: accessToken,
+    refresh_token: refreshToken,
     token_type: 'Bearer',
-    expires_in: data.expires_in ?? 3600,
+    expires_in: ACCESS_TOKEN_TTL_SECONDS,
   })
+}
+
+// Mint an HS256-signed access token using SUPABASE_JWT_SECRET. The existing
+// verifySupabaseJwt path validates this via the HS256 fallback, so the rest
+// of the system (extractUserId, RLS middleware, etc.) keeps working.
+async function mintAccessJwt(userId: string, jwtSecret: string): Promise<string> {
+  const secret = new TextEncoder().encode(jwtSecret)
+  const now = Math.floor(Date.now() / 1000)
+  return new SignJWT({ sub: userId })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt(now)
+    .setExpirationTime(now + ACCESS_TOKEN_TTL_SECONDS)
+    .sign(secret)
+}
+
+// Hash a token for log correlation without leaking the secret value.
+export async function fingerprint(token: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))
+  return Array.from(new Uint8Array(buf).slice(0, 4))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
 }

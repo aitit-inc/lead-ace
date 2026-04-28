@@ -10,6 +10,7 @@ import {
   handleAuthorizeSessionInfo,
   handleAuthorizeFinalize,
   handleToken,
+  fingerprint,
 } from './oauth'
 
 type Env = {
@@ -754,7 +755,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   }
 
   if (path === '/token' && request.method === 'POST') {
-    return withCors(await handleToken(request, env.MCP_OAUTH_STORE, env.SUPABASE_URL, env.SUPABASE_ANON_KEY))
+    return withCors(await handleToken(request, env.MCP_OAUTH_STORE, env.SUPABASE_JWT_SECRET))
   }
 
   // --- MCP endpoints (auth required) ---
@@ -768,8 +769,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     let nowGap: number | null = null
     if (hasBearer) {
       const token = authHeaderRaw!.slice(7)
-      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))
-      accessFp = Array.from(new Uint8Array(buf).slice(0, 4)).map((b) => b.toString(16).padStart(2, '0')).join('')
+      accessFp = await fingerprint(token)
       // Best-effort decode of exp claim without verification (verification already failed above).
       try {
         const parts = token.split('.')

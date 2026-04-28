@@ -65,7 +65,7 @@
     errorMessage = '';
     const { data } = await supabase.auth.getSession();
     const sb = data.session;
-    if (!sb?.access_token || !sb.refresh_token) {
+    if (!sb?.access_token) {
       errorMessage = 'You appear to be signed out. Please sign in and retry.';
       status = 'error';
       return;
@@ -77,7 +77,6 @@
         body: JSON.stringify({
           session: sessionId,
           access_token: sb.access_token,
-          refresh_token: sb.refresh_token,
         }),
       });
       const body = (await res.json()) as { redirect?: string; error?: string; error_description?: string };
