@@ -2,12 +2,64 @@
   import { onMount } from 'svelte';
   import { get as storeGet } from 'svelte/store';
   import { page } from '$app/state';
-  import { del, get, post } from '$lib/api';
+  import { del, get, post, put } from '$lib/api';
   import { activeProject } from '$lib/stores/project';
   import { plan } from '$lib/stores/plan';
   import { supabase } from '$lib/auth';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import type { PlanTier, Project } from '$lib/types';
+
+  type ProjectSettings = {
+    projectId: string;
+    outboundMode: 'send' | 'draft';
+    senderEmailAlias: string | null;
+    senderDisplayName: string | null;
+    unsubscribeEnabled: boolean;
+    updatedAt: string | null;
+  };
+
+  let projectSettings = $state<
+    | { state: 'idle' }
+    | { state: 'loading' }
+    | { state: 'loaded'; data: ProjectSettings }
+    | { state: 'error'; message: string }
+  >({ state: 'idle' });
+  let savingSettings = $state(false);
+  let settingsMessage = $state('');
+
+  async function loadProjectSettings(pid: string) {
+    projectSettings = { state: 'loading' };
+    try {
+      const data = await get<ProjectSettings>(`/projects/${pid}/settings`);
+      projectSettings = { state: 'loaded', data };
+    } catch (e) {
+      projectSettings = {
+        state: 'error',
+        message: e instanceof Error ? e.message : 'Failed to load project settings',
+      };
+    }
+  }
+
+  async function saveProjectSettings() {
+    if (projectSettings.state !== 'loaded') return;
+    const pid = projectSettings.data.projectId;
+    savingSettings = true;
+    settingsMessage = '';
+    try {
+      const body = {
+        outboundMode: projectSettings.data.outboundMode,
+        senderEmailAlias: projectSettings.data.senderEmailAlias?.trim() || null,
+        senderDisplayName: projectSettings.data.senderDisplayName?.trim() || null,
+        unsubscribeEnabled: projectSettings.data.unsubscribeEnabled,
+      };
+      const updated = await put<ProjectSettings>(`/projects/${pid}/settings`, body);
+      projectSettings = { state: 'loaded', data: updated };
+      settingsMessage = 'Saved.';
+    } catch (e) {
+      settingsMessage = `Error: ${e instanceof Error ? e.message : 'Unknown error'}`;
+    }
+    savingSettings = false;
+  }
 
   let gmailStatus = $state<
     | { state: 'loading' }
@@ -62,11 +114,13 @@
     const pid = $activeProject;
     if (!pid) {
       projectName = null;
+      projectSettings = { state: 'idle' };
       return;
     }
     get<{ projects: Project[] }>('/projects').then(({ projects }) => {
       projectName = projects.find((p) => p.id === pid)?.name ?? pid;
     });
+    void loadProjectSettings(pid);
   });
 
   interface PaidTier {
@@ -257,6 +311,101 @@
       <p class="text-danger text-sm">{gmailStatus.message}</p>
     {/if}
   </div>
+</section>
+
+<!-- Project Settings -->
+<section class="mb-10">
+  <h3 class="text-xs font-medium text-text-muted uppercase tracking-wider mb-4">
+    Project Settings
+    {#if projectName}
+      <span class="ml-2 normal-case text-text-secondary">— {projectName}</span>
+    {/if}
+  </h3>
+
+  {#if !$activeProject}
+    <p class="text-xs text-text-muted">Select a project to edit its settings.</p>
+  {:else if projectSettings.state === 'loading'}
+    <p class="text-text-muted text-sm">Loading…</p>
+  {:else if projectSettings.state === 'error'}
+    <p class="text-sm text-danger">{projectSettings.message}</p>
+  {:else if projectSettings.state === 'loaded'}
+    {@const s = projectSettings.data}
+    <div class="rounded-md border border-border p-5 space-y-5">
+      <div>
+        <label for="outbound-mode" class="block text-xs font-medium text-text-secondary mb-1">
+          Outbound mode
+        </label>
+        <select
+          id="outbound-mode"
+          bind:value={s.outboundMode}
+          class="w-full max-w-xs rounded border border-border bg-page px-2 py-1.5 text-sm text-text"
+        >
+          <option value="send">Send immediately</option>
+          <option value="draft">Create drafts only</option>
+        </select>
+        <p class="mt-1 text-xs text-text-muted">
+          Draft mode creates Gmail drafts via the Gmail MCP instead of sending. Outreach is
+          recorded with status <span class="font-mono">pending_review</span>.
+        </p>
+      </div>
+
+      <div>
+        <label for="sender-alias" class="block text-xs font-medium text-text-secondary mb-1">
+          Sender email alias
+        </label>
+        <input
+          id="sender-alias"
+          type="email"
+          placeholder="primary Gmail (default)"
+          bind:value={s.senderEmailAlias}
+          class="w-full max-w-xs rounded border border-border bg-page px-2 py-1.5 text-sm text-text font-mono"
+        />
+        <p class="mt-1 text-xs text-text-muted">
+          A Gmail Send-As alias (e.g. <span class="font-mono">sales@yourdomain.com</span>) to use
+          as the From: address. Must already be verified in your Gmail Send-As settings.
+        </p>
+      </div>
+
+      <div>
+        <label for="sender-display-name" class="block text-xs font-medium text-text-secondary mb-1">
+          Sender display name
+        </label>
+        <input
+          id="sender-display-name"
+          type="text"
+          placeholder="(use Gmail default)"
+          bind:value={s.senderDisplayName}
+          class="w-full max-w-xs rounded border border-border bg-page px-2 py-1.5 text-sm text-text"
+        />
+      </div>
+
+      <div class="flex items-start gap-2">
+        <input
+          id="unsubscribe-enabled"
+          type="checkbox"
+          bind:checked={s.unsubscribeEnabled}
+          class="mt-0.5"
+        />
+        <label for="unsubscribe-enabled" class="text-sm text-text">
+          Add unsubscribe link & List-Unsubscribe header to outbound emails
+        </label>
+      </div>
+
+      <div class="flex items-center gap-3 pt-2">
+        <button
+          type="button"
+          onclick={saveProjectSettings}
+          disabled={savingSettings}
+          class="rounded px-3 py-1.5 text-xs font-medium text-page bg-accent hover:bg-accent-strong transition-colors disabled:opacity-50"
+        >
+          {savingSettings ? 'Saving…' : 'Save'}
+        </button>
+        {#if settingsMessage}
+          <span class="text-xs text-text-muted">{settingsMessage}</span>
+        {/if}
+      </div>
+    </div>
+  {/if}
 </section>
 
 <!-- Plan -->

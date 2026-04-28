@@ -67,6 +67,8 @@ export const planEnum = pgEnum('plan', ['free', 'starter', 'pro', 'scale', 'unli
 
 export const tenantRoleEnum = pgEnum('tenant_role', ['owner', 'admin', 'member'])
 
+export const outboundModeEnum = pgEnum('outbound_mode', ['send', 'draft'])
+
 // ---------------------------------------------------------------------------
 // Types for JSONB columns
 // ---------------------------------------------------------------------------
@@ -170,6 +172,26 @@ export const projects = pgTable('projects', {
 }, (table) => [
   unique('uq_project_tenant_name').on(table.tenantId, table.name),
   index('idx_projects_tenant').on(table.tenantId),
+])
+
+// Per-project user-editable settings. One row per project (1:1).
+// Read by skills (strategy / outbound / daily-cycle) to switch behavior;
+// edited via SaaS Settings UI or `update_project_settings` MCP tool.
+export const projectSettings = pgTable('project_settings', {
+  projectId: text('project_id')
+    .primaryKey()
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  tenantId: text('tenant_id')
+    .notNull()
+    .references(() => tenants.id, { onDelete: 'cascade' }),
+  outboundMode: outboundModeEnum('outbound_mode').notNull().default('send'),
+  senderEmailAlias: text('sender_email_alias'),
+  senderDisplayName: text('sender_display_name'),
+  unsubscribeEnabled: boolean('unsubscribe_enabled').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('idx_project_settings_tenant').on(table.tenantId),
 ])
 
 // ---------------------------------------------------------------------------

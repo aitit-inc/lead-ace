@@ -766,6 +766,53 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
     },
   )
 
+  // --- get_project_settings ---
+  server.tool(
+    'get_project_settings',
+    'Get user-editable project settings (outboundMode, senderEmailAlias, senderDisplayName, unsubscribeEnabled). Returns defaults if no row exists yet. Skills should call this before strategy/outbound/daily-cycle to honor user-controlled behavior.',
+    { projectId: z.string().describe('Project name or ID') },
+    async ({ projectId }) => {
+      const resolved = await resolveProjectId(projectId, apiUrl, authHeader)
+      if (!resolved.id) {
+        return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+      }
+      const { ok, data } = await callApi('GET', `/projects/${resolved.id}/settings`, null, apiUrl, authHeader)
+      if (!ok) {
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] }
+    },
+  )
+
+  // --- update_project_settings ---
+  server.tool(
+    'update_project_settings',
+    'Update user-editable project settings. Any omitted field keeps its current value. Pass null to clear senderEmailAlias / senderDisplayName.',
+    {
+      projectId: z.string().describe('Project name or ID'),
+      outboundMode: z.enum(['send', 'draft']).optional()
+        .describe('"send" = send immediately. "draft" = create Gmail drafts only.'),
+      senderEmailAlias: z.string().email().nullable().optional()
+        .describe('Gmail Send-As alias to use as From: address. null = primary Gmail.'),
+      senderDisplayName: z.string().min(1).max(200).nullable().optional(),
+      unsubscribeEnabled: z.boolean().optional()
+        .describe('When true, outbound emails include an unsubscribe link + List-Unsubscribe header.'),
+    },
+    async ({ projectId, ...patch }) => {
+      const resolved = await resolveProjectId(projectId, apiUrl, authHeader)
+      if (!resolved.id) {
+        return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+      }
+      const { ok, data } = await callApi('PUT', `/projects/${resolved.id}/settings`, patch, apiUrl, authHeader)
+      if (!ok) {
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] }
+    },
+  )
+
   return server
 }
 

@@ -3,6 +3,7 @@ import { cors } from 'hono/cors'
 import { authMiddleware } from './middleware/auth'
 import { rlsMiddleware } from './middleware/rls'
 import { projectsRouter } from './routes/projects'
+import { projectSettingsRouter } from './routes/project-settings'
 import { prospectsRouter } from './routes/prospects'
 import { outreachRouter } from './routes/outreach'
 import { responsesRouter } from './routes/responses'
@@ -28,6 +29,7 @@ app.use('/api/*', authMiddleware)
 app.use('/api/*', rlsMiddleware)
 
 app.route('/api/projects', projectsRouter)
+app.route('/api', projectSettingsRouter)
 app.route('/api', prospectsRouter)
 app.route('/api', outreachRouter)
 app.route('/api', responsesRouter)

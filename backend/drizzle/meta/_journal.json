@@ -71,6 +71,13 @@
       "when": 1777199500000,
       "tag": "0009_grant_app_rls_extensions",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1777389771272,
+      "tag": "0010_ambitious_reavers",
+      "breakpoints": true
     }
   ]
 }
