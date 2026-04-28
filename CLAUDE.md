@@ -147,6 +147,8 @@ For **production** DB: `db:migrate` runs automatically via the `migrate-db` job 
 
 - `any` is prohibited. Use proper types or fix the design.
 - After modifying backend TypeScript, run `cd backend && npm run typecheck` before committing.
+- Zod is v4. Use top-level `z.email()` / `z.url()` / `z.uuid()` etc. for string-format validation. `z.string().email()` / `.url()` are deprecated.
+- For partial-update upsert endpoints (`PUT /xxx`), do not pre-load the row to merge with the patch. Set `INSERT` values from `patch ?? DEFAULTS` and `onConflictDoUpdate.set` to only the columns the caller explicitly provided (conditional spread). The pre-load + merge approach is racy: two concurrent PUTs read the same `existing`, each merges its own patch, and the loser's untouched columns clobber the winner's. See `backend/src/api/routes/project-settings.ts` PUT handler for the canonical shape.
 
 ### Local Dev
 
