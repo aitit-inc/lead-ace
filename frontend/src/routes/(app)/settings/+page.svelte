@@ -7,11 +7,11 @@
   import { plan } from '$lib/stores/plan';
   import { supabase } from '$lib/auth';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-  import type { PlanTier, Project } from '$lib/types';
+  import type { OutboundMode, PlanTier, Project } from '$lib/types';
 
   type ProjectSettings = {
     projectId: string;
-    outboundMode: 'send' | 'draft';
+    outboundMode: OutboundMode;
     senderEmailAlias: string | null;
     senderDisplayName: string | null;
     unsubscribeEnabled: boolean;

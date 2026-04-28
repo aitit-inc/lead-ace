@@ -91,9 +91,9 @@ outreachRouter.post('/outreach', zValidator('json', recordOutreachSchema), async
 const sendAndRecordSchema = z.object({
   projectId: z.string().min(1),
   prospectId: z.number().int().positive(),
-  to: z.array(z.string().email()).min(1),
-  cc: z.array(z.string().email()).optional(),
-  bcc: z.array(z.string().email()).optional(),
+  to: z.array(z.email()).min(1),
+  cc: z.array(z.email()).optional(),
+  bcc: z.array(z.email()).optional(),
   subject: z.string().min(1),
   body: z.string().min(1),
   inReplyTo: z.string().optional(),

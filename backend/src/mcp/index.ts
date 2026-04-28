@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { z } from 'zod'
 import { verifySupabaseJwt } from '../auth/verify-jwt'
+import { OUTBOUND_MODES } from '../db/schema'
 import {
   handleMetadata,
   handleResourceMetadata,
@@ -228,15 +229,15 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
       prospects: z.array(z.object({
         organizationDomain: z.string().describe('Apex domain of the organization (e.g. example.com)'),
         organizationName: z.string(),
-        organizationWebsiteUrl: z.string().url(),
+        organizationWebsiteUrl: z.url(),
         name: z.string().describe('Prospect name (company, school, department, etc.)'),
         contactName: z.string().optional(),
         department: z.string().optional(),
         overview: z.string(),
         industry: z.string().optional(),
-        websiteUrl: z.string().url(),
-        email: z.string().email().optional().describe('At least one contact channel required'),
-        contactFormUrl: z.string().url().optional(),
+        websiteUrl: z.url(),
+        email: z.email().optional().describe('At least one contact channel required'),
+        contactFormUrl: z.url().optional(),
         formType: z.enum(['google_forms', 'native_html', 'wordpress_cf7', 'iframe_embed', 'with_captcha']).optional(),
         snsAccounts: z.object({
           x: z.string().optional(),
@@ -405,11 +406,11 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
     'send_email',
     'Send an email via the user\'s connected Gmail account WITHOUT recording an outreach log. Use for internal notifications (e.g. daily-cycle start/wrap-up emails). For prospect outreach use send_email_and_record instead.',
     {
-      to: z.array(z.string().email()).min(1),
+      to: z.array(z.email()).min(1),
       subject: z.string().min(1),
       body: z.string().min(1),
-      cc: z.array(z.string().email()).optional(),
-      bcc: z.array(z.string().email()).optional(),
+      cc: z.array(z.email()).optional(),
+      bcc: z.array(z.email()).optional(),
       inReplyTo: z.string().optional(),
     },
     async (input) => {
@@ -438,11 +439,11 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
     {
       projectId: z.string().describe('Project name or ID'),
       prospectId: z.number().int(),
-      to: z.array(z.string().email()).min(1),
+      to: z.array(z.email()).min(1),
       subject: z.string().min(1),
       body: z.string().min(1),
-      cc: z.array(z.string().email()).optional(),
-      bcc: z.array(z.string().email()).optional(),
+      cc: z.array(z.email()).optional(),
+      bcc: z.array(z.email()).optional(),
       inReplyTo: z.string().optional().describe('Gmail Message-Id header for threading'),
     },
     async (input) => {
@@ -791,9 +792,9 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
     'Update user-editable project settings. Any omitted field keeps its current value. Pass null to clear senderEmailAlias / senderDisplayName.',
     {
       projectId: z.string().describe('Project name or ID'),
-      outboundMode: z.enum(['send', 'draft']).optional()
+      outboundMode: z.enum(OUTBOUND_MODES).optional()
         .describe('"send" = send immediately. "draft" = create Gmail drafts only.'),
-      senderEmailAlias: z.string().email().nullable().optional()
+      senderEmailAlias: z.email().nullable().optional()
         .describe('Gmail Send-As alias to use as From: address. null = primary Gmail.'),
       senderDisplayName: z.string().min(1).max(200).nullable().optional(),
       unsubscribeEnabled: z.boolean().optional()

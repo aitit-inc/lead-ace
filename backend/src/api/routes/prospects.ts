@@ -2,9 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { eq, and, sql, desc } from 'drizzle-orm'
-import type { Db } from '../../db/connection'
 import {
-  projects,
   organizations,
   prospects,
   projectProspects,
@@ -14,6 +12,7 @@ import {
 import { getRemainingOutreachQuota, getTenantPlan, getPlanLimits, countTenantProspects } from '../plan-limits'
 import type { Env, Variables } from '../types'
 import type { SnsAccounts } from '../../db/schema'
+import { verifyProject } from '../project-helpers'
 
 const snsAccountsSchema = z.object({
   x: z.string().optional(),
@@ -26,16 +25,16 @@ const prospectInputSchema = z.object({
   // Organization
   organizationDomain: z.string().min(1),
   organizationName: z.string().min(1),
-  organizationWebsiteUrl: z.string().url(),
+  organizationWebsiteUrl: z.url(),
   // Prospect
   name: z.string().min(1),
   contactName: z.string().optional(),
   department: z.string().optional(),
   overview: z.string().min(1),
   industry: z.string().optional(),
-  websiteUrl: z.string().url(),
-  email: z.string().email().optional(),
-  contactFormUrl: z.string().url().optional(),
+  websiteUrl: z.url(),
+  email: z.email().optional(),
+  contactFormUrl: z.url().optional(),
   formType: z.enum(formTypeEnum.enumValues).optional(),
   snsAccounts: snsAccountsSchema.optional(),
   notes: z.string().optional(),
@@ -160,16 +159,6 @@ function csvRowToInput(header: string[], row: string[]): { ok: true; value: Pros
 }
 
 export const prospectsRouter = new Hono<{ Bindings: Env; Variables: Variables }>()
-
-// Helper: verify project belongs to tenant
-async function verifyProject(db: Db, projectId: string, tenantId: string) {
-  const [project] = await db
-    .select({ id: projects.id })
-    .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
-    .limit(1)
-  return project
-}
 
 // POST /prospects/batch — batch register prospects with deduplication
 prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async (c) => {

@@ -16,7 +16,7 @@ import type { Env, Variables } from '../types'
 const saveCredentialsSchema = z.object({
   refreshToken: z.string().min(1),
   scope: z.string().min(1),
-  email: z.string().email(),
+  email: z.email(),
 })
 
 export const authRouter = new Hono<{ Bindings: Env; Variables: Variables }>()
@@ -84,9 +84,9 @@ authRouter.get('/auth/google-credentials/status', async (c) => {
 })
 
 const sendEmailSchema = z.object({
-  to: z.array(z.string().email()).min(1),
-  cc: z.array(z.string().email()).optional(),
-  bcc: z.array(z.string().email()).optional(),
+  to: z.array(z.email()).min(1),
+  cc: z.array(z.email()).optional(),
+  bcc: z.array(z.email()).optional(),
   subject: z.string().min(1),
   body: z.string().min(1),
   inReplyTo: z.string().optional(),

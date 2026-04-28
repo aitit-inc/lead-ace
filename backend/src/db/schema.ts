@@ -67,7 +67,9 @@ export const planEnum = pgEnum('plan', ['free', 'starter', 'pro', 'scale', 'unli
 
 export const tenantRoleEnum = pgEnum('tenant_role', ['owner', 'admin', 'member'])
 
-export const outboundModeEnum = pgEnum('outbound_mode', ['send', 'draft'])
+export const OUTBOUND_MODES = ['send', 'draft'] as const
+export type OutboundMode = (typeof OUTBOUND_MODES)[number]
+export const outboundModeEnum = pgEnum('outbound_mode', OUTBOUND_MODES)
 
 // ---------------------------------------------------------------------------
 // Types for JSONB columns

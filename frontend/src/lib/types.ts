@@ -3,6 +3,7 @@ export type Channel = 'email' | 'form' | 'sns_twitter' | 'sns_linkedin';
 export type OutreachStatus = 'sent' | 'failed';
 export type Sentiment = 'positive' | 'neutral' | 'negative';
 export type ResponseType = 'reply' | 'auto_reply' | 'bounce' | 'meeting_request' | 'rejection';
+export type OutboundMode = 'send' | 'draft';
 
 export interface Project {
   id: string;

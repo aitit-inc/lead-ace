@@ -2,21 +2,11 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { eq, and, desc } from 'drizzle-orm'
-import type { Db } from '../../db/connection'
-import { projects, projectDocuments } from '../../db/schema'
+import { projectDocuments } from '../../db/schema'
 import type { Env, Variables } from '../types'
+import { verifyProject } from '../project-helpers'
 
 export const documentsRouter = new Hono<{ Bindings: Env; Variables: Variables }>()
-
-// Helper: verify project ownership
-async function verifyProject(db: Db, projectId: string, tenantId: string) {
-  const [project] = await db
-    .select({ id: projects.id })
-    .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
-    .limit(1)
-  return project
-}
 
 // ---------------------------------------------------------------------------
 // GET /projects/:id/documents — list slugs with last updated timestamp
