@@ -269,6 +269,49 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
     },
   )
 
+  // --- import_prospects_from_csv ---
+  server.tool(
+    'import_prospects_from_csv',
+    'Import prospects into a project from a canonical CSV string. Required headers: organizationDomain, organizationName, organizationWebsiteUrl, name, overview, websiteUrl, matchReason. Optional: contactName, department, industry, email, contactFormUrl, formType, snsAccounts.x, snsAccounts.linkedin, snsAccounts.instagram, snsAccounts.facebook, notes, priority. At least one of email / contactFormUrl / snsAccounts.* per row. dedupPolicy "skip" leaves existing rows alone; "overwrite" updates fields and re-links to the project. do_not_contact rows are always skipped. Max 1000 data rows.',
+    {
+      projectId: z.string().describe('Project name or ID'),
+      csvText: z.string().describe('Full CSV text including header row'),
+      dedupPolicy: z.enum(['skip', 'overwrite']).default('skip'),
+    },
+    async ({ projectId, csvText, dedupPolicy }) => {
+      const resolved = await resolveProjectId(projectId, apiUrl, authHeader)
+      if (!resolved.id) {
+        return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+      }
+      const { ok, data } = await callApi(
+        'POST',
+        '/prospects/import',
+        { projectId: resolved.id, csvText, dedupPolicy },
+        apiUrl,
+        authHeader,
+      )
+      if (!ok) {
+        const err = data as { error: string; detail?: string }
+        const msg = err.detail ? `${err.error}: ${err.detail}` : err.error
+        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true }
+      }
+      const result = data as {
+        inserted: number
+        overwritten: number
+        skipped: number
+        errors: number
+        skippedDetails: unknown[]
+        errorDetails: unknown[]
+      }
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Imported: ${result.inserted} new, ${result.overwritten} overwritten, ${result.skipped} skipped, ${result.errors} errors.\nSkipped: ${JSON.stringify(result.skippedDetails)}\nErrors: ${JSON.stringify(result.errorDetails)}`,
+        }],
+      }
+    },
+  )
+
   // --- get_outbound_targets ---
   server.tool(
     'get_outbound_targets',

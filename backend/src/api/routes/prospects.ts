@@ -52,6 +52,113 @@ const batchSchema = z.object({
   prospects: z.array(prospectInputSchema).min(1).max(100),
 })
 
+const importSchema = z.object({
+  projectId: z.string().min(1),
+  csvText: z.string().min(1),
+  dedupPolicy: z.enum(['skip', 'overwrite']).default('skip'),
+})
+
+type ProspectInput = z.infer<typeof prospectInputSchema>
+
+// Minimal RFC 4180 CSV parser. Supports quoted fields, escaped quotes ("") and CRLF/LF.
+function parseCsv(text: string): string[][] {
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1)
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ''
+  let inQuotes = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; continue }
+        inQuotes = false
+        continue
+      }
+      field += c
+      continue
+    }
+    if (c === '"') { inQuotes = true; continue }
+    if (c === ',') { row.push(field); field = ''; continue }
+    if (c === '\r') {
+      if (text[i + 1] === '\n') i++
+      row.push(field); field = ''
+      rows.push(row); row = []
+      continue
+    }
+    if (c === '\n') {
+      row.push(field); field = ''
+      rows.push(row); row = []
+      continue
+    }
+    field += c
+  }
+  if (field !== '' || row.length > 0) {
+    row.push(field)
+    rows.push(row)
+  }
+  return rows
+}
+
+const REQUIRED_CSV_HEADERS = [
+  'organizationDomain',
+  'organizationName',
+  'organizationWebsiteUrl',
+  'name',
+  'overview',
+  'websiteUrl',
+  'matchReason',
+] as const
+
+const ALLOWED_CSV_HEADERS = new Set<string>([
+  ...REQUIRED_CSV_HEADERS,
+  'contactName',
+  'department',
+  'industry',
+  'email',
+  'contactFormUrl',
+  'formType',
+  'snsAccounts.x',
+  'snsAccounts.linkedin',
+  'snsAccounts.instagram',
+  'snsAccounts.facebook',
+  'notes',
+  'priority',
+])
+
+const MAX_IMPORT_ROWS = 1000
+
+function csvRowToInput(header: string[], row: string[]): { ok: true; value: ProspectInput } | { ok: false; error: string } {
+  const obj: Record<string, unknown> = {}
+  const sns: Record<string, string> = {}
+  for (let j = 0; j < header.length; j++) {
+    const key = header[j]
+    if (!key) continue
+    const raw = row[j] ?? ''
+    const val = raw.trim()
+    if (val === '') continue
+    if (key.startsWith('snsAccounts.')) {
+      sns[key.slice('snsAccounts.'.length)] = val
+    } else if (key === 'priority') {
+      const n = Number.parseInt(val, 10)
+      if (!Number.isFinite(n)) return { ok: false, error: 'priority: not an integer' }
+      obj.priority = n
+    } else {
+      obj[key] = val
+    }
+  }
+  if (Object.keys(sns).length > 0) obj.snsAccounts = sns
+
+  const parsed = prospectInputSchema.safeParse(obj)
+  if (!parsed.success) {
+    const msg = parsed.error.issues
+      .map((iss) => `${iss.path.join('.') || '<root>'}: ${iss.message}`)
+      .join('; ')
+    return { ok: false, error: msg }
+  }
+  return { ok: true, value: parsed.data }
+}
+
 export const prospectsRouter = new Hono<{ Bindings: Env; Variables: Variables }>()
 
 // Helper: verify project belongs to tenant
@@ -227,6 +334,267 @@ prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async 
     skipped: skipped.length,
     insertedIds: inserted,
     skippedDetails: skipped,
+  })
+})
+
+// POST /prospects/import — bulk import from canonical CSV with skip/overwrite dedup
+prospectsRouter.post('/prospects/import', zValidator('json', importSchema), async (c) => {
+  const { projectId, csvText, dedupPolicy } = c.req.valid('json')
+  const tenantId = c.get('tenantId')
+  const db = c.get('db')
+
+  if (!await verifyProject(db, projectId, tenantId)) {
+    return c.json({ error: 'Project not found' }, 404)
+  }
+
+  let rows: string[][]
+  try {
+    rows = parseCsv(csvText)
+  } catch (e) {
+    return c.json({ error: 'CSV parse error', detail: e instanceof Error ? e.message : String(e) }, 400)
+  }
+
+  // Drop trailing empty rows (common when CSV ends with a newline).
+  while (rows.length > 0) {
+    const last = rows[rows.length - 1]
+    if (!last || last.length === 0 || (last.length === 1 && last[0] === '')) rows.pop()
+    else break
+  }
+
+  if (rows.length < 2) {
+    return c.json({ error: 'CSV must contain a header row and at least one data row' }, 400)
+  }
+  if (rows.length - 1 > MAX_IMPORT_ROWS) {
+    return c.json({ error: `CSV too large (max ${MAX_IMPORT_ROWS} data rows)` }, 400)
+  }
+
+  const header = (rows[0] ?? []).map((h) => h.trim())
+  const missing = REQUIRED_CSV_HEADERS.filter((h) => !header.includes(h))
+  if (missing.length > 0) {
+    return c.json({ error: 'Missing required columns', detail: missing.join(', ') }, 400)
+  }
+  const unknown = header.filter((h) => !ALLOWED_CSV_HEADERS.has(h))
+  if (unknown.length > 0) {
+    return c.json({ error: 'Unknown columns', detail: unknown.join(', ') }, 400)
+  }
+
+  // Free plan: lifetime prospect limit (only counts new insertions, not overwrites)
+  const tp = await getTenantPlan(db, tenantId)
+  const limits = getPlanLimits(tp.plan)
+  let prospectBudget: number | null = null
+  if (limits.maxProspects !== null) {
+    const currentCount = await countTenantProspects(db, tenantId)
+    prospectBudget = Math.max(0, limits.maxProspects - currentCount)
+  }
+
+  const inserted: number[] = []
+  const overwritten: number[] = []
+  const skipped: Array<{ row: number; name: string; reason: string }> = []
+  const errors: Array<{ row: number; error: string }> = []
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i]
+    if (!row || row.length === 0 || (row.length === 1 && (row[0] ?? '').trim() === '')) continue
+
+    const parsed = csvRowToInput(header, row)
+    if (!parsed.ok) {
+      errors.push({ row: i + 1, error: parsed.error })
+      continue
+    }
+    const input = parsed.value
+    const rowKey = input.name
+
+    // do_not_contact always wins, regardless of dedupPolicy.
+    const existingByEmail = input.email
+      ? await db
+          .select({ id: prospects.id, doNotContact: prospects.doNotContact })
+          .from(prospects)
+          .where(and(eq(prospects.tenantId, tenantId), eq(prospects.email, input.email)))
+          .limit(1)
+      : []
+    if (existingByEmail[0]?.doNotContact) {
+      skipped.push({ row: i + 1, name: rowKey, reason: 'do_not_contact' })
+      continue
+    }
+
+    const existingByForm = input.contactFormUrl
+      ? await db
+          .select({ id: prospects.id })
+          .from(prospects)
+          .where(and(eq(prospects.tenantId, tenantId), eq(prospects.contactFormUrl, input.contactFormUrl)))
+          .limit(1)
+      : []
+
+    const existingInProject = await db
+      .select({ ppId: projectProspects.id, prospectId: prospects.id })
+      .from(projectProspects)
+      .innerJoin(prospects, eq(prospects.id, projectProspects.prospectId))
+      .innerJoin(organizations, eq(organizations.id, prospects.organizationId))
+      .where(
+        and(
+          eq(projectProspects.projectId, projectId),
+          eq(organizations.tenantId, tenantId),
+          eq(organizations.domain, input.organizationDomain),
+        ),
+      )
+      .limit(1)
+
+    const existingProspectId =
+      existingByEmail[0]?.id ?? existingByForm[0]?.id ?? existingInProject[0]?.prospectId ?? null
+
+    if (existingProspectId !== null) {
+      if (dedupPolicy === 'skip') {
+        const reason = existingByEmail.length > 0
+          ? 'email_duplicate'
+          : existingByForm.length > 0
+            ? 'form_url_duplicate'
+            : 'already_in_project'
+        skipped.push({ row: i + 1, name: rowKey, reason })
+        continue
+      }
+
+      // overwrite: update prospect fields, upsert org, ensure project link.
+      const now = new Date()
+      const [org] = await db
+        .insert(organizations)
+        .values({
+          tenantId,
+          domain: input.organizationDomain,
+          name: input.organizationName,
+          websiteUrl: input.organizationWebsiteUrl,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: [organizations.tenantId, organizations.domain],
+          set: {
+            name: sql`excluded.name`,
+            websiteUrl: sql`excluded.website_url`,
+            updatedAt: now,
+          },
+        })
+        .returning({ id: organizations.id })
+      if (!org) continue
+
+      await db
+        .update(prospects)
+        .set({
+          name: input.name,
+          contactName: input.contactName ?? null,
+          organizationId: org.id,
+          department: input.department ?? null,
+          overview: input.overview,
+          industry: input.industry ?? null,
+          websiteUrl: input.websiteUrl,
+          email: input.email ?? null,
+          contactFormUrl: input.contactFormUrl ?? null,
+          formType: input.formType ?? null,
+          snsAccounts: (input.snsAccounts as SnsAccounts) ?? null,
+          notes: input.notes ?? null,
+          updatedAt: now,
+        })
+        .where(and(eq(prospects.id, existingProspectId), eq(prospects.tenantId, tenantId)))
+
+      // Upsert link: insert if missing, otherwise update matchReason / priority.
+      await db
+        .insert(projectProspects)
+        .values({
+          tenantId,
+          projectId,
+          prospectId: existingProspectId,
+          matchReason: input.matchReason,
+          priority: input.priority as 1 | 2 | 3 | 4 | 5,
+          status: 'new',
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: [projectProspects.projectId, projectProspects.prospectId],
+          set: {
+            matchReason: sql`excluded.match_reason`,
+            priority: sql`excluded.priority`,
+            updatedAt: now,
+          },
+        })
+
+      overwritten.push(existingProspectId)
+      continue
+    }
+
+    // No match: insert path. Honour the prospect budget for free plans.
+    if (prospectBudget !== null && inserted.length >= prospectBudget) {
+      skipped.push({ row: i + 1, name: rowKey, reason: 'plan_limit' })
+      continue
+    }
+
+    const now = new Date()
+    const [org] = await db
+      .insert(organizations)
+      .values({
+        tenantId,
+        domain: input.organizationDomain,
+        name: input.organizationName,
+        websiteUrl: input.organizationWebsiteUrl,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [organizations.tenantId, organizations.domain],
+        set: {
+          name: sql`excluded.name`,
+          websiteUrl: sql`excluded.website_url`,
+          updatedAt: now,
+        },
+      })
+      .returning({ id: organizations.id })
+    if (!org) continue
+
+    const [newProspect] = await db
+      .insert(prospects)
+      .values({
+        tenantId,
+        name: input.name,
+        contactName: input.contactName ?? null,
+        organizationId: org.id,
+        department: input.department ?? null,
+        overview: input.overview,
+        industry: input.industry ?? null,
+        websiteUrl: input.websiteUrl,
+        email: input.email ?? null,
+        contactFormUrl: input.contactFormUrl ?? null,
+        formType: input.formType ?? null,
+        snsAccounts: (input.snsAccounts as SnsAccounts) ?? null,
+        doNotContact: false,
+        notes: input.notes ?? null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning({ id: prospects.id })
+    if (!newProspect) continue
+
+    await db.insert(projectProspects).values({
+      tenantId,
+      projectId,
+      prospectId: newProspect.id,
+      matchReason: input.matchReason,
+      priority: input.priority as 1 | 2 | 3 | 4 | 5,
+      status: 'new',
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    inserted.push(newProspect.id)
+  }
+
+  return c.json({
+    inserted: inserted.length,
+    overwritten: overwritten.length,
+    skipped: skipped.length,
+    errors: errors.length,
+    insertedIds: inserted,
+    overwrittenIds: overwritten,
+    skippedDetails: skipped,
+    errorDetails: errors,
   })
 })
 
