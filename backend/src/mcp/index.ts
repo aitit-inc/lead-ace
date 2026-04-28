@@ -759,8 +759,33 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 
   // --- MCP endpoints (auth required) ---
 
+  const authHeaderRaw = request.headers.get('Authorization')
   const userId = await extractUserId(request, env.SUPABASE_JWT_SECRET, env.SUPABASE_URL)
   if (!userId) {
+    const hasBearer = authHeaderRaw?.startsWith('Bearer ') ?? false
+    let accessFp: string | null = null
+    let exp: number | null = null
+    let nowGap: number | null = null
+    if (hasBearer) {
+      const token = authHeaderRaw!.slice(7)
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))
+      accessFp = Array.from(new Uint8Array(buf).slice(0, 4)).map((b) => b.toString(16).padStart(2, '0')).join('')
+      // Best-effort decode of exp claim without verification (verification already failed above).
+      try {
+        const parts = token.split('.')
+        if (parts.length === 3 && parts[1]) {
+          const payloadJson = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))
+          const claims = JSON.parse(payloadJson) as { exp?: number }
+          if (typeof claims.exp === 'number') {
+            exp = claims.exp
+            nowGap = Math.floor(Date.now() / 1000) - claims.exp
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    console.log('[mcp.auth] 401', { path, method: request.method, hasBearer, accessFp, exp, nowGap })
     return withCors(new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: {

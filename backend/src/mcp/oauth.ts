@@ -329,6 +329,7 @@ async function handleAuthCodeGrant(body: Record<string, string>, kv: KVNamespace
 
   const stored = await authCodes.get(kv, code)
   if (!stored || stored.expiresAt < Date.now()) {
+    console.log('[oauth.code] invalid/expired code', { hasStored: !!stored, expired: stored ? stored.expiresAt < Date.now() : null })
     return oauthError('invalid_grant', 400, 'Invalid or expired authorization code')
   }
 
@@ -343,12 +344,24 @@ async function handleAuthCodeGrant(body: Record<string, string>, kv: KVNamespace
 
   await authCodes.del(kv, code)
 
+  const accessFp = await fingerprint(stored.supabaseAccessToken)
+  const refreshFp = await fingerprint(stored.supabaseRefreshToken)
+  console.log('[oauth.code] exchanged', { accessFp, refreshFp, clientId: stored.clientId })
+
   return Response.json({
     access_token: stored.supabaseAccessToken,
     refresh_token: stored.supabaseRefreshToken,
     token_type: 'Bearer',
     expires_in: 3600,
   })
+}
+
+// Hash a token for log correlation without leaking the secret value.
+async function fingerprint(token: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))
+  return Array.from(new Uint8Array(buf).slice(0, 4))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
 }
 
 async function handleRefreshGrant(
@@ -358,8 +371,12 @@ async function handleRefreshGrant(
 ): Promise<Response> {
   const refreshToken = body['refresh_token']
   if (!refreshToken) {
+    console.log('[oauth.refresh] missing refresh_token in body')
     return oauthError('invalid_request', 400, 'refresh_token required')
   }
+
+  const inFp = await fingerprint(refreshToken)
+  const t0 = Date.now()
 
   const res = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
     method: 'POST',
@@ -370,11 +387,35 @@ async function handleRefreshGrant(
     body: JSON.stringify({ refresh_token: refreshToken }),
   })
 
+  const elapsed = Date.now() - t0
+
   if (!res.ok) {
+    let supabaseErr: unknown = null
+    try {
+      supabaseErr = await res.json()
+    } catch {
+      supabaseErr = await res.text().catch(() => '<no body>')
+    }
+    console.log('[oauth.refresh] supabase rejected', {
+      inFp,
+      status: res.status,
+      elapsed,
+      supabaseErr,
+    })
     return oauthError('invalid_grant', 400, 'Refresh failed')
   }
 
   const data = await res.json() as { access_token: string; refresh_token: string; expires_in?: number }
+  const outFp = await fingerprint(data.refresh_token)
+  const accessFp = await fingerprint(data.access_token)
+  console.log('[oauth.refresh] ok', {
+    inFp,
+    outFp,
+    accessFp,
+    rotated: outFp !== inFp,
+    expires_in: data.expires_in ?? 3600,
+    elapsed,
+  })
 
   return Response.json({
     access_token: data.access_token,
