@@ -10,7 +10,11 @@
   },
   // Secrets (set via wrangler secret or .dev.vars):
   //   WEB_API_URL         (e.g. http://localhost:8787 for local dev, https://api.leadace.ai for prod)
-  //   SUPABASE_JWT_SECRET (optional — JWKS used when SUPABASE_URL is set)
+  //   SUPABASE_JWT_SECRET (REQUIRED since 0.5.38 — used by oauth.ts:mintAccessJwt to sign HS256
+  //                        access tokens, and by verifySupabaseJwt to validate them on incoming
+  //                        MCP requests. Without it, /token returns a broken JWT and every
+  //                        subsequent tool call hits a DataError on importKey. Use the same
+  //                        value as on lead-ace-api; pull it from Supabase Dashboard → Settings → API.)
   //   SUPABASE_URL
   //   SUPABASE_ANON_KEY
   // Local dev: wrangler simulates KV in-memory regardless of the id.

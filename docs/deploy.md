@@ -151,7 +151,10 @@ npx wrangler secret put SUPABASE_URL --config wrangler.api.jsonc --env productio
 npx wrangler secret put STRIPE_SECRET_KEY --config wrangler.api.jsonc --env production
 # Stripe webhook signing secret。§6 で発行するため、まず空文字/ダミーで入れておき、§6 の後に上書きする運用でもOK
 npx wrangler secret put STRIPE_WEBHOOK_SECRET --config wrangler.api.jsonc --env production
-# SUPABASE_JWT_SECRET は不要（JWKS 検証経由）
+# Supabase Dashboard → Settings → API → "JWT Settings" の JWT Secret。MCP Worker が
+# 0.5.38 以降 HS256 で自前 access token を mint するようになり、API Worker はそれを HS256
+# fallback で検証する必要がある。設定漏れだと MCP→API forwarding が 401 で全滅するので必須。
+npx wrangler secret put SUPABASE_JWT_SECRET --config wrangler.api.jsonc --env production
 ```
 
 MCP Worker の secrets:
@@ -162,6 +165,9 @@ npx wrangler secret put WEB_API_URL --config wrangler.mcp.jsonc --env production
 npx wrangler secret put SUPABASE_URL --config wrangler.mcp.jsonc --env production
 # Supabase Dashboard → Project Settings → API Keys の "Publishable key" (sb_publishable_...) を設定
 npx wrangler secret put SUPABASE_ANON_KEY --config wrangler.mcp.jsonc --env production
+# 上記と同じ Supabase JWT Secret。MCP の oauth.ts:mintAccessJwt が HS256 で署名する。
+# 未設定だと /token は 200 を返すが署名が壊れて、後続の tool 呼び出しが DataError で全滅する。
+npx wrangler secret put SUPABASE_JWT_SECRET --config wrangler.mcp.jsonc --env production
 ```
 
 Supabase のキー命名は最近変更された。レガシー `anon public` JWT（`eyJ...`）も使えるが、新プロジェクトでは `sb_publishable_...` 形式。変数名は後方互換で `SUPABASE_ANON_KEY` のまま。
