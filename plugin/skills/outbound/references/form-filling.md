@@ -1,45 +1,42 @@
 # Contact Form Submission Procedure
 
-Use playwright-cli to fill in and submit forms, then record the result via MCP.
+Use the `mcp__claude_in_chrome__*` tools to fill in and submit forms, then record the result via MCP. See `claude-in-chrome-guide.md` for the full tool reference.
 
-**Important: Submit forms only once.** After clicking the submit button, do not retry for any reason. Use the network command to verify submission success.
+**Important: Submit forms only once.** After clicking the submit button, do not retry for any reason. Verify outcome via `read_network_requests` and page state.
 
 ## Basic Flow
 
-```bash
-# 1. Open browser and navigate to the form
-playwright-cli open <form URL>
+Set up the tab and navigate per the Quick start in `claude-in-chrome-guide.md`, then:
 
-# 2. Use snapshot to understand form structure
-playwright-cli snapshot
-
-# 3. Fill in each field (using refs)
-playwright-cli fill e5 "Acme Corp"
-playwright-cli fill e8 "John Smith"
-playwright-cli fill e12 "info@example.com"
-playwright-cli select e15 "Service inquiry"
-playwright-cli fill e20 "<body text>"
-
-# 4. Click the submit button
-playwright-cli click e25
-
-# 5. Verify submission completion (see "Submission Completion Check" below)
-
-# 6. Close the browser
-playwright-cli close
 ```
+1. mcp__claude_in_chrome__read_page { tabId }
+   -> identify the form, fields, and submit button refs
+
+2. mcp__claude_in_chrome__form_input × N  (call in parallel — no order dependency)
+   { tabId, ref: "ref_5",  value: "Acme Corp" }
+   { tabId, ref: "ref_8",  value: "山田 太郎" }
+   { tabId, ref: "ref_12", value: "info@example.com" }
+   { tabId, ref: "ref_15", value: "Service inquiry" }   // select uses string
+   { tabId, ref: "ref_20", value: "<body text>" }        // textarea
+   { tabId, ref: "ref_22", value: true }                 // checkbox / radio
+
+3. mcp__claude_in_chrome__read_network_requests { tabId, clear: true }
+   -> initialize tracking BEFORE the submit click
+
+4. mcp__claude_in_chrome__computer { tabId, action: "left_click", ref: <submit ref> }
+
+5. Verify completion (see "Submission Completion Check" below)
+```
+
+Capture the body text in your own state **before** step 4 — some forms wipe fields on submit.
 
 ## Sales Refusal Check (Safety Net)
 
-When taking a snapshot of the form page, check for any text stating "No sales inquiries", "Please refrain from sales outreach", "No solicitation", etc. **If found, stop the form submission** and do the following before moving on to the next prospect:
+When inspecting the form page, check for any text stating "No sales inquiries", "Please refrain from sales outreach", "営業お断り", "勧誘お断り", etc. The accessibility tree from `read_page` includes most labels and headings; for body copy, also try `find { query: "sales refusal notice" }` or `javascript_tool { text: "document.body.innerText" }` and grep.
 
-```bash
-playwright-cli close
-```
-
-Then call `mcp__plugin_lead-ace_api__record_outreach` with `channel: "form"`, `status: "failed"`, `errorMessage: "Sales refusal notice found"`.
-
-Then call `mcp__plugin_lead-ace_api__update_prospect_status` with `status: "inactive"`.
+**If found, stop the form submission** and call:
+- `mcp__plugin_lead-ace_api__record_outreach` with `channel: "form"`, `status: "failed"`, `errorMessage: "Sales refusal notice found"`.
+- `mcp__plugin_lead-ace_api__update_prospect_status` with `status: "inactive"`.
 
 ## Form Filling Policy
 
@@ -47,77 +44,62 @@ Then call `mcp__plugin_lead-ace_api__update_prospect_status` with `status: "inac
 - For "Inquiry type" fields, select options like "Service inquiry" or "Business partnership inquiry"
 - Retrieve basic info (organization name, full name, email, phone number) from BUSINESS.md
 - In free-text fields, enter a customized message following the same email guidelines, but adapted to be concise for forms
-- Use `playwright-cli check <ref>` for checkboxes (e.g., privacy policy agreement)
+- Use `form_input { ref, value: true }` for privacy-policy / agreement checkboxes
 
 ## Submission Completion Check (Required)
 
-After clicking the submit button, verify completion in the following order. **Never re-submit until verification is complete.**
+After the submit click, verify in this order. **Never re-submit until verification is complete.**
 
-### Step 1: Check Page Change with snapshot
+### Step 1: Check the network result
 
-```bash
-playwright-cli snapshot
+```
+mcp__claude_in_chrome__read_network_requests { tabId, urlPattern: <relevant>, limit: 30 }
 ```
 
-The submission is **successful** if any of the following are observed:
-- A thank-you page is displayed ("Thank you for your inquiry", etc.)
-- URL has transitioned to a thank-you page (`/thanks`, `/complete`, etc.)
-- The form has disappeared and a completion message is displayed
-- A success message such as "Message sent" is displayed
+Look for the form's POST:
+- **HTTP 200 / 302** -> Submission successful
+- **HTTP 4xx** -> Submission failed (validation or rejection)
+- **HTTP 5xx** -> Treat as failed for the outreach log. **Note**: a small number of SaaS form backends (e.g. studio.design's `studiodesignapp.com`) return 5xx but still deliver the message asynchronously. If you suspect this, surface it in the report so the user can verify.
+- **No POST visible** -> the submit click did not trigger submission. Re-check the form for missing required fields, then verify page state.
 
-### Step 2: If snapshot is inconclusive, check network
+If there are many unrelated requests, narrow with `urlPattern` (a substring of the expected POST URL) before reading.
 
-```bash
-playwright-cli network
+### Step 2: Sanity-check page state
+
+```
+mcp__claude_in_chrome__read_page { tabId }
 ```
 
-Look for a POST request in the network output:
-- A POST to the form URL or a related endpoint -> **Submission successful** (reached the server)
-- POST status is 200 or 302 -> **Submission successful**
-- No POST found -> **Submission failed** (button click may not have triggered form submission)
+The submission is **definitely successful** if any of:
+- A thank-you page is displayed ("Thank you for your inquiry", "送信完了", etc.)
+- URL has transitioned to a confirmation route (`/thanks`, `/complete`, etc.)
+- The form has disappeared and a completion message is shown
 
 ### Processing Based on Verification Result
 
-**If submission was successful:**
+**If submission was successful:** call `mcp__plugin_lead-ace_api__record_outreach` with `channel: "form"`, `status: "sent"`, `subject`, and `body`. Use the body text you captured **before** the click.
 
-```bash
-playwright-cli close
-```
-
-Then call `mcp__plugin_lead-ace_api__record_outreach` with `channel: "form"`, `status: "sent"`, `subject`, and `body`.
-
-**If submission failed (only when no POST confirmed):**
-
-```bash
-playwright-cli close
-```
-
-Then call `mcp__plugin_lead-ace_api__record_outreach` with `channel: "form"`, `status: "failed"`, `errorMessage: "<reason>"`.
+**If submission failed (4xx, 5xx, or no POST):** call `mcp__plugin_lead-ace_api__record_outreach` with `channel: "form"`, `status: "failed"`, `errorMessage: "<reason>"`.
 
 **Important:** Even on failure, do not re-submit to that form. Move on to the next prospect.
 
 ## Error Handling
 
-- **Form not found:** No form element in snapshot -> record with `status: "failed"` and `errorMessage`
-- **Input validation error:** Check snapshot for error messages, then attempt one corrected re-submission. Verify the re-submission via network as well
-- **Page load timeout:** Record as `status: "failed"` and move on
+- **Form not found:** No `<form>` in `read_page` -> record with `status: "failed"` and `errorMessage: "no form on page"`
+- **Input validation error:** Check `read_page` for inline error messages, then make **one** corrected re-submission attempt. Verify the re-submission via network as well.
+- **Page load timeout:** Record as `status: "failed"` and move on.
 
 ### When reCAPTCHA / hCaptcha or Similar is Present
 
-If the form has reCAPTCHA, hCaptcha, Turnstile, or similar CAPTCHA (detected in snapshot), skip form submission:
+If the form has reCAPTCHA, hCaptcha, Turnstile, or similar CAPTCHA (visible in `read_page` or `find { query: "captcha" }`), skip form submission:
 
-```bash
-playwright-cli close
-```
-
-Then call `mcp__plugin_lead-ace_api__record_outreach` with `channel: "form"`, `status: "failed"`, `errorMessage: "Skipped due to reCAPTCHA"`.
-
-- The prospect's status stays as `new` (the CAPTCHA may be removed in a future update)
-- If another channel (email, SNS) is available, try that instead
+- `mcp__plugin_lead-ace_api__record_outreach` with `channel: "form"`, `status: "failed"`, `errorMessage: "Skipped due to reCAPTCHA"`.
+- The prospect's status stays as `new` (the CAPTCHA may be removed in a future update).
+- If another channel (email, SNS) is available, try that instead.
 
 ### For Google Forms
 
-Submit Google Forms via a direct POST to the `formResponse` endpoint rather than browser UI interaction. This has a high success rate (no UI interaction needed, no CAPTCHA), and minimal context usage. No browser needs to be opened.
+Submit Google Forms via a direct POST to the `formResponse` endpoint rather than browser UI interaction. This has a high success rate (no UI interaction needed, no CAPTCHA), and minimal context usage.
 
 **Detection:**
 - URL contains `docs.google.com/forms`
@@ -125,35 +107,51 @@ Submit Google Forms via a direct POST to the `formResponse` endpoint rather than
 
 **Submission procedure:**
 
-1. **Retrieve the raw HTML of the form page and extract form ID and entry IDs**
+1. **Extract entry IDs via `javascript_tool`** (replaces the old `fetch_url.py --raw` + Haiku flow — deterministic, no LLM call needed):
 
-   Use the `--raw` flag to get raw HTML (Jina Reader strips form data):
+   ```
+   mcp__claude_in_chrome__navigate { tabId, url: "https://docs.google.com/forms/d/e/{FORM_ID}/viewform" }
 
-   ```bash
-   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_url.py \
-     --url "https://docs.google.com/forms/d/{FORM_ID}/viewform" \
-     --prompt "Extract all entry IDs from this Google Form. From the field definitions in FB_PUBLIC_LOAD_DATA_, list each field's label and its corresponding entry.XXXXXXX ID. For multiple-choice fields, include the list of options and their selection IDs." \
-     --raw --timeout 20
+   mcp__claude_in_chrome__javascript_tool {
+     tabId,
+     action: "javascript_exec",
+     text: "(() => { const data = window.FB_PUBLIC_LOAD_DATA_; const fields = data[1][1]; return JSON.stringify({ formId: location.pathname.match(/\\/forms\\/d\\/e\\/([^/]+)\\//)[1], title: data[1][8], fields: fields.map(f => ({ label: f[1], type: f[3], entries: Array.isArray(f[4]) ? f[4].map(e => ({ id: e[0], options: Array.isArray(e[1]) ? e[1].map(o => o[0]) : null })) : null })) }); })()"
+   }
    ```
 
-   - Form ID: from the `/forms/d/{FORM_ID}/` part of the URL
-   - Entry IDs: `--raw` passes raw HTML to Haiku, which extracts field labels and entry ID mappings from `FB_PUBLIC_LOAD_DATA_`
-
-3. **POST to the formResponse endpoint**
-
-   ```bash
-   curl -s -o /dev/null -w "%{http_code}" \
-     -X POST "https://docs.google.com/forms/d/{FORM_ID}/formResponse" \
-     -d "entry.XXXXXXX=value1&entry.YYYYYYY=value2&entry.ZZZZZZZ=value3"
+   Result shape:
+   ```json
+   {
+     "formId": "1FAIp...",
+     "title": "...",
+     "fields": [
+       { "label": "ラジオボタン", "type": 2, "entries": [{ "id": 1022372562, "options": ["オプション 1", ...] }] },
+       { "label": "プルダウン",   "type": 3, "entries": [{ "id": 87339598,   "options": [...] }] },
+       { "label": "チェックボックス", "type": 4, "entries": [{ "id": 1220516489, "options": [...] }] },
+       { "label": "日付選択",     "type": 9, "entries": [{ "id": 1490458150, "options": null }] },
+       ...
+     ]
+   }
    ```
 
-   - HTTP 200 means submission was successful
-   - Redirect (302 -> confirmation page) also means success
+2. **POST to the formResponse endpoint** via Bash:
 
-4. **Record the log**
+   ```bash
+   curl -s -o /tmp/gform_resp.html -w "HTTP: %{http_code}\n" \
+     -X POST "https://docs.google.com/forms/d/e/{FORM_ID}/formResponse" \
+     --data-urlencode "entry.XXXXXXX=value1" \
+     --data-urlencode "entry.YYYYYYY=value2" \
+     --data-urlencode "entry.YYYYYYY=value3"   # repeat the same entry.X for multi-checkbox
+   grep -oE "回答を記録しました|response has been recorded" /tmp/gform_resp.html
+   ```
 
-   Call `mcp__plugin_lead-ace_api__record_outreach` with `channel: "form"`, `status: "sent"`, `subject`, and `body`.
+   - HTTP 200 + the body containing `回答を記録しました` (or `Your response has been recorded.`) -> success
+   - HTTP 200 without that marker usually means the form re-rendered with a validation error — check the response body.
+   - HTTP 302 (redirect to confirmation page) also means success.
+
+3. **Record the log:** call `mcp__plugin_lead-ace_api__record_outreach` with `channel: "form"`, `status: "sent"`, `subject`, and `body`.
 
 **Notes:**
-- The order of form fields and their entry IDs may not be obvious. Cross-reference with the field definitions (label text) in the page source to map the correct entry IDs
-- Some forms with email collection enabled also require an `emailAddress` parameter
+- The order of form fields and their entry IDs may not be obvious. Cross-reference with the field `label` in the JS extraction to map the correct entry IDs.
+- Some forms with email collection enabled also require an `emailAddress` parameter.
+- For checkbox fields, repeat `--data-urlencode "entry.X=optionA"` once per selected option.

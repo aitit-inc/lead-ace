@@ -31,15 +31,14 @@ Call `mcp__plugin_lead-ace_api__list_projects` and verify that `$0` exists. If n
 
 Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "env_status"` to get the environment snapshot saved by `/setup`.
 
-If the document is missing, abort with: "No environment status recorded for this project. Please run `/setup $0` first — it verifies Gmail / playwright / Chrome availability and saves the status that this skill relies on."
+If the document is missing, abort with: "No environment status recorded for this project. Please run `/setup $0` first — it verifies Gmail and Chrome availability and saves the status that this skill relies on."
 
-Hold the parsed env status in memory; it is reused in step 4 (channel choices) and step 7 (the "Environment & Tool Status" section of SALES_STRATEGY.md). Do **not** re-ask the user about Gmail / playwright / Chrome here — that is `/setup`'s responsibility.
+Hold the parsed env status in memory; it is reused in step 4 (channel choices) and step 7 (the "Environment & Tool Status" section of SALES_STRATEGY.md). Do **not** re-ask the user about Gmail / Chrome here — that is `/setup`'s responsibility.
 
 **Impact of results on channel selection (apply throughout the rest of the skill):**
 - No Gmail SaaS connection -> Email sending not possible. Forms or SNS DMs only
 - No Gmail MCP -> Reply checking in /check-results becomes manual
-- No playwright-cli -> Form submission not possible. Email and SNS DMs only
-- No Claude in Chrome -> SNS DMs not possible. Email and forms only
+- No Claude in Chrome -> Form submission and SNS DMs not possible. Email only
 - No tools at all -> Outbound is effectively unusable -- make constraints clear when setting up channels in steps 3-6
 
 ### 3. Check Existing Documents & Determine Mode

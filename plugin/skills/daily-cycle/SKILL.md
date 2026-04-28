@@ -154,7 +154,7 @@ You are an outbound sales agent. Please reach out to each company on the prospec
 
 3. Also read these based on the channel:
    - For email: retrieve via mcp__plugin_lead-ace_api__get_master_document with slug "tpl_email_guidelines"
-   - For forms: read `${CLAUDE_PLUGIN_ROOT}/skills/outbound/references/form-filling.md` and `${CLAUDE_PLUGIN_ROOT}/skills/outbound/references/playwright-guide.md`
+   - For forms: read `${CLAUDE_PLUGIN_ROOT}/skills/outbound/references/form-filling.md` and `${CLAUDE_PLUGIN_ROOT}/skills/outbound/references/claude-in-chrome-guide.md`
 
 ## Required Rules for Sales Policy
 

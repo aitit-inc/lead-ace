@@ -5,14 +5,17 @@ argument-hint: "<project-id> [count]"
 allowed-tools:
   - Bash
   - Read
-  # For SNS DMs (claude-in-chrome is used because login session is required)
+  # claude-in-chrome handles both contact-form submission and SNS DMs
   - mcp__claude_in_chrome__tabs_context_mcp
   - mcp__claude_in_chrome__tabs_create_mcp
   - mcp__claude_in_chrome__navigate
   - mcp__claude_in_chrome__read_page
+  - mcp__claude_in_chrome__find
   - mcp__claude_in_chrome__get_page_text
   - mcp__claude_in_chrome__form_input
   - mcp__claude_in_chrome__computer
+  - mcp__claude_in_chrome__javascript_tool
+  - mcp__claude_in_chrome__read_network_requests
   - mcp__plugin_lead-ace_api__get_outbound_targets
   - mcp__plugin_lead-ace_api__send_email_and_record
   - mcp__plugin_lead-ace_api__record_outreach
@@ -72,7 +75,7 @@ No need to approach a single prospect via all available channels. One channel is
 
 **SNS DM caution:** SNS DMs have a lower reach rate (depends on recipient's DM settings). Follow the priority order in the "Sales Channels" section of SALES_STRATEGY.md if specified. Skip if SNS is disabled.
 
-**If browser tools are unavailable:** If playwright-cli is not installed, form submission is not possible; if claude-in-chrome is not connected, SNS DM is not possible. Target only prospects with email addresses and skip those where the channel is unavailable. Report skipped count in results report as "Skipped due to browser not connected: N".
+**If claude-in-chrome is not connected:** Both contact-form submission and SNS DMs require it. Target only prospects with email addresses and skip those where the channel is unavailable. Report skipped count in results report as "Skipped due to browser not connected: N".
 
 ### 3. Email Sending
 
@@ -105,18 +108,18 @@ If the tool returns `error: "Gmail not connected"` or `"Gmail token revoked"` (s
 
 ### 4. Contact Form Submission
 
-Read `${CLAUDE_PLUGIN_ROOT}/skills/outbound/references/playwright-guide.md` and `${CLAUDE_PLUGIN_ROOT}/skills/outbound/references/form-filling.md` and follow their procedures.
+Read `${CLAUDE_PLUGIN_ROOT}/skills/outbound/references/claude-in-chrome-guide.md` and `${CLAUDE_PLUGIN_ROOT}/skills/outbound/references/form-filling.md` and follow their procedures.
 
 Branch processing based on the `formType` field:
 
 | formType | Processing |
 |---|---|
-| `google_forms` | Follow "Google Forms" section in `references/form-filling.md`, submit via `formResponse` POST (no browser needed) |
-| `native_html` / `wordpress_cf7` / null | Use playwright-cli for browser operations. Follow basic flow in `references/form-filling.md` |
+| `google_forms` | Follow "Google Forms" section in `references/form-filling.md`. Extract entry IDs via `javascript_tool`, then submit via `formResponse` POST with curl |
+| `native_html` / `wordpress_cf7` / null | Use claude-in-chrome MCP tools (`navigate`, `read_page` / `find`, `form_input`, `computer`, `read_network_requests`). Follow basic flow in `references/form-filling.md` |
 | `iframe_embed` | Skip. Record with `status: "failed"`, `errorMessage: "iframe-embedded form -- skipped"` |
 | `with_captcha` | Skip. Follow "reCAPTCHA / hCaptcha etc." section in `references/form-filling.md` |
 
-If `formType` is null (not yet determined), check form structure with playwright-cli before deciding. **However, if null, skip immediately on first attempt failure** (to prevent wasted tool calls in case it's iframe_embed or with_captcha).
+If `formType` is null (not yet determined), inspect the page with `read_page` / `find` first. **However, if null, skip immediately on first attempt failure** (to prevent wasted tool calls in case it's iframe_embed or with_captcha).
 
 **Body validation before sending:** Before recording, verify that the body entered in the form is not empty. If empty, record as `status: "failed"`, `errorMessage: "body empty"`.
 
@@ -124,7 +127,7 @@ If `formType` is null (not yet determined), check form structure with playwright
 
 ### 5. SNS DM
 
-Use claude-in-chrome to send DMs on SNS (login session required). Supported platforms: **X (Twitter)** and **LinkedIn**.
+Use claude-in-chrome to send DMs on SNS (login session required). Supported platforms: **X (Twitter)** and **LinkedIn**. See `references/claude-in-chrome-guide.md` for tool reference.
 
 **Message:** Keep it short and concise for SNS. Refer to the "SNS Messages" section of SALES_STRATEGY.md.
 

@@ -38,17 +38,11 @@ Call `mcp__plugin_lead-ace_api__get_gmail_status`. Record `connected` (boolean) 
 
 If not connected, instruct the user: "Sign in at https://app.leadace.ai with Google (Settings -> Connect Google) to enable email sending, then re-run /setup. Without this, no emails can be sent." This does not abort the skill -- the user can still proceed with form-only or SNS-only outreach.
 
-#### 2-2. playwright-cli (auto)
-```bash
-playwright-cli --version 2>&1
-```
-Record whether the command exists. Required for form submission in /outbound.
-
-#### 2-3. Gmail MCP (claude.ai built-in) (ask)
+#### 2-2. Gmail MCP (claude.ai built-in) (ask)
 Use AskUserQuestion to ask: "Have you connected the Gmail MCP in claude.ai? (Required for reply checking in /check-results and draft creation.)" — options: `yes` / `no` / `unsure`.
 
-#### 2-4. Claude in Chrome extension (ask)
-Use AskUserQuestion to ask: "Are you using the Claude in Chrome extension? (Required for SNS DM sending in /outbound and SNS reply checking in /check-results.)" — options: `yes` / `no` / `unsure`.
+#### 2-3. Claude in Chrome extension (ask)
+Use AskUserQuestion to ask: "Are you using the Claude in Chrome extension? (Required for contact-form submission and SNS DMs in /outbound, plus SNS reply checking in /check-results.)" — options: `yes` / `no` / `unsure`.
 
 ### 3. Pick or Create a Project
 
@@ -79,14 +73,13 @@ Captured: <YYYY-MM-DD HH:MM> via /setup.
 |---|---|---|
 | LeadAce MCP | connected | (verified by list_projects) |
 | Gmail send (SaaS) | connected / not connected | <email when connected> |
-| playwright-cli (forms) | available / missing | <version when available> |
 | Gmail MCP (replies) | yes / no / unsure | answered via AskUserQuestion |
-| Claude in Chrome (SNS) | yes / no / unsure | answered via AskUserQuestion |
+| Claude in Chrome (forms + SNS) | yes / no / unsure | answered via AskUserQuestion |
 
 ## Channel availability implied by the above
 
 - Email: <available / unavailable — Gmail SaaS connection required>
-- Form submission: <available / unavailable — playwright-cli required>
+- Form submission: <available / unavailable — Claude in Chrome required>
 - SNS DM: <available / unavailable — Claude in Chrome required>
 - Reply checking: <automated via Gmail MCP / manual fallback>
 ```
