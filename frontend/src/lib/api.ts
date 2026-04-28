@@ -1,3 +1,4 @@
+import { goto } from '$app/navigation';
 import { supabase } from './auth';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8787';
@@ -13,10 +14,29 @@ export class ApiError extends Error {
   }
 }
 
+let redirecting = false;
+
+async function handleUnauthorized(): Promise<void> {
+  if (redirecting) return;
+  redirecting = true;
+  try {
+    await supabase.auth.signOut();
+  } catch {
+    // ignore — session may already be gone
+  }
+  const here = window.location.pathname + window.location.search;
+  const onLogin = window.location.pathname === '/login';
+  const next = !onLogin ? `?next=${encodeURIComponent(here)}` : '';
+  await goto(`/login${next}`, { replaceState: true });
+}
+
 async function getToken(): Promise<string> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
-  if (!token) throw new ApiError(401, 'Not authenticated');
+  if (!token) {
+    void handleUnauthorized();
+    throw new ApiError(401, 'Not authenticated');
+  }
   return token;
 }
 
@@ -32,6 +52,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
+    if (res.status === 401) {
+      void handleUnauthorized();
+    }
     throw new ApiError(res.status, err.error ?? 'Unknown error', err.detail);
   }
   return res.json();
