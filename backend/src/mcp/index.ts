@@ -24,6 +24,19 @@ type Env = {
 }
 
 // ---------------------------------------------------------------------------
+// Version metadata
+// ---------------------------------------------------------------------------
+//
+// SERVER_VERSION is informational — the deployed backend's own version.
+// MIN_PLUGIN_VERSION is the gate: any plugin older than this MUST be told to
+// run `/plugin update lead-ace@lead-ace` because backend behavior assumes the
+// new plugin contract. Bump this **only when** introducing a backend change
+// that the old plugin cannot tolerate (removed tool, renamed required arg,
+// changed response shape). See .claude/rules/release.md.
+const SERVER_VERSION = '1.0.0'
+const MIN_PLUGIN_VERSION = '0.5.38'
+
+// ---------------------------------------------------------------------------
 // Auth helpers
 // ---------------------------------------------------------------------------
 
@@ -106,7 +119,22 @@ function withCors(response: Response): Response {
 // ---------------------------------------------------------------------------
 
 function createMcpServer(apiUrl: string, authHeader: string): McpServer {
-  const server = new McpServer({ name: 'lead-ace', version: '1.0.0' })
+  const server = new McpServer({ name: 'lead-ace', version: SERVER_VERSION })
+
+  // --- get_server_version ---
+  server.tool(
+    'get_server_version',
+    'Return the LeadAce backend MCP server version and the minimum compatible plugin version. Skills should call this first and abort with a "/plugin update" message if their plugin.json version is below minPluginVersion.',
+    {},
+    async () => {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ serverVersion: SERVER_VERSION, minPluginVersion: MIN_PLUGIN_VERSION }),
+        }],
+      }
+    },
+  )
 
   // --- list_projects ---
   server.tool(

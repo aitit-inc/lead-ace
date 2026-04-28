@@ -4,7 +4,9 @@ description: "This skill should be used when the user asks to \"set up\", \"star
 argument-hint: "[project-name]"
 allowed-tools:
   - Bash
+  - Read
   - AskUserQuestion
+  - mcp__plugin_lead-ace_api__get_server_version
   - mcp__plugin_lead-ace_api__list_projects
   - mcp__plugin_lead-ace_api__setup_project
   - mcp__plugin_lead-ace_api__get_gmail_status
@@ -19,7 +21,21 @@ Run this skill the first time you use LeadAce, and re-run it whenever your local
 
 ## Steps
 
-### 1. Verify MCP Connection
+### 1. Verify MCP Connection & Plugin Version
+
+#### 1-1. Server version & plugin compatibility
+
+Call `mcp__plugin_lead-ace_api__get_server_version`. The response is a JSON object `{ serverVersion, minPluginVersion }`.
+
+Then read the local plugin's version: `Read` `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` and take the `version` field.
+
+Compare semver component-by-component (split on `.`, parse each as integer, compare lexicographically). If the plugin version is **less than** `minPluginVersion`, **abort** with:
+
+> Your LeadAce plugin is too old (v<plugin-version>) for the current backend (requires ≥ v<minPluginVersion>). Run `/plugin update lead-ace@lead-ace` and then re-run `/setup`.
+
+Otherwise continue.
+
+#### 1-2. Auth & reachability
 
 Call `mcp__plugin_lead-ace_api__list_projects`. A successful response proves three things at once: the MCP server is reachable, the OAuth token is valid, and the user is authenticated.
 
