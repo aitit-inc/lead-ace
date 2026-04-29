@@ -38,8 +38,8 @@ const prospectInputSchema = z.object({
   formType: z.enum(formTypeEnum.enumValues).optional(),
   snsAccounts: snsAccountsSchema.optional(),
   notes: z.string().optional(),
-  // Linking
-  matchReason: z.string().min(1),
+  // Linking — only consulted when projectId is set on the request
+  matchReason: z.string().min(1).optional(),
   priority: z.number().int().min(1).max(5).default(3),
 }).refine(
   (p) => p.email || p.contactFormUrl || (p.snsAccounts && Object.values(p.snsAccounts).some(Boolean)),
@@ -47,12 +47,12 @@ const prospectInputSchema = z.object({
 )
 
 const batchSchema = z.object({
-  projectId: z.string().min(1),
+  projectId: z.string().min(1).optional(),
   prospects: z.array(prospectInputSchema).min(1).max(100),
 })
 
 const importSchema = z.object({
-  projectId: z.string().min(1),
+  projectId: z.string().min(1).optional(),
   csvText: z.string().min(1),
   dedupPolicy: z.enum(['skip', 'overwrite']).default('skip'),
 })
@@ -106,11 +106,11 @@ const REQUIRED_CSV_HEADERS = [
   'name',
   'overview',
   'websiteUrl',
-  'matchReason',
 ] as const
 
 const ALLOWED_CSV_HEADERS = new Set<string>([
   ...REQUIRED_CSV_HEADERS,
+  'matchReason',
   'contactName',
   'department',
   'industry',
@@ -160,14 +160,26 @@ function csvRowToInput(header: string[], row: string[]): { ok: true; value: Pros
 
 export const prospectsRouter = new Hono<{ Bindings: Env; Variables: Variables }>()
 
-// POST /prospects/batch — batch register prospects with deduplication
+// POST /prospects/batch — batch register prospects with deduplication.
+// projectId is optional: when omitted, prospects are saved as tenant-only assets
+// (no project_prospects link is created). When provided, every input row must
+// also include matchReason.
 prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async (c) => {
   const { projectId, prospects: inputs } = c.req.valid('json')
   const tenantId = c.get('tenantId')
   const db = c.get('db')
 
-  if (!await verifyProject(db, projectId, tenantId)) {
-    return c.json({ error: 'Project not found' }, 404)
+  if (projectId) {
+    if (!await verifyProject(db, projectId, tenantId)) {
+      return c.json({ error: 'Project not found' }, 404)
+    }
+    const missingReason = inputs.find((p) => !p.matchReason || p.matchReason.trim() === '')
+    if (missingReason) {
+      return c.json({
+        error: 'matchReason is required for every prospect when projectId is provided',
+        detail: `First offending row: ${missingReason.name}`,
+      }, 400)
+    }
   }
 
   // Free plan: lifetime prospect limit (null = unlimited / paid tiers; skip the check)
@@ -234,24 +246,26 @@ prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async 
       }
     }
 
-    // Check if this domain is already registered in this project
-    const existingInProject = await db
-      .select({ pp: projectProspects.id })
-      .from(projectProspects)
-      .innerJoin(prospects, eq(prospects.id, projectProspects.prospectId))
-      .innerJoin(organizations, eq(organizations.id, prospects.organizationId))
-      .where(
-        and(
-          eq(projectProspects.projectId, projectId),
-          eq(organizations.tenantId, tenantId),
-          eq(organizations.domain, input.organizationDomain),
-        ),
-      )
-      .limit(1)
+    if (projectId) {
+      // Check if this domain is already registered in this project
+      const existingInProject = await db
+        .select({ pp: projectProspects.id })
+        .from(projectProspects)
+        .innerJoin(prospects, eq(prospects.id, projectProspects.prospectId))
+        .innerJoin(organizations, eq(organizations.id, prospects.organizationId))
+        .where(
+          and(
+            eq(projectProspects.projectId, projectId),
+            eq(organizations.tenantId, tenantId),
+            eq(organizations.domain, input.organizationDomain),
+          ),
+        )
+        .limit(1)
 
-    if (existingInProject.length > 0) {
-      skipped.push({ name: input.name, reason: 'already_in_project' })
-      continue
+      if (existingInProject.length > 0) {
+        skipped.push({ name: input.name, reason: 'already_in_project' })
+        continue
+      }
     }
 
     // Upsert organization (scoped to tenant)
@@ -303,17 +317,19 @@ prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async 
 
     if (!newProspect) continue
 
-    // Link to project
-    await db.insert(projectProspects).values({
-      tenantId,
-      projectId,
-      prospectId: newProspect.id,
-      matchReason: input.matchReason,
-      priority: input.priority as 1 | 2 | 3 | 4 | 5,
-      status: 'new',
-      createdAt: now,
-      updatedAt: now,
-    })
+    // Link to project — only when projectId is provided.
+    if (projectId) {
+      await db.insert(projectProspects).values({
+        tenantId,
+        projectId,
+        prospectId: newProspect.id,
+        matchReason: input.matchReason!,
+        priority: input.priority as 1 | 2 | 3 | 4 | 5,
+        status: 'new',
+        createdAt: now,
+        updatedAt: now,
+      })
+    }
 
     inserted.push(newProspect.id)
   }
@@ -326,13 +342,16 @@ prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async 
   })
 })
 
-// POST /prospects/import — bulk import from canonical CSV with skip/overwrite dedup
+// POST /prospects/import — bulk import from canonical CSV with skip/overwrite dedup.
+// projectId is optional: when omitted, prospects are saved as tenant-only assets
+// (no project_prospects link is created or updated, even with dedupPolicy='overwrite').
+// matchReason becomes a CSV-level required column only when projectId is provided.
 prospectsRouter.post('/prospects/import', zValidator('json', importSchema), async (c) => {
   const { projectId, csvText, dedupPolicy } = c.req.valid('json')
   const tenantId = c.get('tenantId')
   const db = c.get('db')
 
-  if (!await verifyProject(db, projectId, tenantId)) {
+  if (projectId && !await verifyProject(db, projectId, tenantId)) {
     return c.json({ error: 'Project not found' }, 404)
   }
 
@@ -361,6 +380,9 @@ prospectsRouter.post('/prospects/import', zValidator('json', importSchema), asyn
   const missing = REQUIRED_CSV_HEADERS.filter((h) => !header.includes(h))
   if (missing.length > 0) {
     return c.json({ error: 'Missing required columns', detail: missing.join(', ') }, 400)
+  }
+  if (projectId && !header.includes('matchReason')) {
+    return c.json({ error: 'Missing required columns', detail: 'matchReason is required when projectId is provided' }, 400)
   }
   const unknown = header.filter((h) => !ALLOWED_CSV_HEADERS.has(h))
   if (unknown.length > 0) {
@@ -393,6 +415,11 @@ prospectsRouter.post('/prospects/import', zValidator('json', importSchema), asyn
     const input = parsed.value
     const rowKey = input.name
 
+    if (projectId && (!input.matchReason || input.matchReason.trim() === '')) {
+      errors.push({ row: i + 1, error: 'matchReason: required when projectId is provided' })
+      continue
+    }
+
     // do_not_contact always wins, regardless of dedupPolicy.
     const existingByEmail = input.email
       ? await db
@@ -414,19 +441,21 @@ prospectsRouter.post('/prospects/import', zValidator('json', importSchema), asyn
           .limit(1)
       : []
 
-    const existingInProject = await db
-      .select({ ppId: projectProspects.id, prospectId: prospects.id })
-      .from(projectProspects)
-      .innerJoin(prospects, eq(prospects.id, projectProspects.prospectId))
-      .innerJoin(organizations, eq(organizations.id, prospects.organizationId))
-      .where(
-        and(
-          eq(projectProspects.projectId, projectId),
-          eq(organizations.tenantId, tenantId),
-          eq(organizations.domain, input.organizationDomain),
-        ),
-      )
-      .limit(1)
+    const existingInProject = projectId
+      ? await db
+          .select({ ppId: projectProspects.id, prospectId: prospects.id })
+          .from(projectProspects)
+          .innerJoin(prospects, eq(prospects.id, projectProspects.prospectId))
+          .innerJoin(organizations, eq(organizations.id, prospects.organizationId))
+          .where(
+            and(
+              eq(projectProspects.projectId, projectId),
+              eq(organizations.tenantId, tenantId),
+              eq(organizations.domain, input.organizationDomain),
+            ),
+          )
+          .limit(1)
+      : []
 
     const existingProspectId =
       existingByEmail[0]?.id ?? existingByForm[0]?.id ?? existingInProject[0]?.prospectId ?? null
@@ -442,7 +471,8 @@ prospectsRouter.post('/prospects/import', zValidator('json', importSchema), asyn
         continue
       }
 
-      // overwrite: update prospect fields, upsert org, ensure project link.
+      // overwrite: update prospect fields, upsert org, and (if projectId given)
+      // upsert the project link.
       const now = new Date()
       const [org] = await db
         .insert(organizations)
@@ -484,27 +514,29 @@ prospectsRouter.post('/prospects/import', zValidator('json', importSchema), asyn
         })
         .where(and(eq(prospects.id, existingProspectId), eq(prospects.tenantId, tenantId)))
 
-      // Upsert link: insert if missing, otherwise update matchReason / priority.
-      await db
-        .insert(projectProspects)
-        .values({
-          tenantId,
-          projectId,
-          prospectId: existingProspectId,
-          matchReason: input.matchReason,
-          priority: input.priority as 1 | 2 | 3 | 4 | 5,
-          status: 'new',
-          createdAt: now,
-          updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: [projectProspects.projectId, projectProspects.prospectId],
-          set: {
-            matchReason: sql`excluded.match_reason`,
-            priority: sql`excluded.priority`,
+      if (projectId) {
+        // Upsert link: insert if missing, otherwise update matchReason / priority.
+        await db
+          .insert(projectProspects)
+          .values({
+            tenantId,
+            projectId,
+            prospectId: existingProspectId,
+            matchReason: input.matchReason!,
+            priority: input.priority as 1 | 2 | 3 | 4 | 5,
+            status: 'new',
+            createdAt: now,
             updatedAt: now,
-          },
-        })
+          })
+          .onConflictDoUpdate({
+            target: [projectProspects.projectId, projectProspects.prospectId],
+            set: {
+              matchReason: sql`excluded.match_reason`,
+              priority: sql`excluded.priority`,
+              updatedAt: now,
+            },
+          })
+      }
 
       overwritten.push(existingProspectId)
       continue
@@ -561,16 +593,18 @@ prospectsRouter.post('/prospects/import', zValidator('json', importSchema), asyn
       .returning({ id: prospects.id })
     if (!newProspect) continue
 
-    await db.insert(projectProspects).values({
-      tenantId,
-      projectId,
-      prospectId: newProspect.id,
-      matchReason: input.matchReason,
-      priority: input.priority as 1 | 2 | 3 | 4 | 5,
-      status: 'new',
-      createdAt: now,
-      updatedAt: now,
-    })
+    if (projectId) {
+      await db.insert(projectProspects).values({
+        tenantId,
+        projectId,
+        prospectId: newProspect.id,
+        matchReason: input.matchReason!,
+        priority: input.priority as 1 | 2 | 3 | 4 | 5,
+        status: 'new',
+        createdAt: now,
+        updatedAt: now,
+      })
+    }
 
     inserted.push(newProspect.id)
   }

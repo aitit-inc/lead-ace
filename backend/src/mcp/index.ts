@@ -223,9 +223,9 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
   // --- add_prospects ---
   server.tool(
     'add_prospects',
-    'Batch register prospects into a project. Automatically deduplicates by email, contact form URL, and organization domain.',
+    'Batch register prospects. Automatically deduplicates by email, contact form URL, and (when projectId is given) organization domain within the project. projectId is optional: omit it to save prospects as tenant-only assets (no project link). When projectId is provided, every prospect must include matchReason. Pair tenant-only imports with /match-prospects to link the right ones into a project later.',
     {
-      projectId: z.string().describe('Project name or ID'),
+      projectId: z.string().optional().describe('Project name or ID. Omit to save prospects as tenant-only assets without linking to any project.'),
       prospects: z.array(z.object({
         organizationDomain: z.string().describe('Apex domain of the organization (e.g. example.com)'),
         organizationName: z.string(),
@@ -246,25 +246,32 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
           facebook: z.string().optional(),
         }).optional(),
         notes: z.string().optional(),
-        matchReason: z.string().describe('Why this prospect is a good target'),
+        matchReason: z.string().optional().describe('Why this prospect is a good target. Required when projectId is set; ignored otherwise.'),
         priority: z.number().int().min(1).max(5).default(3),
       })).describe('Array of prospects to register (max 100)'),
     },
     async ({ projectId, prospects }) => {
-      const resolved = await resolveProjectId(projectId, apiUrl, authHeader)
-      if (!resolved.id) {
-        return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+      let resolvedId: string | undefined
+      if (projectId) {
+        const resolved = await resolveProjectId(projectId, apiUrl, authHeader)
+        if (!resolved.id) {
+          return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+        }
+        resolvedId = resolved.id
       }
-      const { ok, data } = await callApi('POST', '/prospects/batch', { projectId: resolved.id, prospects }, apiUrl, authHeader)
+      const body: { projectId?: string; prospects: typeof prospects } = { prospects }
+      if (resolvedId) body.projectId = resolvedId
+      const { ok, data } = await callApi('POST', '/prospects/batch', body, apiUrl, authHeader)
       if (!ok) {
         const err = data as { error: string }
         return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
       }
       const result = data as { inserted: number; skipped: number; insertedIds: number[]; skippedDetails: unknown[] }
+      const target = resolvedId ? `project ${resolvedId}` : 'tenant assets'
       return {
         content: [{
           type: 'text' as const,
-          text: `Registered: ${result.inserted}, Skipped: ${result.skipped}\nSkipped details: ${JSON.stringify(result.skippedDetails)}`,
+          text: `Registered (${target}): ${result.inserted}, Skipped: ${result.skipped}\nSkipped details: ${JSON.stringify(result.skippedDetails)}`,
         }],
       }
     },
@@ -273,21 +280,27 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
   // --- import_prospects_from_csv ---
   server.tool(
     'import_prospects_from_csv',
-    'Import prospects into a project from a canonical CSV string. Required headers: organizationDomain, organizationName, organizationWebsiteUrl, name, overview, websiteUrl, matchReason. Optional: contactName, department, industry, email, contactFormUrl, formType, snsAccounts.x, snsAccounts.linkedin, snsAccounts.instagram, snsAccounts.facebook, notes, priority. At least one of email / contactFormUrl / snsAccounts.* per row. dedupPolicy "skip" leaves existing rows alone; "overwrite" updates fields and re-links to the project. do_not_contact rows are always skipped. Max 1000 data rows.',
+    'Import prospects from a canonical CSV string. Required headers: organizationDomain, organizationName, organizationWebsiteUrl, name, overview, websiteUrl. matchReason is required only when projectId is provided. Optional headers: contactName, department, industry, email, contactFormUrl, formType, snsAccounts.x, snsAccounts.linkedin, snsAccounts.instagram, snsAccounts.facebook, notes, priority. At least one of email / contactFormUrl / snsAccounts.* per row. projectId is optional: omit it to save prospects as tenant-only assets (no project_prospects link is created — pair with /match-prospects to link them into a project later). dedupPolicy "skip" leaves existing prospects alone; "overwrite" updates prospect fields and (if projectId is given) re-links to that project. do_not_contact rows are always skipped. Max 1000 data rows.',
     {
-      projectId: z.string().describe('Project name or ID'),
+      projectId: z.string().optional().describe('Project name or ID. Omit to save prospects as tenant-only assets without linking to any project.'),
       csvText: z.string().describe('Full CSV text including header row'),
       dedupPolicy: z.enum(['skip', 'overwrite']).default('skip'),
     },
     async ({ projectId, csvText, dedupPolicy }) => {
-      const resolved = await resolveProjectId(projectId, apiUrl, authHeader)
-      if (!resolved.id) {
-        return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+      let resolvedId: string | undefined
+      if (projectId) {
+        const resolved = await resolveProjectId(projectId, apiUrl, authHeader)
+        if (!resolved.id) {
+          return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+        }
+        resolvedId = resolved.id
       }
+      const body: { projectId?: string; csvText: string; dedupPolicy: 'skip' | 'overwrite' } = { csvText, dedupPolicy }
+      if (resolvedId) body.projectId = resolvedId
       const { ok, data } = await callApi(
         'POST',
         '/prospects/import',
-        { projectId: resolved.id, csvText, dedupPolicy },
+        body,
         apiUrl,
         authHeader,
       )
@@ -304,10 +317,11 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
         skippedDetails: unknown[]
         errorDetails: unknown[]
       }
+      const target = resolvedId ? `project ${resolvedId}` : 'tenant assets'
       return {
         content: [{
           type: 'text' as const,
-          text: `Imported: ${result.inserted} new, ${result.overwritten} overwritten, ${result.skipped} skipped, ${result.errors} errors.\nSkipped: ${JSON.stringify(result.skippedDetails)}\nErrors: ${JSON.stringify(result.errorDetails)}`,
+          text: `Imported (${target}): ${result.inserted} new, ${result.overwritten} overwritten, ${result.skipped} skipped, ${result.errors} errors.\nSkipped: ${JSON.stringify(result.skippedDetails)}\nErrors: ${JSON.stringify(result.errorDetails)}`,
         }],
       }
     },
