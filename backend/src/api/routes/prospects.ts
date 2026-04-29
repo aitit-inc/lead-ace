@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { eq, and, sql, desc } from 'drizzle-orm'
+import { eq, and, sql, desc, or, ilike, inArray } from 'drizzle-orm'
 import {
   organizations,
   prospects,
@@ -820,6 +820,152 @@ prospectsRouter.get('/projects/:id/prospects', async (c) => {
   return c.json({
     prospects: rows,
     total: countRows[0]?.total ?? 0,
+  })
+})
+
+// GET /tenant/prospects — list all tenant prospects across projects.
+// Used by /match-prospects to surface candidates already in the DB that match
+// the current project's targeting criteria.
+// Query params: excludeProjectId (omit prospects already linked there),
+// q (substring on name / overview / industry / orgName), industry, limit.
+prospectsRouter.get('/tenant/prospects', async (c) => {
+  const tenantId = c.get('tenantId')
+  const db = c.get('db')
+
+  const limitParam = c.req.query('limit')
+  const limit = limitParam ? Math.min(parseInt(limitParam, 10), 1000) : 200
+  const q = c.req.query('q')?.trim()
+  const industry = c.req.query('industry')?.trim()
+  const excludeProjectId = c.req.query('excludeProjectId')?.trim()
+
+  const conditions = [
+    eq(prospects.tenantId, tenantId),
+    eq(prospects.doNotContact, false),
+  ]
+
+  if (industry) {
+    conditions.push(eq(prospects.industry, industry))
+  }
+
+  if (q) {
+    const like = `%${q}%`
+    conditions.push(
+      or(
+        ilike(prospects.name, like),
+        ilike(prospects.overview, like),
+        ilike(prospects.industry, like),
+        ilike(organizations.name, like),
+      )!,
+    )
+  }
+
+  if (excludeProjectId) {
+    conditions.push(
+      sql`NOT EXISTS (SELECT 1 FROM project_prospects pp WHERE pp.prospect_id = ${prospects.id} AND pp.project_id = ${excludeProjectId})`,
+    )
+  }
+
+  const rows = await db
+    .select({
+      id: prospects.id,
+      name: prospects.name,
+      contactName: prospects.contactName,
+      department: prospects.department,
+      overview: prospects.overview,
+      industry: prospects.industry,
+      websiteUrl: prospects.websiteUrl,
+      email: prospects.email,
+      contactFormUrl: prospects.contactFormUrl,
+      formType: prospects.formType,
+      snsAccounts: prospects.snsAccounts,
+      notes: prospects.notes,
+      organizationId: prospects.organizationId,
+      organizationDomain: organizations.domain,
+      organizationName: organizations.name,
+      createdAt: prospects.createdAt,
+      linkedProjectIds: sql<string[]>`COALESCE(ARRAY(SELECT pp.project_id FROM project_prospects pp WHERE pp.prospect_id = ${prospects.id}), '{}')`,
+    })
+    .from(prospects)
+    .innerJoin(organizations, eq(organizations.id, prospects.organizationId))
+    .where(and(...conditions))
+    .orderBy(desc(prospects.createdAt))
+    .limit(limit)
+
+  return c.json({ prospects: rows, total: rows.length })
+})
+
+// POST /projects/:id/prospects/link — link existing tenant prospects to a project.
+// Creates project_prospects junction rows only; never inserts new prospects or
+// organizations. Used by /match-prospects after the LLM identifies cross-project
+// targets that fit the current project's criteria.
+const linkSchema = z.object({
+  links: z.array(z.object({
+    prospectId: z.number().int(),
+    matchReason: z.string().min(1),
+    priority: z.number().int().min(1).max(5).default(3),
+  })).min(1).max(200),
+})
+
+prospectsRouter.post('/projects/:id/prospects/link', zValidator('json', linkSchema), async (c) => {
+  const projectId = c.req.param('id')
+  const { links } = c.req.valid('json')
+  const tenantId = c.get('tenantId')
+  const db = c.get('db')
+
+  if (!await verifyProject(db, projectId, tenantId)) {
+    return c.json({ error: 'Project not found' }, 404)
+  }
+
+  const ids = links.map((l) => l.prospectId)
+  const existing = await db
+    .select({ id: prospects.id, doNotContact: prospects.doNotContact })
+    .from(prospects)
+    .where(and(eq(prospects.tenantId, tenantId), inArray(prospects.id, ids)))
+
+  const byId = new Map(existing.map((r) => [r.id, r]))
+
+  const linkedIds: number[] = []
+  const alreadyLinkedIds: number[] = []
+  const skipped: Array<{ prospectId: number; reason: string }> = []
+
+  for (const link of links) {
+    const row = byId.get(link.prospectId)
+    if (!row) {
+      skipped.push({ prospectId: link.prospectId, reason: 'not_found' })
+      continue
+    }
+    if (row.doNotContact) {
+      skipped.push({ prospectId: link.prospectId, reason: 'do_not_contact' })
+      continue
+    }
+
+    const now = new Date()
+    const [inserted] = await db
+      .insert(projectProspects)
+      .values({
+        tenantId,
+        projectId,
+        prospectId: link.prospectId,
+        matchReason: link.matchReason,
+        priority: link.priority as 1 | 2 | 3 | 4 | 5,
+        status: 'new',
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoNothing({ target: [projectProspects.projectId, projectProspects.prospectId] })
+      .returning({ id: projectProspects.id })
+
+    if (inserted) linkedIds.push(link.prospectId)
+    else alreadyLinkedIds.push(link.prospectId)
+  }
+
+  return c.json({
+    linked: linkedIds.length,
+    alreadyLinked: alreadyLinkedIds.length,
+    skipped: skipped.length,
+    linkedIds,
+    alreadyLinkedIds,
+    skippedDetails: skipped,
   })
 })
 

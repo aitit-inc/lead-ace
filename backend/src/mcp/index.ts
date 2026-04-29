@@ -768,6 +768,89 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
     },
   )
 
+  // --- list_tenant_prospects ---
+  server.tool(
+    'list_tenant_prospects',
+    'List existing prospects across the entire tenant (every project the user owns). Use this in /match-prospects to find prospects gathered for past projects that may fit the current project. Excludes do-not-contact prospects. excludeProjectId omits prospects already linked to that project. q is a substring match on name / overview / industry / organization name. Returns up to 1000 rows.',
+    {
+      excludeProjectId: z.string().optional()
+        .describe('Project name or ID — omit prospects already linked to this project'),
+      q: z.string().optional().describe('Substring search on name / overview / industry / org name'),
+      industry: z.string().optional().describe('Exact-match industry filter'),
+      limit: z.number().int().min(1).max(1000).default(200),
+    },
+    async ({ excludeProjectId, q, industry, limit }) => {
+      const params = new URLSearchParams()
+      if (excludeProjectId) {
+        const resolved = await resolveProjectId(excludeProjectId, apiUrl, authHeader)
+        if (!resolved.id) {
+          return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+        }
+        params.set('excludeProjectId', resolved.id)
+      }
+      if (q) params.set('q', q)
+      if (industry) params.set('industry', industry)
+      params.set('limit', String(limit))
+
+      const { ok, data } = await callApi('GET', `/tenant/prospects?${params.toString()}`, null, apiUrl, authHeader)
+      if (!ok) {
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      const result = data as { prospects: unknown[]; total: number }
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `${result.total} tenant prospect(s).\n${JSON.stringify(result.prospects, null, 2)}`,
+        }],
+      }
+    },
+  )
+
+  // --- link_existing_prospects_to_project ---
+  server.tool(
+    'link_existing_prospects_to_project',
+    'Link existing tenant prospects to a project by creating project_prospects junction rows. Does NOT create new prospects or organizations — pair with list_tenant_prospects to discover candidates first. Skips prospects flagged do_not_contact and reports prospects already linked. Use this in /match-prospects after the LLM picks targets and the user approves.',
+    {
+      projectId: z.string().describe('Project name or ID'),
+      links: z.array(z.object({
+        prospectId: z.number().int(),
+        matchReason: z.string().min(1).describe('Why this prospect fits the current project'),
+        priority: z.number().int().min(1).max(5).default(3),
+      })).min(1).max(200),
+    },
+    async ({ projectId, links }) => {
+      const resolved = await resolveProjectId(projectId, apiUrl, authHeader)
+      if (!resolved.id) {
+        return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+      }
+      const { ok, data } = await callApi(
+        'POST',
+        `/projects/${resolved.id}/prospects/link`,
+        { links },
+        apiUrl,
+        authHeader,
+      )
+      if (!ok) {
+        const err = data as { error: string; detail?: string }
+        const msg = err.detail ? `${err.error}: ${err.detail}` : err.error
+        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true }
+      }
+      const result = data as {
+        linked: number
+        alreadyLinked: number
+        skipped: number
+        skippedDetails: unknown[]
+      }
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Linked: ${result.linked} new, ${result.alreadyLinked} already linked, ${result.skipped} skipped.\nSkipped: ${JSON.stringify(result.skippedDetails)}`,
+        }],
+      }
+    },
+  )
+
   // --- get_project_settings ---
   server.tool(
     'get_project_settings',
