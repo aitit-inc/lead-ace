@@ -5,6 +5,7 @@ import { rlsMiddleware } from './middleware/rls'
 import { projectsRouter } from './routes/projects'
 import { projectSettingsRouter } from './routes/project-settings'
 import { prospectsRouter } from './routes/prospects'
+import { organizationsRouter } from './routes/organizations'
 import { outreachRouter } from './routes/outreach'
 import { responsesRouter } from './routes/responses'
 import { evaluationsRouter } from './routes/evaluations'
@@ -36,6 +37,7 @@ app.use('/api/*', rlsMiddleware)
 app.route('/api/projects', projectsRouter)
 app.route('/api', projectSettingsRouter)
 app.route('/api', prospectsRouter)
+app.route('/api', organizationsRouter)
 app.route('/api', outreachRouter)
 app.route('/api', responsesRouter)
 app.route('/api', evaluationsRouter)

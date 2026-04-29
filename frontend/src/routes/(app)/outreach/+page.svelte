@@ -1,13 +1,16 @@
 <script lang="ts">
   import { get } from '$lib/api';
   import { activeProject } from '$lib/stores/project';
-  import type { OutreachLog, OutreachStatus } from '$lib/types';
+  import type { OutreachLog, OutreachStatus, OutreachResponse } from '$lib/types';
   import ChannelBadge from '$lib/components/ChannelBadge.svelte';
+  import SentimentBadge from '$lib/components/SentimentBadge.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
 
   let logs = $state<OutreachLog[]>([]);
   let loading = $state(true);
   let expandedId = $state<number | null>(null);
+  let responsesCache = $state<Record<number, OutreachResponse[]>>({});
+  let loadingResponses = $state<Record<number, boolean>>({});
 
   $effect(() => {
     const pid = $activeProject;
@@ -18,6 +21,27 @@
       loading = false;
     });
   });
+
+  async function toggleExpand(logId: number) {
+    if (expandedId === logId) {
+      expandedId = null;
+      return;
+    }
+    expandedId = logId;
+    if (!responsesCache[logId] && !loadingResponses[logId]) {
+      const log = logs.find((l) => l.id === logId);
+      if (!log || log.responseCount === 0) return;
+      loadingResponses = { ...loadingResponses, [logId]: true };
+      try {
+        const res = await get<{ responses: OutreachResponse[] }>(`/outreach/${logId}/responses`);
+        responsesCache = { ...responsesCache, [logId]: res.responses };
+      } finally {
+        const next = { ...loadingResponses };
+        delete next[logId];
+        loadingResponses = next;
+      }
+    }
+  }
 
   function formatDate(iso: string) {
     return new Date(iso).toLocaleString('en-US', {
@@ -42,6 +66,10 @@
         return 'bg-danger';
     }
   }
+
+  function replyLabel(n: number): string {
+    return n === 1 ? '1 reply' : `${n} replies`;
+  }
 </script>
 
 <h2 class="text-lg font-semibold text-text mb-4">Outreach Logs</h2>
@@ -65,7 +93,7 @@
       <!-- Desktop row -->
       <button
         class="hidden md:grid w-full grid-cols-[120px_70px_60px_1fr_60px] gap-4 px-3 py-2.5 text-left text-sm hover:bg-surface transition-colors rounded"
-        onclick={() => (expandedId = expandedId === log.id ? null : log.id)}
+        onclick={() => toggleExpand(log.id)}
       >
         <span class="text-text-secondary text-xs font-mono">{formatDate(log.sentAt)}</span>
         <span><ChannelBadge channel={log.channel} /></span>
@@ -78,6 +106,9 @@
             <span class="font-medium">{log.subject}</span> &mdash;
           {/if}
           {truncate(log.body)}
+          {#if log.responseCount > 0}
+            <span class="ml-2 text-[11px] text-success font-medium">↳ {replyLabel(log.responseCount)}</span>
+          {/if}
         </span>
         <span class="text-right text-xs text-text-muted font-mono">#{log.prospectId}</span>
       </button>
@@ -85,7 +116,7 @@
       <!-- Mobile card -->
       <button
         class="flex md:hidden w-full flex-col gap-1 px-3 py-3 text-left hover:bg-surface transition-colors rounded"
-        onclick={() => (expandedId = expandedId === log.id ? null : log.id)}
+        onclick={() => toggleExpand(log.id)}
       >
         <div class="flex items-center justify-between gap-2">
           <div class="flex items-center gap-2 min-w-0">
@@ -101,7 +132,12 @@
           <p class="text-sm font-medium text-text truncate">{log.subject}</p>
         {/if}
         <p class="text-xs text-text-secondary line-clamp-2">{truncate(log.body, 120)}</p>
-        <span class="text-[11px] text-text-muted font-mono">#{log.prospectId}</span>
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-[11px] text-text-muted font-mono">#{log.prospectId}</span>
+          {#if log.responseCount > 0 && log.latestResponseAt}
+            <span class="text-[11px] text-success font-medium">↳ {replyLabel(log.responseCount)} · {formatDate(log.latestResponseAt)}</span>
+          {/if}
+        </div>
       </button>
 
       {#if expandedId === log.id}
@@ -112,6 +148,27 @@
           <p class="text-xs text-text-secondary whitespace-pre-wrap break-words">{log.body}</p>
           {#if log.errorMessage}
             <p class="text-xs text-danger mt-2 break-words">Error: {log.errorMessage}</p>
+          {/if}
+
+          {#if log.responseCount > 0}
+            <div class="mt-3 border-t border-border pt-3 space-y-2">
+              <p class="text-[11px] font-medium text-text-muted uppercase tracking-wider">Replies ({log.responseCount})</p>
+              {#if loadingResponses[log.id]}
+                <p class="text-xs text-text-muted">Loading replies...</p>
+              {:else if responsesCache[log.id]}
+                {#each responsesCache[log.id] as r}
+                  <div class="rounded bg-page px-3 py-2 space-y-1.5">
+                    <div class="flex flex-wrap items-center gap-2 text-[11px] text-text-muted">
+                      <span class="font-mono">{formatDate(r.receivedAt)}</span>
+                      <SentimentBadge sentiment={r.sentiment} />
+                      <span class="font-mono text-text-secondary">{r.responseType}</span>
+                      <ChannelBadge channel={r.channel} />
+                    </div>
+                    <p class="text-xs text-text-secondary whitespace-pre-wrap break-words">{r.content}</p>
+                  </div>
+                {/each}
+              {/if}
+            </div>
           {/if}
         </div>
       {/if}

@@ -7,6 +7,7 @@ import {
   outreachStatusEnum,
   projectProspects,
   prospects,
+  responses,
   channelEnum,
 } from '../../db/schema'
 import { getRemainingOutreachQuota } from '../plan-limits'
@@ -224,6 +225,8 @@ outreachRouter.get('/projects/:id/outreach/recent', async (c) => {
       status: outreachLogs.status,
       sentAt: outreachLogs.sentAt,
       errorMessage: outreachLogs.errorMessage,
+      responseCount: sql<number>`COALESCE((SELECT COUNT(*)::int FROM responses WHERE outreach_log_id = ${outreachLogs.id}), 0)`,
+      latestResponseAt: sql<string | null>`(SELECT MAX(received_at) FROM responses WHERE outreach_log_id = ${outreachLogs.id})`,
     })
     .from(outreachLogs)
     .where(and(
@@ -234,6 +237,38 @@ outreachRouter.get('/projects/:id/outreach/recent', async (c) => {
     .limit(limit)
 
   return c.json({ logs })
+})
+
+// GET /outreach/:id/responses — all responses linked to a specific outreach log.
+// Used by the /outreach UI to expand a row and show the conversation inline.
+outreachRouter.get('/outreach/:id/responses', async (c) => {
+  const id = parseInt(c.req.param('id'), 10)
+  if (Number.isNaN(id)) return c.json({ error: 'Invalid id' }, 400)
+  const tenantId = c.get('tenantId')
+  const db = c.get('db')
+
+  const [log] = await db
+    .select({ id: outreachLogs.id })
+    .from(outreachLogs)
+    .where(and(eq(outreachLogs.id, id), eq(outreachLogs.tenantId, tenantId)))
+    .limit(1)
+
+  if (!log) return c.json({ error: 'Outreach log not found' }, 404)
+
+  const rows = await db
+    .select({
+      id: responses.id,
+      channel: responses.channel,
+      content: responses.content,
+      sentiment: responses.sentiment,
+      responseType: responses.responseType,
+      receivedAt: responses.receivedAt,
+    })
+    .from(responses)
+    .where(eq(responses.outreachLogId, id))
+    .orderBy(desc(responses.receivedAt))
+
+  return c.json({ responses: rows })
 })
 
 // GET /projects/:id/drafts — list pending_review drafts for review

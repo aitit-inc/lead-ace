@@ -50,6 +50,17 @@ export interface OutreachLog {
   status: OutreachStatus;
   sentAt: string;
   errorMessage: string | null;
+  responseCount: number;
+  latestResponseAt: string | null;
+}
+
+export interface OutreachResponse {
+  id: number;
+  channel: Channel;
+  content: string;
+  sentiment: Sentiment;
+  responseType: ResponseType;
+  receivedAt: string;
 }
 
 export interface OutreachDraft {
@@ -109,6 +120,37 @@ export interface ProjectStats {
   respondedMessages: Array<Record<string, unknown>>;
   noResponseSample: Array<Record<string, unknown>>;
   dataSufficiency: { sufficient: boolean; totalSent: number; daysSinceLastSend: number | null };
+}
+
+export interface Organization {
+  id: number;
+  name: string;
+  domain: string;
+  websiteUrl: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OrganizationListItem extends Organization {
+  prospectCount: number;
+  projectCount: number;
+}
+
+export interface OrganizationProspect {
+  id: number;
+  name: string;
+  contactName: string | null;
+  department: string | null;
+  overview: string;
+  industry: string | null;
+  websiteUrl: string;
+  email: string | null;
+  contactFormUrl: string | null;
+  snsAccounts: SnsAccounts | null;
+  doNotContact: boolean;
+  notes: string | null;
+  createdAt: string;
+  projectCount: number;
 }
 
 export type PlanTier = 'free' | 'starter' | 'pro' | 'scale' | 'unlimited';

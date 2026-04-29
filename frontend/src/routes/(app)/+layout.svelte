@@ -21,6 +21,7 @@
 
   const nav = [
     { href: '/prospects', label: 'Prospects' },
+    { href: '/organizations', label: 'Organizations' },
     { href: '/outreach', label: 'Outreach' },
     { href: '/drafts', label: 'Drafts' },
     { href: '/responses', label: 'Responses' },
@@ -28,6 +29,12 @@
     { href: '/documents', label: 'Documents' },
     { href: '/settings', label: 'Settings' },
   ];
+
+  // Pages that work without an active project (tenant-scoped or global).
+  const tenantScopedPaths = ['/settings', '/organizations'];
+  function isTenantScoped(pathname: string): boolean {
+    return tenantScopedPaths.some((p) => pathname === p || pathname.startsWith(p + '/'));
+  }
 
   function isActive(href: string) {
     return page.url.pathname === href || page.url.pathname.startsWith(href + '/');
@@ -162,7 +169,7 @@
 
     <!-- Content -->
     <main class="flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-5">
-      {#if $activeProject || page.url.pathname === '/settings'}
+      {#if $activeProject || isTenantScoped(page.url.pathname)}
         {@render children()}
       {:else}
         <div class="flex flex-col items-center justify-center h-full gap-4">

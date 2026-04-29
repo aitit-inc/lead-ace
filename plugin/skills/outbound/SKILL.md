@@ -50,7 +50,7 @@ Pay particular attention to these sections in the sales_strategy document:
 - **Outreach mode**: `precision` (deep personalization) or `volume` (template-based semi-personalization). Default to `precision` if not set
 - **Sales channels**: Channel priority and which channels not to use
 - **Messaging**: Subject line patterns, body structure, and A/B test instructions if any -- follow them
-- **Sender information**: Sender email address, signature
+- **Sender information**: Signature block (organization phone, name, title, etc.). Sender display name and email come from project settings (loaded above), **not** from this document — the backend send path uses them automatically
 - **Email template**: If a template is defined, use it as a base (especially important in volume mode)
 - **SNS messages**: SNS DM messaging policy
 
@@ -83,7 +83,7 @@ No need to approach a single prospect via all available channels. One channel is
 
 ### 3. Email Sending
 
-Retrieve email guidelines via `mcp__plugin_lead-ace_api__get_master_document` with `slug: "tpl_email_guidelines"` and follow them. Get the sender email address and signature from the "Sender Information" section of SALES_STRATEGY.md.
+Retrieve email guidelines via `mcp__plugin_lead-ace_api__get_master_document` with `slug: "tpl_email_guidelines"` and follow them. Get the signature block from the "Sender Information" section of SALES_STRATEGY.md (append it to the body). Sender display name and `From:` address are applied automatically by `send_email_and_record` from project settings — do not pass them as arguments.
 
 **Subject line variation:** If SALES_STRATEGY.md defines multiple subject line patterns, use different patterns for each prospect. Never use the same subject for all outreach. Distribute evenly if A/B test instructions exist.
 
@@ -123,7 +123,7 @@ Call `mcp__plugin_lead-ace_api__record_outreach` with:
 
 **Notes (both modes):**
 - The body must be the complete content including the signature
-- Sender alias support is not yet available; emails always send from the user's primary Gmail address
+- The `From:` address and display name are pulled from project settings (`senderEmailAlias` / `senderDisplayName`) by the backend. If `senderEmailAlias` is set to a Send-As alias not yet verified in the user's Gmail account, sending fails with a Gmail error — surface it in the report and tell the user to verify the alias at https://mail.google.com → Settings → Accounts → "Send mail as"
 
 ### 4. Contact Form Submission
 

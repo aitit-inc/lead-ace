@@ -13,6 +13,8 @@ allowed-tools:
   - mcp__plugin_lead-ace_api__save_document
   - mcp__plugin_lead-ace_api__list_documents
   - mcp__plugin_lead-ace_api__get_master_document
+  - mcp__plugin_lead-ace_api__get_project_settings
+  - mcp__plugin_lead-ace_api__update_project_settings
 ---
 
 # Strategy - Sales & Marketing Strategy Development
@@ -43,12 +45,17 @@ Hold the parsed env status in memory; it is reused in step 4 (channel choices) a
 
 ### 3. Check Existing Documents & Determine Mode
 
-Retrieve existing documents via MCP:
+Retrieve existing documents and project settings via MCP:
 
 Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "business"`.
 Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "sales_strategy"`.
+Call `mcp__plugin_lead-ace_api__get_project_settings` with `projectId: "$0"` (returns defaults if no row exists yet — that's fine).
 
-If either call returns a "Project not found" error, instruct the user to run `/setup $0` first and **abort**.
+If either document call returns a "Project not found" error, instruct the user to run `/setup $0` first and **abort**.
+
+Hold the parsed project settings (`outboundMode`, `senderEmailAlias`, `senderDisplayName`, `unsubscribeEnabled`) in memory — they feed into the gap analysis below and into Step 4-7 / 4-8 (skip those steps if the corresponding setting is already filled and the user hasn't asked to change it).
+
+**Migration check (update mode only):** If the existing SALES_STRATEGY.md has a "Sender Information" section that contains a sender email or display name (older versions wrote them there), and project settings have those fields empty, propose migrating the values into project settings via `update_project_settings` and stripping them from the document — sender email/display name now live exclusively in project settings.
 
 **Mode determination:**
 - **Initial mode**: Neither document exists (both return "not found") -> Execute all steps in step 4 in sequence
@@ -66,8 +73,9 @@ Check the completeness of each section in the existing SALES_STRATEGY.md documen
 | Value proposition | Content is present |
 | Track record / social proof | At least 1 specific achievement or number |
 | Outreach mode | precision / volume is set |
+| Outbound mode | send / draft is set in project settings |
 | Sales channels | Channels and priority are specified |
-| Sender information | Sender name, email address, and signature are all present |
+| Sender information | Sender display name + email are set in project settings; phone + signature are in SALES_STRATEGY.md |
 | Messaging / email template | Template is defined |
 | Response definition | Conditions that count as a response are specified |
 | Notification settings | Content is present ("none" is also a valid setting) |
@@ -169,16 +177,35 @@ Question: What platforms and directories should be used to find prospect candida
 - If "up to you": Select reasonable defaults based on the user's target market (industry, country/region) and write selected sources into the "Prospect Discovery Sources" section of SALES_STRATEGY.md
 
 #### Step 4-7: Sender Information
-Question: Confirm the following in order (these are required for email sending)
-- Organization's phone number (may be needed when filling in contact forms)
-- Sender name (name displayed as email sender)
-- Sender email address (account used to send sales emails)
-- Signature information (organization name, full name, title, phone number, URL, etc.)
-  - Show a common signature format example
 
-These are required for outbound processing so "up to you" is not allowed. Must be obtained from the user.
+Collect 4 items in order (all required for outbound):
+1. Organization's phone number (may be needed when filling in contact forms)
+2. Sender display name (name shown as the email sender, e.g., "Taro Yamada — Acme Inc.")
+3. Sender email address (Gmail address or a verified Send-As alias of the connected Google account)
+4. Signature block (organization name, full name, title, phone number, URL, etc.) — show a common format example
 
-#### Step 4-8: Scheduling and Response Definition
+These are required for outbound processing, so "up to you" is not allowed. Must be obtained from the user.
+
+After collecting these, **save sender display name and sender email to project settings** so the SaaS backend uses them automatically on every send (no document scraping needed):
+
+Call `mcp__plugin_lead-ace_api__update_project_settings` with `projectId: "$0"`, `senderDisplayName: <display name>`, `senderEmailAlias: <email>`.
+
+The phone number and signature block stay in SALES_STRATEGY.md (Sender Information section) — they're free-form text and not used by the backend send path.
+
+If the email is a Send-As alias that is **not yet verified** in Gmail (Settings → Accounts → "Send mail as"), Gmail will reject the send. Tell the user to verify the alias before running `/outbound`. If they intend to send from their primary Gmail address only, just enter that primary address.
+
+#### Step 4-8: Outbound Mode
+
+Question: How should `/outbound` deliver emails?
+- `send` (default): emails are sent immediately during `/outbound`
+- `draft`: `/outbound` stores the composed body as a LeadAce draft. The user reviews and sends it from `https://app.leadace.ai/drafts`. Recommended while still calibrating messaging or for high-stakes outreach
+
+Save the choice:
+Call `mcp__plugin_lead-ace_api__update_project_settings` with `projectId: "$0"`, `outboundMode: "send" | "draft"`.
+
+If "up to you": default to `send`.
+
+#### Step 4-9: Scheduling and Response Definition
 Question: Confirm the following
 - Scheduling link (Calendly / Cal.com / HubSpot Meetings, etc. URL. "None" if not applicable)
   - "Do you use a scheduling tool? Calendly, Cal.com, HubSpot Meetings are popular options"
@@ -187,7 +214,7 @@ Question: Confirm the following
 - Scheduling service name in use and notification sender email address
 - If "up to you": Use (1)(2)(3) above as default for response definition
 
-#### Step 4-9: Notification Settings
+#### Step 4-10: Notification Settings
 Question: Email address to receive daily-cycle completion notifications (or "none")
 - "We can send you a daily report notification when the daily sales cycle completes. Please provide an email address if you'd like notifications"
 
@@ -210,6 +237,10 @@ Save via `mcp__plugin_lead-ace_api__save_document` with `projectId: "$0"`, `slug
 
 - **Initial mode**: Retrieve the template via `mcp__plugin_lead-ace_api__get_master_document` with `slug: "tpl_sales_strategy"` and generate the document following its structure
 - **Update mode**: Use the existing content from `get_document` and update only changed or added sections. Keep sections without changes as-is. Do not erase existing content unless the user explicitly instructs deletion. **Evaluate-managed sections (messaging, targeting, channels, KPI, search keywords) are only rewritten when the user explicitly instructs an update**
+
+**Sender Information section:** Write only the organization's phone number and the signature block. Sender display name and email are stored in project settings (set in Step 4-7) and are read from there by `/outbound`, `/daily-cycle`, and `/check-results` — do not duplicate them in the document. If the section template prompts for them, replace those lines with a single pointer: `Sender display name and email: managed in Project Settings (Web UI → Settings page)`.
+
+**Outbound mode:** Do not write the chosen `send`/`draft` mode into SALES_STRATEGY.md either — it lives in project settings. Add a one-line note in the "Outbound Mode" section (or near "Sales channels") if helpful: `Outbound mode: managed in Project Settings`.
 
 Also retrieve the following master documents via `mcp__plugin_lead-ace_api__get_master_document` to improve quality:
 

@@ -24,6 +24,7 @@ allowed-tools:
   - mcp__plugin_lead-ace_api__get_document
   - mcp__plugin_lead-ace_api__save_document
   - mcp__plugin_lead-ace_api__get_master_document
+  - mcp__plugin_lead-ace_api__get_project_settings
 ---
 
 # Daily Cycle - Daily Sales Cycle Execution
@@ -147,7 +148,7 @@ You are an outbound sales agent. Please reach out to each company on the prospec
    - Channel priorities and which channels not to use
    - Subject line pattern variations (if A/B test instructions exist, follow them)
    - Email body structure and template (especially important in volume mode)
-   - Sender information (sender email address, signature)
+   - Sender information: signature block only (sender display name + email live in project settings and are applied automatically by `send_email` / `send_email_and_record`)
    - SNS messaging policy
 
 2. Next, read `${CLAUDE_PLUGIN_ROOT}/skills/outbound/SKILL.md` and follow its procedure
@@ -291,7 +292,7 @@ This prevents KPI actuals from becoming stale even in cycles where evaluate is s
 
 **9b. Completion Notification Email**
 
-Get the notification recipient email from the "Notification Settings" section of the sales_strategy document (already loaded in 9a), and the sender email from the "Sender Information" section. Skip if notification is "none" or not set.
+Get the notification recipient email from the "Notification Settings" section of the sales_strategy document (already loaded in 9a). Skip if notification is "none" or not set. The `From:` address is applied automatically by `send_email` from project settings (`senderEmailAlias` / `senderDisplayName`) — do not pass them as arguments.
 
 Compose the report body from the phase summaries passed in the prompt:
 

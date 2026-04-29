@@ -122,6 +122,7 @@
 
       {#if expandedId === p.ppId}
         <div class="mx-3 mb-2 rounded bg-surface px-4 py-3 text-xs space-y-1.5">
+          <p><span class="text-text-muted">Organization:</span> <a href="/organizations/{p.organizationId}" class="text-accent hover:underline">{p.organizationName}</a></p>
           <p class="break-words"><span class="text-text-muted">Website:</span> <a href={p.websiteUrl} target="_blank" class="text-accent hover:underline">{p.websiteUrl}</a></p>
           {#if p.email}<p class="break-all"><span class="text-text-muted">Email:</span> <span class="font-mono">{p.email}</span></p>{/if}
           {#if p.contactFormUrl}<p class="break-all"><span class="text-text-muted">Form:</span> <a href={p.contactFormUrl} target="_blank" class="text-accent hover:underline">{p.contactFormUrl}</a></p>{/if}
