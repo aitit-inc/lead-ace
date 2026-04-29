@@ -10,7 +10,7 @@
   // /mcp-authorize is listed here so the global guard does not strip its
   // session id when redirecting unauthenticated users — that page handles
   // its own /login?next=… redirect to preserve the deep link round-trip.
-  const publicPaths = ['/login', '/auth/callback', '/mcp-authorize', '/terms', '/privacy'];
+  const publicPaths = ['/login', '/auth/callback', '/mcp-authorize', '/terms', '/privacy', '/unsubscribe'];
 
   $effect(() => {
     if ($auth.loading) return;

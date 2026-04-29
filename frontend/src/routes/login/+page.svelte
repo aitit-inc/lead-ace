@@ -7,9 +7,12 @@
   let error = $state('');
   let loading = $state(false);
 
-  // gmail.send is the Sensitive scope LeadAce needs to send outbound emails on
-  // the user's behalf. We always request it at sign-in time so the same flow
-  // works for first-time sign-up and returning users.
+  // gmail.send is the only Gmail scope LeadAce needs. It's Sensitive (not Restricted),
+  // so verification doesn't require CASA. With this scope alone we can send from any
+  // Send-As alias the user has already verified in their Gmail web UI — Gmail honors
+  // the From: header for accepted aliases. Listing aliases programmatically would
+  // require gmail.settings.basic / .sharing, both Restricted (CASA-gated), so we
+  // intentionally let users type their alias address by hand instead.
   const GOOGLE_SCOPES = [
     'openid',
     'profile',

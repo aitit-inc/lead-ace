@@ -10,6 +10,8 @@ export type Env = {
   GOOGLE_CLIENT_ID: string
   GOOGLE_CLIENT_SECRET: string
   GMAIL_TOKEN_ENCRYPTION_KEY: string
+  UNSUBSCRIBE_TOKEN_SECRET: string
+  APP_URL: string
 }
 
 export type Variables = {

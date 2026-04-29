@@ -13,6 +13,7 @@ import { masterDocumentsRouter } from './routes/master-documents'
 import { billingRouter } from './routes/billing'
 import { authRouter } from './routes/auth'
 import { stripeWebhookRouter } from './routes/stripe-webhook'
+import { unsubscribeRouter } from './routes/unsubscribe'
 import type { Env, Variables } from './types'
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>()
@@ -23,6 +24,10 @@ app.get('/health', (c) => c.json({ ok: true }))
 
 // Stripe webhook — no auth middleware (uses Stripe signature verification)
 app.route('/api', stripeWebhookRouter)
+
+// Unsubscribe endpoints — no auth middleware. The HMAC token in the URL is
+// the auth and authorizes flipping prospects.do_not_contact for one prospect.
+app.route('/api', unsubscribeRouter)
 
 // All routes below require authentication + tenant-scoped RLS
 app.use('/api/*', authMiddleware)

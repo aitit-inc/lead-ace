@@ -1,5 +1,7 @@
-import { sql } from 'drizzle-orm'
+import { sql, eq } from 'drizzle-orm'
 import type { Db } from '../db/connection'
+import { projectSettings } from '../db/schema'
+import { signUnsubscribeToken } from './unsubscribe-token'
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GMAIL_SEND_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send'
@@ -67,6 +69,7 @@ export function buildRfc822(args: {
   subject: string
   body: string
   inReplyTo?: string
+  extraHeaders?: Record<string, string>
 }): string {
   const lines: string[] = []
   lines.push(`From: ${args.from}`)
@@ -78,12 +81,77 @@ export function buildRfc822(args: {
     lines.push(`In-Reply-To: ${args.inReplyTo}`)
     lines.push(`References: ${args.inReplyTo}`)
   }
+  if (args.extraHeaders) {
+    for (const [name, value] of Object.entries(args.extraHeaders)) {
+      lines.push(`${name}: ${value}`)
+    }
+  }
   lines.push('MIME-Version: 1.0')
   lines.push('Content-Type: text/plain; charset=UTF-8')
   lines.push('Content-Transfer-Encoding: 8bit')
   lines.push('')
   lines.push(args.body)
   return lines.join('\r\n')
+}
+
+export type ProjectSendSettings = {
+  senderEmailAlias: string | null
+  senderDisplayName: string | null
+  unsubscribeEnabled: boolean
+}
+
+// Defaults match project_settings DB defaults — used when no row exists.
+const DEFAULT_SEND_SETTINGS: ProjectSendSettings = {
+  senderEmailAlias: null,
+  senderDisplayName: null,
+  unsubscribeEnabled: true,
+}
+
+export async function loadProjectSendSettings(
+  db: Db,
+  projectId: string,
+): Promise<ProjectSendSettings> {
+  const [row] = await db
+    .select({
+      senderEmailAlias: projectSettings.senderEmailAlias,
+      senderDisplayName: projectSettings.senderDisplayName,
+      unsubscribeEnabled: projectSettings.unsubscribeEnabled,
+    })
+    .from(projectSettings)
+    .where(eq(projectSettings.projectId, projectId))
+    .limit(1)
+  return row ?? DEFAULT_SEND_SETTINGS
+}
+
+// Build the body footer + RFC 8058 List-Unsubscribe headers for a prospect.
+// Returns null when unsubscribe is disabled, or when the prospect has no email
+// channel (no recipient = no point in adding a footer). Pure CPU — caller
+// supplies the already-known prospect email so we don't reissue a SELECT
+// during a request that has often loaded the same row already.
+export async function buildUnsubscribeAttachments(args: {
+  prospectId: number
+  tenantId: string
+  prospectEmail: string | null
+  unsubscribeEnabled: boolean
+  appUrl: string
+  apiUrl: string
+  secret: string
+}): Promise<{ footer: string; headers: Record<string, string> } | null> {
+  if (!args.unsubscribeEnabled || !args.prospectEmail) return null
+
+  const token = await signUnsubscribeToken(
+    { prospectId: args.prospectId, tenantId: args.tenantId },
+    args.secret,
+  )
+  const userUrl = `${args.appUrl}/unsubscribe/${token}`
+  const oneClickUrl = `${args.apiUrl}/api/unsubscribe/${token}`
+
+  const footer = `\n\n---\nDon't want these emails? Unsubscribe: ${userUrl}`
+  const headers: Record<string, string> = {
+    'List-Unsubscribe': `<${oneClickUrl}>, <${userUrl}>`,
+    'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+  }
+  return { footer, headers }
 }
 
 function base64UrlEncode(s: string): string {
@@ -160,6 +228,13 @@ export type GmailSendForUserResult =
   | { ok: false; httpStatus: 412; error: 'Gmail not connected' | 'Gmail token revoked'; detail: string }
   | { ok: false; httpStatus: 502; error: 'Send failed'; detail: string; from: string }
 
+function formatFromHeader(email: string, displayName: string | null): string {
+  if (!displayName) return email
+  // RFC 5322 display-name with double quotes; escape inner quotes/backslashes.
+  const escaped = displayName.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+  return `"${escaped}" <${email}>`
+}
+
 export async function sendGmailForUser(
   db: Db,
   args: {
@@ -174,6 +249,13 @@ export async function sendGmailForUser(
     subject: string
     body: string
     inReplyTo?: string
+    extraHeaders?: Record<string, string>
+    // Optional Send-As alias to use as From:. Must already be verified by the
+    // user in Gmail web UI (we have no scope to verify programmatically — that
+    // would require gmail.settings.basic which is Restricted/CASA-gated).
+    // Gmail rejects unverified aliases at send time; we surface that error.
+    senderEmailAlias?: string | null
+    senderDisplayName?: string | null
   },
 ): Promise<GmailSendForUserResult> {
   const creds = await loadGmailRefreshToken(db, args)
@@ -201,26 +283,30 @@ export async function sendGmailForUser(
     throw e
   }
 
+  const sendAsEmail = args.senderEmailAlias?.trim() || creds.email
+  const fromHeader = formatFromHeader(sendAsEmail, args.senderDisplayName ?? null)
+
   const rfc822 = buildRfc822({
-    from: creds.email,
+    from: fromHeader,
     to: args.to,
     cc: args.cc,
     bcc: args.bcc,
     subject: args.subject,
     body: args.body,
     inReplyTo: args.inReplyTo,
+    extraHeaders: args.extraHeaders,
   })
 
   try {
     const result = await sendGmailMessage({ accessToken, rfc822 })
-    return { ok: true, messageId: result.id, threadId: result.threadId, from: creds.email }
+    return { ok: true, messageId: result.id, threadId: result.threadId, from: sendAsEmail }
   } catch (e) {
     return {
       ok: false,
       httpStatus: 502,
       error: 'Send failed',
       detail: e instanceof Error ? e.message : String(e),
-      from: creds.email,
+      from: sendAsEmail,
     }
   }
 }

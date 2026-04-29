@@ -5,7 +5,8 @@
   "compatibility_flags": ["nodejs_compat"],
   "account_id": "0633d5a3f3b6d8d4cb5b2c7fcf453494", // Leo.uno@surpassone.com's Account
   "vars": {
-    "ENVIRONMENT": "development"
+    "ENVIRONMENT": "development",
+    "APP_URL": "http://localhost:5173"
   },
   // Secrets (set via wrangler secret or .dev.vars):
   //   DATABASE_URL
@@ -20,11 +21,16 @@
   //   GOOGLE_CLIENT_ID            (Google Cloud Console → OAuth Client → Web application)
   //   GOOGLE_CLIENT_SECRET        (paired with GOOGLE_CLIENT_ID, used for refresh_token exchange)
   //   GMAIL_TOKEN_ENCRYPTION_KEY  (random 32+ char passphrase; used as pgp_sym_encrypt key)
+  //   UNSUBSCRIBE_TOKEN_SECRET    (REQUIRED — random 32+ char passphrase; HMAC-SHA256 key for signing
+  //                                /unsubscribe/:token links embedded in outbound emails. Tokens are
+  //                                long-lived — never rotate this in place once emails are out;
+  //                                rotation invalidates every prior unsubscribe link.)
   "env": {
     "production": {
       "name": "lead-ace-api",
       "vars": {
-        "ENVIRONMENT": "production"
+        "ENVIRONMENT": "production",
+        "APP_URL": "https://app.leadace.ai"
       },
       // Custom Domain — wrangler creates the DNS record and SSL cert automatically.
       // The zone must live in the same Cloudflare account (`account_id` above).

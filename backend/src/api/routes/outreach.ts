@@ -10,7 +10,11 @@ import {
   channelEnum,
 } from '../../db/schema'
 import { getRemainingOutreachQuota } from '../plan-limits'
-import { sendGmailForUser } from '../../auth/google'
+import {
+  sendGmailForUser,
+  buildUnsubscribeAttachments,
+  loadProjectSendSettings,
+} from '../../auth/google'
 import { verifyProject } from '../project-helpers'
 import type { Env, Variables } from '../types'
 
@@ -104,9 +108,16 @@ outreachRouter.post(
     const userId = c.get('userId')
     const db = c.get('db')
 
-    const [verified, quota] = await Promise.all([
+    const [verified, quota, sendSettings, prospectEmailRow] = await Promise.all([
       verifyProject(db, input.projectId, tenantId),
       getRemainingOutreachQuota(db, tenantId),
+      loadProjectSendSettings(db, input.projectId),
+      db
+        .select({ email: prospects.email })
+        .from(prospects)
+        .where(eq(prospects.id, input.prospectId))
+        .limit(1)
+        .then((rows) => rows[0]),
     ])
     if (!verified) {
       return c.json({ error: 'Project not found' }, 404)
@@ -121,6 +132,17 @@ outreachRouter.post(
       )
     }
 
+    const unsubscribe = await buildUnsubscribeAttachments({
+      prospectId: input.prospectId,
+      tenantId,
+      prospectEmail: prospectEmailRow?.email ?? null,
+      unsubscribeEnabled: sendSettings.unsubscribeEnabled,
+      appUrl: c.env.APP_URL,
+      apiUrl: new URL(c.req.url).origin,
+      secret: c.env.UNSUBSCRIBE_TOKEN_SECRET,
+    })
+    const sendBody = unsubscribe ? `${input.body}${unsubscribe.footer}` : input.body
+
     const result = await sendGmailForUser(db, {
       tenantId,
       userId,
@@ -131,8 +153,11 @@ outreachRouter.post(
       cc: input.cc,
       bcc: input.bcc,
       subject: input.subject,
-      body: input.body,
+      body: sendBody,
       inReplyTo: input.inReplyTo,
+      extraHeaders: unsubscribe?.headers,
+      senderEmailAlias: sendSettings.senderEmailAlias,
+      senderDisplayName: sendSettings.senderDisplayName,
     })
 
     if (!result.ok && result.httpStatus === 412) {
@@ -291,10 +316,12 @@ outreachRouter.post('/outreach/drafts/:id/send', async (c) => {
   const userId = c.get('userId')
   const db = c.get('db')
 
-  const [[draft], quota] = await Promise.all([
+  const [draft, quota] = await Promise.all([
     db
       .select({
         id: outreachLogs.id,
+        projectId: outreachLogs.projectId,
+        prospectId: outreachLogs.prospectId,
         subject: outreachLogs.subject,
         body: outreachLogs.body,
         status: outreachLogs.status,
@@ -304,7 +331,8 @@ outreachRouter.post('/outreach/drafts/:id/send', async (c) => {
       .from(outreachLogs)
       .innerJoin(prospects, eq(prospects.id, outreachLogs.prospectId))
       .where(and(eq(outreachLogs.id, id), eq(outreachLogs.tenantId, tenantId)))
-      .limit(1),
+      .limit(1)
+      .then((rows) => rows[0]),
     getRemainingOutreachQuota(db, tenantId),
   ])
 
@@ -328,6 +356,18 @@ outreachRouter.post('/outreach/drafts/:id/send', async (c) => {
     )
   }
 
+  const sendSettings = await loadProjectSendSettings(db, draft.projectId)
+  const unsubscribe = await buildUnsubscribeAttachments({
+    prospectId: draft.prospectId,
+    tenantId,
+    prospectEmail: draft.prospectEmail,
+    unsubscribeEnabled: sendSettings.unsubscribeEnabled,
+    appUrl: c.env.APP_URL,
+    apiUrl: new URL(c.req.url).origin,
+    secret: c.env.UNSUBSCRIBE_TOKEN_SECRET,
+  })
+  const sendBody = unsubscribe ? `${draft.body}${unsubscribe.footer}` : draft.body
+
   const result = await sendGmailForUser(db, {
     tenantId,
     userId,
@@ -336,7 +376,10 @@ outreachRouter.post('/outreach/drafts/:id/send', async (c) => {
     clientSecret: c.env.GOOGLE_CLIENT_SECRET,
     to: [draft.prospectEmail],
     subject: draft.subject ?? '',
-    body: draft.body,
+    body: sendBody,
+    extraHeaders: unsubscribe?.headers,
+    senderEmailAlias: sendSettings.senderEmailAlias,
+    senderDisplayName: sendSettings.senderDisplayName,
   })
 
   if (!result.ok && result.httpStatus === 412) {

@@ -364,7 +364,14 @@
         />
         <p class="mt-1 text-xs text-text-muted">
           A Gmail Send-As alias (e.g. <span class="font-mono">sales@yourdomain.com</span>) to use
-          as the From: address. Must already be verified in your Gmail Send-As settings.
+          as the From: address. The alias must already be set up and verified in
+          <a
+            href="https://mail.google.com/mail/u/0/#settings/accounts"
+            target="_blank"
+            rel="noopener"
+            class="underline hover:text-text"
+          >Gmail → Settings → Accounts and Import</a>. If it isn't verified there, sending will
+          fail with a Gmail error.
         </p>
       </div>
 
