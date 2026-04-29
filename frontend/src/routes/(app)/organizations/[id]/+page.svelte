@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { get, patch } from '$lib/api';
+  import { channelLabel } from '$lib/contact-channels';
   import type { Organization, OrganizationProspect } from '$lib/types';
   import EmptyState from '$lib/components/EmptyState.svelte';
 
@@ -43,15 +44,10 @@
     saving = true;
     saveError = null;
     try {
-      const body: { name?: string; websiteUrl?: string } = {};
-      if (editName !== org.name) body.name = editName;
-      if (editWebsite !== org.websiteUrl) body.websiteUrl = editWebsite;
-      if (Object.keys(body).length === 0) {
-        editing = false;
-        saving = false;
-        return;
-      }
-      const res = await patch<{ organization: Organization }>(`/organizations/${org.id}`, body);
+      const res = await patch<{ organization: Organization }>(`/organizations/${org.id}`, {
+        name: editName,
+        websiteUrl: editWebsite,
+      });
       org = res.organization;
       editing = false;
     } catch (e) {
@@ -59,15 +55,6 @@
     } finally {
       saving = false;
     }
-  }
-
-  function channelLabel(p: OrganizationProspect): string {
-    const parts: string[] = [];
-    if (p.email) parts.push('Email');
-    if (p.contactFormUrl) parts.push('Form');
-    if (p.snsAccounts?.x) parts.push('X');
-    if (p.snsAccounts?.linkedin) parts.push('LI');
-    return parts.join(', ') || '-';
   }
 </script>
 

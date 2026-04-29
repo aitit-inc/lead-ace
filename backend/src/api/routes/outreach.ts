@@ -225,22 +225,22 @@ outreachRouter.get('/projects/:id/outreach/recent', async (c) => {
       status: outreachLogs.status,
       sentAt: outreachLogs.sentAt,
       errorMessage: outreachLogs.errorMessage,
-      responseCount: sql<number>`COALESCE((SELECT COUNT(*)::int FROM responses WHERE outreach_log_id = ${outreachLogs.id}), 0)`,
-      latestResponseAt: sql<string | null>`(SELECT MAX(received_at) FROM responses WHERE outreach_log_id = ${outreachLogs.id})`,
+      responseCount: sql<number>`COALESCE(COUNT(${responses.id})::int, 0)`,
+      latestResponseAt: sql<string | null>`MAX(${responses.receivedAt})`,
     })
     .from(outreachLogs)
+    .leftJoin(responses, eq(responses.outreachLogId, outreachLogs.id))
     .where(and(
       eq(outreachLogs.projectId, projectId),
       ne(outreachLogs.status, 'pending_review'),
     ))
+    .groupBy(outreachLogs.id)
     .orderBy(desc(outreachLogs.sentAt))
     .limit(limit)
 
   return c.json({ logs })
 })
 
-// GET /outreach/:id/responses — all responses linked to a specific outreach log.
-// Used by the /outreach UI to expand a row and show the conversation inline.
 outreachRouter.get('/outreach/:id/responses', async (c) => {
   const id = parseInt(c.req.param('id'), 10)
   if (Number.isNaN(id)) return c.json({ error: 'Invalid id' }, 400)

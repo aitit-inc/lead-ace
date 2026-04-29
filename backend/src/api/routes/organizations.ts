@@ -6,8 +6,6 @@ import type { Env, Variables } from '../types'
 
 export const organizationsRouter = new Hono<{ Bindings: Env; Variables: Variables }>()
 
-// GET /organizations — list organizations in the tenant with prospect / project counts.
-// Query params: q (substring on name or domain), limit (default 200, max 500).
 organizationsRouter.get('/organizations', async (c) => {
   const tenantId = c.get('tenantId')
   const db = c.get('db')
@@ -44,8 +42,6 @@ organizationsRouter.get('/organizations', async (c) => {
   return c.json({ organizations: rows, total: rows.length })
 })
 
-// GET /organizations/:id — single organization plus all prospects in the tenant
-// that belong to it (across every project).
 organizationsRouter.get('/organizations/:id', async (c) => {
   const tenantId = c.get('tenantId')
   const db = c.get('db')
@@ -75,17 +71,18 @@ organizationsRouter.get('/organizations/:id', async (c) => {
       doNotContact: prospects.doNotContact,
       notes: prospects.notes,
       createdAt: prospects.createdAt,
-      projectCount: sql<number>`(SELECT COUNT(DISTINCT pp.project_id)::int FROM project_prospects pp WHERE pp.prospect_id = ${prospects.id})`,
+      projectCount: sql<number>`COUNT(DISTINCT ${projectProspects.projectId})::int`,
     })
     .from(prospects)
+    .leftJoin(projectProspects, eq(projectProspects.prospectId, prospects.id))
     .where(and(eq(prospects.organizationId, id), eq(prospects.tenantId, tenantId)))
+    .groupBy(prospects.id)
     .orderBy(desc(prospects.createdAt))
 
   return c.json({ organization: org, prospects: orgProspects })
 })
 
-// PATCH /organizations/:id — update name and/or websiteUrl. Domain is immutable
-// because it is the dedup key for organizations within a tenant.
+// Domain is immutable: it is the dedup key for organizations within a tenant.
 const updateOrgSchema = z
   .object({
     name: z.string().min(1).optional(),

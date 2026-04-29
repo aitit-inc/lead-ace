@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { get, patch } from '$lib/api';
+  import { get } from '$lib/api';
   import { activeProject } from '$lib/stores/project';
+  import { channelLabel } from '$lib/contact-channels';
   import type { Prospect, ProspectStatus } from '$lib/types';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
@@ -36,15 +37,6 @@
     void filterPriority;
     load();
   });
-
-  function channelLabel(p: Prospect): string {
-    const parts: string[] = [];
-    if (p.email) parts.push('Email');
-    if (p.contactFormUrl) parts.push('Form');
-    if (p.snsAccounts?.x) parts.push('X');
-    if (p.snsAccounts?.linkedin) parts.push('LI');
-    return parts.join(', ') || '-';
-  }
 </script>
 
 <div class="flex items-center justify-between mb-4">
