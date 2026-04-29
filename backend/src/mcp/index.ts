@@ -93,6 +93,8 @@ async function resolveProjectId(
   return { id: match.id }
 }
 
+const formatTarget = (id?: string) => id ? `project ${id}` : 'tenant assets'
+
 // ---------------------------------------------------------------------------
 // CORS headers
 // ---------------------------------------------------------------------------
@@ -259,19 +261,16 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
         }
         resolvedId = resolved.id
       }
-      const body: { projectId?: string; prospects: typeof prospects } = { prospects }
-      if (resolvedId) body.projectId = resolvedId
-      const { ok, data } = await callApi('POST', '/prospects/batch', body, apiUrl, authHeader)
+      const { ok, data } = await callApi('POST', '/prospects/batch', { projectId: resolvedId, prospects }, apiUrl, authHeader)
       if (!ok) {
         const err = data as { error: string }
         return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
       }
       const result = data as { inserted: number; skipped: number; insertedIds: number[]; skippedDetails: unknown[] }
-      const target = resolvedId ? `project ${resolvedId}` : 'tenant assets'
       return {
         content: [{
           type: 'text' as const,
-          text: `Registered (${target}): ${result.inserted}, Skipped: ${result.skipped}\nSkipped details: ${JSON.stringify(result.skippedDetails)}`,
+          text: `Registered (${formatTarget(resolvedId)}): ${result.inserted}, Skipped: ${result.skipped}\nSkipped details: ${JSON.stringify(result.skippedDetails)}`,
         }],
       }
     },
@@ -295,12 +294,10 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
         }
         resolvedId = resolved.id
       }
-      const body: { projectId?: string; csvText: string; dedupPolicy: 'skip' | 'overwrite' } = { csvText, dedupPolicy }
-      if (resolvedId) body.projectId = resolvedId
       const { ok, data } = await callApi(
         'POST',
         '/prospects/import',
-        body,
+        { projectId: resolvedId, csvText, dedupPolicy },
         apiUrl,
         authHeader,
       )
@@ -317,11 +314,10 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
         skippedDetails: unknown[]
         errorDetails: unknown[]
       }
-      const target = resolvedId ? `project ${resolvedId}` : 'tenant assets'
       return {
         content: [{
           type: 'text' as const,
-          text: `Imported (${target}): ${result.inserted} new, ${result.overwritten} overwritten, ${result.skipped} skipped, ${result.errors} errors.\nSkipped: ${JSON.stringify(result.skippedDetails)}\nErrors: ${JSON.stringify(result.errorDetails)}`,
+          text: `Imported (${formatTarget(resolvedId)}): ${result.inserted} new, ${result.overwritten} overwritten, ${result.skipped} skipped, ${result.errors} errors.\nSkipped: ${JSON.stringify(result.skippedDetails)}\nErrors: ${JSON.stringify(result.errorDetails)}`,
         }],
       }
     },

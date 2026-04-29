@@ -12,7 +12,7 @@ import {
 import { getRemainingOutreachQuota, getTenantPlan, getPlanLimits, countTenantProspects } from '../plan-limits'
 import type { Env, Variables } from '../types'
 import type { SnsAccounts } from '../../db/schema'
-import { verifyProject } from '../project-helpers'
+import { verifyProject, findExistingProjectLink } from '../project-helpers'
 
 const snsAccountsSchema = z.object({
   x: z.string().optional(),
@@ -247,22 +247,12 @@ prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async 
     }
 
     if (projectId) {
-      // Check if this domain is already registered in this project
-      const existingInProject = await db
-        .select({ pp: projectProspects.id })
-        .from(projectProspects)
-        .innerJoin(prospects, eq(prospects.id, projectProspects.prospectId))
-        .innerJoin(organizations, eq(organizations.id, prospects.organizationId))
-        .where(
-          and(
-            eq(projectProspects.projectId, projectId),
-            eq(organizations.tenantId, tenantId),
-            eq(organizations.domain, input.organizationDomain),
-          ),
-        )
-        .limit(1)
-
-      if (existingInProject.length > 0) {
+      const existing = await findExistingProjectLink(db, {
+        projectId,
+        tenantId,
+        domain: input.organizationDomain,
+      })
+      if (existing) {
         skipped.push({ name: input.name, reason: 'already_in_project' })
         continue
       }
@@ -317,7 +307,6 @@ prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async 
 
     if (!newProspect) continue
 
-    // Link to project — only when projectId is provided.
     if (projectId) {
       await db.insert(projectProspects).values({
         tenantId,
@@ -442,23 +431,15 @@ prospectsRouter.post('/prospects/import', zValidator('json', importSchema), asyn
       : []
 
     const existingInProject = projectId
-      ? await db
-          .select({ ppId: projectProspects.id, prospectId: prospects.id })
-          .from(projectProspects)
-          .innerJoin(prospects, eq(prospects.id, projectProspects.prospectId))
-          .innerJoin(organizations, eq(organizations.id, prospects.organizationId))
-          .where(
-            and(
-              eq(projectProspects.projectId, projectId),
-              eq(organizations.tenantId, tenantId),
-              eq(organizations.domain, input.organizationDomain),
-            ),
-          )
-          .limit(1)
-      : []
+      ? await findExistingProjectLink(db, {
+          projectId,
+          tenantId,
+          domain: input.organizationDomain,
+        })
+      : null
 
     const existingProspectId =
-      existingByEmail[0]?.id ?? existingByForm[0]?.id ?? existingInProject[0]?.prospectId ?? null
+      existingByEmail[0]?.id ?? existingByForm[0]?.id ?? existingInProject?.prospectId ?? null
 
     if (existingProspectId !== null) {
       if (dedupPolicy === 'skip') {
@@ -471,8 +452,6 @@ prospectsRouter.post('/prospects/import', zValidator('json', importSchema), asyn
         continue
       }
 
-      // overwrite: update prospect fields, upsert org, and (if projectId given)
-      // upsert the project link.
       const now = new Date()
       const [org] = await db
         .insert(organizations)
@@ -515,7 +494,6 @@ prospectsRouter.post('/prospects/import', zValidator('json', importSchema), asyn
         .where(and(eq(prospects.id, existingProspectId), eq(prospects.tenantId, tenantId)))
 
       if (projectId) {
-        // Upsert link: insert if missing, otherwise update matchReason / priority.
         await db
           .insert(projectProspects)
           .values({
