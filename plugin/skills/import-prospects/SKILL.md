@@ -49,6 +49,7 @@ A skill that imports existing prospect / contact lists (CSV, Excel, SQLite, plai
 | `snsAccounts.facebook` | no\* | |
 | `notes` | no | |
 | `priority` | no | Integer 1-5, default 3 |
+| `doNotContact` | no | Boolean. `1` / `true` / `yes` / `on` (case-insensitive) → DNC; `0` / `false` / `no` / `off` → not DNC; empty cell omitted. |
 
 \* At least **one** of `email`, `contactFormUrl`, or any `snsAccounts.*` is required per row.
 \*\* Tenant-only imports may omit the `matchReason` column entirely. Linking happens later via `/match-prospects`, which writes a fresh `matchReason` per project.
@@ -97,6 +98,7 @@ For each source column, decide what canonical column it corresponds to. Do not i
 - `matchReason` handling depends on the mode chosen in step 1:
   - **Tenant-only mode**: omit the `matchReason` column entirely from the canonical CSV. Don't ask the user — `/match-prospects` will write fresh per-project reasons later.
   - **Project-linked mode**: if the source has no usable `matchReason`, ask the user once for a default ("Why is this list a fit for this project?") and apply it to every row.
+- **`doNotContact` mapping (important)**: if the source has any do-not-contact-like column — common names: `do_not_contact`, `dnc`, `opted_out`, `opt_out`, `unsubscribed`, `unsubscribe`, `is_unsubscribed`, `subscribed=false` — map it to canonical `doNotContact`. Emit `1` for truthy values and leave the cell blank for falsy ones. **Do not silently drop these rows.** They must be imported with the flag set; otherwise `/build-list` may rediscover the same organisation later and the user will outreach to someone who already opted out. Truthy: `1`, `true`, `yes`, `on`, `unsubscribed`, `opted out`. Falsy: `0`, `false`, `no`, `off`, `subscribed`, `active`, blank. If the semantics are ambiguous, ask the user once before mapping.
 - If a row has none of email / contactFormUrl / snsAccounts.* — drop it and report it in the per-row error summary.
 
 If the source has columns you cannot place anywhere, ignore them — do not try to widen the schema.
@@ -107,6 +109,7 @@ Show the user:
 - the import mode chosen (tenant-only vs linked to project `<name>`)
 - the source path and row count detected
 - the column mapping you inferred (source column → canonical column)
+- if a `doNotContact` column was mapped, how many rows will be flagged DNC vs not
 - any rows you are dropping and why
 
 Ask via `AskUserQuestion` whether to proceed. If the user wants tweaks, iterate.

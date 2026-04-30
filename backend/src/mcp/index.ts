@@ -225,7 +225,7 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
   // --- add_prospects ---
   server.tool(
     'add_prospects',
-    'Batch register prospects. Automatically deduplicates by email, contact form URL, and (when projectId is given) organization domain within the project. projectId is optional: omit it to save prospects as tenant-only assets (no project link). When projectId is provided, every prospect must include matchReason. Pair tenant-only imports with /match-prospects to link the right ones into a project later.',
+    'Batch register prospects. Automatically deduplicates by email, contact form URL, and (when projectId is given) organization domain within the project. projectId is optional: omit it to save prospects as tenant-only assets (no project link). When projectId is provided, every prospect must include matchReason. Set doNotContact=true on rows the source data marks as unsubscribed/opted-out so /build-list will not re-contact them later (DNC is a one-way ratchet on overwrite — false never clears an existing flag). Pair tenant-only imports with /match-prospects to link the right ones into a project later.',
     {
       projectId: z.string().optional().describe('Project name or ID. Omit to save prospects as tenant-only assets without linking to any project.'),
       prospects: z.array(z.object({
@@ -248,6 +248,7 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
           facebook: z.string().optional(),
         }).optional(),
         notes: z.string().optional(),
+        doNotContact: z.boolean().optional().describe('Mark this prospect as do-not-contact (unsubscribed / opted-out). Defaults to false. On overwrite, true sets the flag but false never clears an existing one.'),
         matchReason: z.string().optional().describe('Why this prospect is a good target. Required when projectId is set; ignored otherwise.'),
         priority: z.number().int().min(1).max(5).default(3),
       })).describe('Array of prospects to register (max 100)'),
@@ -279,7 +280,7 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
   // --- import_prospects_from_csv ---
   server.tool(
     'import_prospects_from_csv',
-    'Import prospects from a canonical CSV string. Required headers: organizationDomain, organizationName, organizationWebsiteUrl, name, overview, websiteUrl. matchReason is required only when projectId is provided. Optional headers: contactName, department, industry, email, contactFormUrl, formType, snsAccounts.x, snsAccounts.linkedin, snsAccounts.instagram, snsAccounts.facebook, notes, priority. At least one of email / contactFormUrl / snsAccounts.* per row. projectId is optional: omit it to save prospects as tenant-only assets (no project_prospects link is created — pair with /match-prospects to link them into a project later). dedupPolicy "skip" leaves existing prospects alone; "overwrite" updates prospect fields and (if projectId is given) re-links to that project. do_not_contact rows are always skipped. Max 1000 data rows.',
+    'Import prospects from a canonical CSV string. Required headers: organizationDomain, organizationName, organizationWebsiteUrl, name, overview, websiteUrl. matchReason is required only when projectId is provided. Optional headers: contactName, department, industry, email, contactFormUrl, formType, snsAccounts.x, snsAccounts.linkedin, snsAccounts.instagram, snsAccounts.facebook, notes, priority, doNotContact. At least one of email / contactFormUrl / snsAccounts.* per row. doNotContact accepts 1/true/yes/on (DNC) or 0/false/no/off (not DNC); empty cells are treated as not provided. Set it on rows the source marks as unsubscribed/opted-out so /build-list will not re-discover and contact them. On overwrite, doNotContact=true sets the flag on existing prospects; false (or column absent) never clears an existing flag (one-way ratchet). projectId is optional: omit it to save prospects as tenant-only assets (no project_prospects link is created — pair with /match-prospects to link them into a project later). dedupPolicy "skip" leaves existing prospects alone; "overwrite" updates prospect fields and (if projectId is given) re-links to that project. Existing prospects already flagged do_not_contact are always skipped (their record is preserved). Max 1000 data rows.',
     {
       projectId: z.string().optional().describe('Project name or ID. Omit to save prospects as tenant-only assets without linking to any project.'),
       csvText: z.string().describe('Full CSV text including header row'),
@@ -512,6 +513,30 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
         return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
       }
       return { content: [{ type: 'text' as const, text: `Status updated to "${status}".` }] }
+    },
+  )
+
+  // --- set_prospect_do_not_contact ---
+  server.tool(
+    'set_prospect_do_not_contact',
+    'Toggle the do_not_contact flag on a tenant prospect. Use after /import-prospects when the source had no DNC column but you know certain rows are unsubscribed/opted-out, or for ad-hoc DNC management outside the response-recording flow. DNC prospects are excluded from /build-list re-discovery and from outbound targeting.',
+    {
+      prospectId: z.number().int(),
+      doNotContact: z.boolean().describe('true to mark do-not-contact; false to clear the flag.'),
+    },
+    async ({ prospectId, doNotContact }) => {
+      const { ok, data } = await callApi(
+        'PATCH',
+        `/prospects/${prospectId}/do-not-contact`,
+        { doNotContact },
+        apiUrl,
+        authHeader,
+      )
+      if (!ok) {
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      return { content: [{ type: 'text' as const, text: `Prospect ${prospectId}: do_not_contact = ${doNotContact}.` }] }
     },
   )
 

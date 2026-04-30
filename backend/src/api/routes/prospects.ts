@@ -38,6 +38,8 @@ const prospectInputSchema = z.object({
   formType: z.enum(formTypeEnum.enumValues).optional(),
   snsAccounts: snsAccountsSchema.optional(),
   notes: z.string().optional(),
+  // One-way ratchet on import: true sets/keeps DNC; false (or omitted) never clears an existing flag.
+  doNotContact: z.boolean().optional(),
   // Linking — only consulted when projectId is set on the request
   matchReason: z.string().min(1).optional(),
   priority: z.number().int().min(1).max(5).default(3),
@@ -123,7 +125,11 @@ const ALLOWED_CSV_HEADERS = new Set<string>([
   'snsAccounts.facebook',
   'notes',
   'priority',
+  'doNotContact',
 ])
+
+const DNC_TRUTHY = new Set(['1', 'true', 'yes', 'on'])
+const DNC_FALSY = new Set(['0', 'false', 'no', 'off'])
 
 const MAX_IMPORT_ROWS = 1000
 
@@ -142,6 +148,11 @@ function csvRowToInput(header: string[], row: string[]): { ok: true; value: Pros
       const n = Number.parseInt(val, 10)
       if (!Number.isFinite(n)) return { ok: false, error: 'priority: not an integer' }
       obj.priority = n
+    } else if (key === 'doNotContact') {
+      const lower = val.toLowerCase()
+      if (DNC_TRUTHY.has(lower)) obj.doNotContact = true
+      else if (DNC_FALSY.has(lower)) obj.doNotContact = false
+      else return { ok: false, error: `doNotContact: not a boolean (got "${val}")` }
     } else {
       obj[key] = val
     }
@@ -298,7 +309,7 @@ prospectsRouter.post('/prospects/batch', zValidator('json', batchSchema), async 
         contactFormUrl: input.contactFormUrl ?? null,
         formType: input.formType ?? null,
         snsAccounts: (input.snsAccounts as SnsAccounts) ?? null,
-        doNotContact: false,
+        doNotContact: input.doNotContact ?? false,
         notes: input.notes ?? null,
         createdAt: now,
         updatedAt: now,
@@ -489,6 +500,8 @@ prospectsRouter.post('/prospects/import', zValidator('json', importSchema), asyn
           formType: input.formType ?? null,
           snsAccounts: (input.snsAccounts as SnsAccounts) ?? null,
           notes: input.notes ?? null,
+          // One-way ratchet: only set DNC=true; never clear an existing flag from an import.
+          ...(input.doNotContact === true ? { doNotContact: true } : {}),
           updatedAt: now,
         })
         .where(and(eq(prospects.id, existingProspectId), eq(prospects.tenantId, tenantId)))
@@ -563,7 +576,7 @@ prospectsRouter.post('/prospects/import', zValidator('json', importSchema), asyn
         contactFormUrl: input.contactFormUrl ?? null,
         formType: input.formType ?? null,
         snsAccounts: (input.snsAccounts as SnsAccounts) ?? null,
-        doNotContact: false,
+        doNotContact: input.doNotContact ?? false,
         notes: input.notes ?? null,
         createdAt: now,
         updatedAt: now,
