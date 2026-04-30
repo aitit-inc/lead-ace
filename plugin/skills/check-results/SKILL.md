@@ -29,12 +29,16 @@ A skill that automatically checks outbound sales responses and records them in t
 
 - Project ID: `$0` (required)
 
-Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "sales_strategy"`. Understand the following from the "Response Definition" section:
+In parallel, call:
+- `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "sales_strategy"`
+- `mcp__plugin_lead-ace_api__get_master_document` with `slug: "ref_scheduling_services"` (canonical service-name → notification-domain mapping)
+
+From the "Response Definition" section of SALES_STRATEGY.md, understand:
 - What counts as a "response"
 - Scheduling service(s) in use (service names — there may be multiple, e.g. one for global, one for Japan)
 - Other response signals
 
-**Resolve scheduling notification domains:** Call `mcp__plugin_lead-ace_api__get_master_document` with `slug: "ref_scheduling_services"` to get the canonical service-name → notification-domain mapping. For each scheduling service named in SALES_STRATEGY.md, look up its domain(s) in this reference. If SALES_STRATEGY also has an explicit sender address (legacy format like "Timerex — notifications@timerex.net"), extract just the domain. If the service is not in the reference and SALES_STRATEGY has no sender address, skip the scheduler search for that service and report it in step 7.
+**Resolve scheduling notification domains:** for each scheduling service named in SALES_STRATEGY.md, look up its domain(s) in the `ref_scheduling_services` reference. If SALES_STRATEGY also has an explicit sender address (legacy format like "Timerex — notifications@timerex.net"), extract just the domain. If the service is not in the reference and SALES_STRATEGY has no sender address, skip the scheduler search for that service and report it in step 7.
 
 ### 2. Retrieve Recent Outreach Information
 

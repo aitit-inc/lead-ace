@@ -40,8 +40,9 @@ if (envFileArg) {
     if (!m) continue
     let value = m[2]!
     if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
+      value.length >= 2 &&
+      ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'")))
     ) {
       value = value.slice(1, -1)
     }
@@ -88,12 +89,17 @@ async function main() {
     `
     for (const row of rows) existing.set(row.slug, row.content)
 
-    const plan: Array<{ slug: string; action: 'INSERT' | 'UPDATE' | 'NOOP'; bytes: number }> = []
+    const plan: Array<{
+      slug: string
+      action: 'INSERT' | 'UPDATE' | 'NOOP'
+      bytes: number
+      content: string
+    }> = []
     for (const doc of documents) {
       const content = readContent(doc.file)
       const prev = existing.get(doc.slug)
       const action = prev === undefined ? 'INSERT' : prev === content ? 'NOOP' : 'UPDATE'
-      plan.push({ slug: doc.slug, action, bytes: content.length })
+      plan.push({ slug: doc.slug, action, bytes: content.length, content })
     }
 
     const target = (() => {
@@ -120,16 +126,18 @@ async function main() {
       return
     }
 
-    for (const doc of documents) {
-      const content = readContent(doc.file)
+    let applied = 0
+    for (const p of plan) {
+      if (p.action === 'NOOP') continue
       await sql`
         INSERT INTO master_documents (slug, content, version, updated_at)
-        VALUES (${doc.slug}, ${content}, 1, NOW())
+        VALUES (${p.slug}, ${p.content}, 1, NOW())
         ON CONFLICT (slug)
-        DO UPDATE SET content = ${content}, version = master_documents.version + 1, updated_at = NOW()
+        DO UPDATE SET content = ${p.content}, version = master_documents.version + 1, updated_at = NOW()
       `
+      applied++
     }
-    console.log(`\nDone: ${documents.length} master documents seeded.`)
+    console.log(`\nDone: ${applied} master documents seeded (${documents.length - applied} unchanged).`)
   } finally {
     await sql.end()
   }
