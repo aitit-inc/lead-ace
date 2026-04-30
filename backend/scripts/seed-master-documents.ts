@@ -33,6 +33,7 @@ const documents = [
   { slug: 'tpl_email_guidelines', file: 'skills/outbound/references/email-guidelines.md' },
   { slug: 'tpl_enrich_contacts', file: 'skills/build-list/references/enrich-contacts.md' },
   { slug: 'tpl_analysis_frameworks', file: 'skills/evaluate/references/analysis-frameworks.md' },
+  { slug: 'ref_scheduling_services', file: 'skills/check-results/references/scheduling-services.md' },
 ]
 
 function readContent(relPath: string): string {

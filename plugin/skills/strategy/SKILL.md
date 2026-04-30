@@ -207,11 +207,11 @@ If "up to you": default to `send`.
 
 #### Step 4-9: Scheduling and Response Definition
 Question: Confirm the following
-- Scheduling link (Calendly / Cal.com / HubSpot Meetings, etc. URL. "None" if not applicable)
+- Scheduling link (Calendly / Cal.com / HubSpot Meetings, etc. URL. "None" if not applicable). Multiple services are OK (e.g. one for global, one for Japan)
   - "Do you use a scheduling tool? Calendly, Cal.com, HubSpot Meetings are popular options"
 - Response definition: What counts as a "response"
   - Show options: "Common responses counted as 'responded': (1) Direct email reply (2) Scheduling completion notification (3) Reply via contact form. Is this OK? Add if there are others"
-- Scheduling service name in use and notification sender email address
+- Scheduling service name(s) in use. **Auto-resolve the notification domain:** call `mcp__plugin_lead-ace_api__get_master_document` with `slug: "ref_scheduling_services"`, look up each service the user named, and record the domain in SALES_STRATEGY.md without asking the user (e.g. `Calendly — calendly.com`). Only ask the user for the notification sender domain if the service is not in the reference list
 - If "up to you": Use (1)(2)(3) above as default for response definition
 
 #### Step 4-10: Notification Settings

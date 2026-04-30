@@ -31,8 +31,10 @@ A skill that automatically checks outbound sales responses and records them in t
 
 Call `mcp__plugin_lead-ace_api__get_document` with `projectId: "$0"` and `slug: "sales_strategy"`. Understand the following from the "Response Definition" section:
 - What counts as a "response"
-- Scheduling service in use and its notification sender email address
+- Scheduling service(s) in use (service names — there may be multiple, e.g. one for global, one for Japan)
 - Other response signals
+
+**Resolve scheduling notification domains:** Call `mcp__plugin_lead-ace_api__get_master_document` with `slug: "ref_scheduling_services"` to get the canonical service-name → notification-domain mapping. For each scheduling service named in SALES_STRATEGY.md, look up its domain(s) in this reference. If SALES_STRATEGY also has an explicit sender address (legacy format like "Timerex — notifications@timerex.net"), extract just the domain. If the service is not in the reference and SALES_STRATEGY has no sender address, skip the scheduler search for that service and report it in step 7.
 
 ### 2. Retrieve Recent Outreach Information
 
@@ -56,10 +58,11 @@ For each outreach-targeted prospect, search by the **domain** of the email addre
 
 **3b. Search for Scheduling Notifications**
 
-If a scheduling service is listed in SALES_STRATEGY.md, search for emails from its notification address:
+For each scheduling service domain resolved in step 1, search Gmail. Run searches for all configured services in parallel (e.g. one for Calendly, one for TimeRex if both are in use):
 
-1. Search `mcp__claude_ai_Gmail__search_threads` for `from:<notification address> newer_than:1d`
+1. Search `mcp__claude_ai_Gmail__search_threads` for `from:<domain> newer_than:4d` (e.g. `from:calendly.com newer_than:4d`). Substring match catches subdomains (`@email.calendly.com` etc.)
 2. If found, read the content and match the name, email address, and organization name in the notification body against the outreach list
+3. Domain match alone is insufficient — the body must reference an outreach prospect (the same domain may carry unrelated mail like service marketing emails)
 
 **3c. Search for Bounced Emails**
 
