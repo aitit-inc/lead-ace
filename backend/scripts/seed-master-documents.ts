@@ -1,10 +1,19 @@
 /**
  * Seed master_documents table with content from plugin reference files.
- * Files were moved to DB in Phase 4.7 and deleted from the repo.
- * This script reads them from git history (HEAD~1) as a fallback if not on disk.
  *
  * Usage:
+ *   # Read DATABASE_URL from current environment
  *   DATABASE_URL="postgresql://..." npx tsx scripts/seed-master-documents.ts
+ *
+ *   # Read DATABASE_URL from a dotenv-style file (e.g. backend/.env.production, gitignored)
+ *   npx tsx scripts/seed-master-documents.ts --env-file=.env.production
+ *
+ *   # Preview what would change without writing
+ *   npx tsx scripts/seed-master-documents.ts --env-file=.env.production --dry-run
+ *
+ * Phase 4.7 deleted the plugin reference files from disk and stored their content
+ * in the master_documents table. New entries (added since 4.7) live as files in
+ * the repo and are read from disk; older legacy entries fall back to git history.
  */
 
 import { readFileSync, existsSync } from 'node:fs'
@@ -17,9 +26,32 @@ const __dirname = typeof import.meta.dirname === 'string'
   ? import.meta.dirname
   : dirname(fileURLToPath(import.meta.url))
 
+const args = process.argv.slice(2)
+const dryRun = args.includes('--dry-run')
+const envFileArg = args.find((a) => a.startsWith('--env-file='))
+if (envFileArg) {
+  const envPath = resolve(__dirname, '..', envFileArg.slice('--env-file='.length))
+  if (!existsSync(envPath)) {
+    console.error(`env file not found: ${envPath}`)
+    process.exit(1)
+  }
+  for (const line of readFileSync(envPath, 'utf-8').split('\n')) {
+    const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$/i)
+    if (!m) continue
+    let value = m[2]!
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1)
+    }
+    if (process.env[m[1]!] === undefined) process.env[m[1]!] = value
+  }
+}
+
 const DATABASE_URL = process.env['DATABASE_URL']
 if (!DATABASE_URL) {
-  console.error('DATABASE_URL is required')
+  console.error('DATABASE_URL is required (set in env or via --env-file=...)')
   process.exit(1)
 }
 
@@ -50,6 +82,44 @@ async function main() {
   const sql = postgres(DATABASE_URL!)
 
   try {
+    const existing = new Map<string, string>()
+    const rows = await sql<{ slug: string; content: string }[]>`
+      SELECT slug, content FROM master_documents WHERE slug = ANY(${documents.map((d) => d.slug)})
+    `
+    for (const row of rows) existing.set(row.slug, row.content)
+
+    const plan: Array<{ slug: string; action: 'INSERT' | 'UPDATE' | 'NOOP'; bytes: number }> = []
+    for (const doc of documents) {
+      const content = readContent(doc.file)
+      const prev = existing.get(doc.slug)
+      const action = prev === undefined ? 'INSERT' : prev === content ? 'NOOP' : 'UPDATE'
+      plan.push({ slug: doc.slug, action, bytes: content.length })
+    }
+
+    const target = (() => {
+      try {
+        return new URL(DATABASE_URL!).host
+      } catch {
+        return '?'
+      }
+    })()
+    console.log(`Target: ${target}`)
+    console.log(`Plan (${dryRun ? 'dry-run' : 'apply'}):`)
+    for (const p of plan) {
+      const marker = p.action === 'NOOP' ? '·' : p.action === 'INSERT' ? '+' : '~'
+      console.log(`  ${marker} ${p.slug.padEnd(28)} ${p.action.padEnd(6)} ${p.bytes} chars`)
+    }
+    const counts = plan.reduce<Record<string, number>>((acc, p) => {
+      acc[p.action] = (acc[p.action] ?? 0) + 1
+      return acc
+    }, {})
+    console.log(`Summary: INSERT=${counts['INSERT'] ?? 0}, UPDATE=${counts['UPDATE'] ?? 0}, NOOP=${counts['NOOP'] ?? 0}`)
+
+    if (dryRun) {
+      console.log('\nDry run — no changes written.')
+      return
+    }
+
     for (const doc of documents) {
       const content = readContent(doc.file)
       await sql`
@@ -58,7 +128,6 @@ async function main() {
         ON CONFLICT (slug)
         DO UPDATE SET content = ${content}, version = master_documents.version + 1, updated_at = NOW()
       `
-      console.log(`✓ ${doc.slug} (${content.length} chars)`)
     }
     console.log(`\nDone: ${documents.length} master documents seeded.`)
   } finally {
