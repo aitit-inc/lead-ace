@@ -861,6 +861,7 @@
     </div>
     <div class="nav-links">
       <a href="#how">How it works</a>
+      <a href="#open-source">Open source</a>
       <a href="#pricing">Pricing</a>
       <a href="#faq">FAQ</a>
     </div>
@@ -1010,10 +1011,45 @@
   </div>
 </section>
 
+<!-- ===== Open source / self-host ===== -->
+<section id="open-source">
+  <div class="container">
+    <div class="section-label reveal">04 / Open source</div>
+    <h2 class="reveal">Or run it yourself. <span class="dim">Same code, your infra.</span></h2>
+    <p class="section-sub reveal">Don't want to depend on us? LeadAce's full backend is on GitHub. Deploy it to your own Cloudflare + Supabase and pay nothing to LeadAce.</p>
+
+    <div class="points">
+      <div class="point reveal" style="--delay: 0ms">
+        <span class="point-icon mono">code</span>
+        <h3>Same source, no fork</h3>
+        <p>The hosted service and the self-host build are the same code. Switch any time without losing features or migrating data formats.</p>
+      </div>
+      <div class="point reveal" style="--delay: 80ms">
+        <span class="point-icon mono">cost</span>
+        <h3>Free tiers cover most usage</h3>
+        <p>Cloudflare Workers + Pages and Supabase have generous free tiers that handle solo and small-team outbound. You pay nothing to LeadAce.</p>
+      </div>
+      <div class="point reveal" style="--delay: 160ms">
+        <span class="point-icon mono">data</span>
+        <h3>Your data on your infra</h3>
+        <p>Prospect lists, OAuth tokens, outreach logs — all stored in your Supabase project. Nothing routes through our servers.</p>
+      </div>
+      <div class="point reveal" style="--delay: 240ms">
+        <span class="point-icon mono">audit</span>
+        <h3>Auditable end-to-end</h3>
+        <p>Read every line. Run a security review through your team. Fork it if your needs diverge from our roadmap.</p>
+      </div>
+    </div>
+    <div class="pricing-footer reveal" style="margin-top: 32px;">
+      Self-host guide: <a href="https://github.com/aitit-inc/lead-ace/blob/main/docs/self-host.md">docs/self-host.md</a> · Source: <a href="https://github.com/aitit-inc/lead-ace">github.com/aitit-inc/lead-ace</a>
+    </div>
+  </div>
+</section>
+
 <!-- ===== Pricing ===== -->
 <section id="pricing">
   <div class="container">
-    <div class="section-label reveal">04 / Pricing</div>
+    <div class="section-label reveal">05 / Pricing</div>
     <h2 class="reveal">Simple plans. <span class="dim">Scale when you need to.</span></h2>
     <p class="section-sub reveal">All plans include the Claude Code plugin, cloud dashboard, and all future updates.</p>
 
@@ -1057,7 +1093,7 @@
     </div>
     <div class="pricing-footer reveal">
       Requires macOS and a Claude Code plan (Pro or Max)<br>
-      Self-host version available for free on <a href="https://github.com/aitit-inc/lead-ace">GitHub</a> — 1 project, no cloud features
+      Prefer to host it yourself? See <a href="#open-source">Open source</a> above.
     </div>
   </div>
 </section>
@@ -1065,7 +1101,7 @@
 <!-- ===== FAQ ===== -->
 <section id="faq">
   <div class="container">
-    <div class="section-label reveal">05 / FAQ</div>
+    <div class="section-label reveal">06 / FAQ</div>
     <h2 class="reveal">Questions.</h2>
 
     <div class="faq-list">
@@ -1083,6 +1119,9 @@
       </details>
       <details class="reveal"><summary>Can I cancel anytime?</summary>
         <p>Yes. All plans are month-to-month. Cancel anytime from your dashboard — no lock-in, no cancellation fees. Annual plans are non-refundable but can be cancelled at renewal.</p>
+      </details>
+      <details class="reveal"><summary>What if you shut down the hosted service?</summary>
+        <p>The full backend is on <a href="https://github.com/aitit-inc/lead-ace">GitHub</a>. You can deploy your own copy to Cloudflare + Supabase at any time and keep running with the same plugin. Your data is portable — see <a href="https://github.com/aitit-inc/lead-ace/blob/main/docs/self-host.md">self-host.md</a>.</p>
       </details>
       <details class="reveal"><summary>Who built this?</summary>
         <p>SurpassOne Inc., a one-person software company based in Tokyo. LeadAce is the tool we built to run our own outbound — now shipped as a product.</p>

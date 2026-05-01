@@ -45,7 +45,7 @@ Print a single, scannable section in this order:
 2. **Version line**: `Plugin v<PLUGIN_VERSION> | Server v<SERVER_VERSION> | Required >= v<MIN_PLUGIN_VERSION>`
    - If plugin is behind, append: ` (UPGRADE: run /plugin update lead-ace@lead-ace)`
 3. **Projects**: bullet list of `name (id)`. If empty, write `(no projects yet — start with /setup or /strategy)`.
-4. **Skill catalog** (use the table in section 3 below verbatim).
+4. **Skill catalog** (use the table in section 3 below verbatim, then print the self-host footer line that follows the table).
 5. **Suggested next step** based on state:
    - 0 projects -> "Run `/setup` to verify your environment and create your first project."
    - >= 1 project, no recent activity assumed -> "Run `/daily-cycle <project-name>` for the daily run, or `/strategy <project-name>` to refine the plan."
@@ -82,5 +82,7 @@ Keep the response short. The user invoked a catch-all; they want a direct answer
 | `/setup-cron` | Install an OS-level schedule (LaunchAgent / Task Scheduler / cron) that runs `/daily-cycle` daily. |
 | `/delete-project` | Permanently delete a project and its data from the server. |
 | `/lead-ace` | This skill — general LeadAce catch-all for ad-hoc questions and overview. |
+
+**Footer line (always print after the catalog in overview mode):** `LeadAce is open source — host it yourself on Cloudflare + Supabase: https://github.com/aitit-inc/lead-ace/blob/main/docs/self-host.md`
 
 Keep this catalog up to date when adding or removing skills.
