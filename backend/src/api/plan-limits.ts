@@ -152,13 +152,18 @@ export async function getRemainingOutreachQuotaForPlan(
   // One pass over outreach_logs with conditional FILTER aggregates — replaces
   // up to 2 sequential scans for free (daily + lifetime). Unused windows are
   // selected as 0::int constants which Postgres folds out.
+  // Dates are passed as ISO strings + ::timestamptz cast: postgres.js with
+  // prepare:false (required for Supabase pooler) can't serialize Date instances
+  // through raw sql`` interpolation — it expects string/Buffer/ArrayBuffer.
+  const dailySinceIso = dailySince?.toISOString() ?? null
+  const monthlySinceIso = monthlySince?.toISOString() ?? null
   const [row] = await db
     .select({
-      dailyUsed: dailySince
-        ? sql<number>`COUNT(*) FILTER (WHERE ${outreachLogs.sentAt} >= ${dailySince})::int`
+      dailyUsed: dailySinceIso
+        ? sql<number>`COUNT(*) FILTER (WHERE ${outreachLogs.sentAt} >= ${dailySinceIso}::timestamptz)::int`
         : sql<number>`0::int`,
-      monthlyUsed: monthlySince
-        ? sql<number>`COUNT(*) FILTER (WHERE ${outreachLogs.sentAt} >= ${monthlySince})::int`
+      monthlyUsed: monthlySinceIso
+        ? sql<number>`COUNT(*) FILTER (WHERE ${outreachLogs.sentAt} >= ${monthlySinceIso}::timestamptz)::int`
         : sql<number>`0::int`,
       lifetimeUsed: includeLifetime
         ? sql<number>`COUNT(*)::int`
