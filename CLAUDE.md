@@ -178,6 +178,10 @@ See `README.md` -> For Developers for full details.
 
 Project-internal skill at [.claude/skills/prod-e2e/SKILL.md](.claude/skills/prod-e2e/SKILL.md) holds the full prerequisite knowledge for running E2E tests against the live backend (Docker harness in `e2e/`, Worker log tailing, test tenant + `+`-alias scheme, cleanup SQL). Invoke it when the user asks to run a production E2E.
 
+## Test Account Plan Tier Setup
+
+For setting test accounts to non-free plan tiers (starter / pro / scale / unlimited) without Stripe billing, see [docs/manual-plan-setup.md](docs/manual-plan-setup.md) — covers per-tier UPSERT SQL, monthly period rollover, and the four pitfalls (especially: `current_period_start` must be set for starter/pro or quota becomes effectively unlimited).
+
 ## Pre-Release Checklist (Required)
 
 **Backend (TypeScript):**
