@@ -55,15 +55,12 @@ billingRouter.get('/me/plan', async (c) => {
     plan: tenantPlan.plan,
     limits: {
       maxProjects: limits.maxProjects,
+      maxOutreachPerDay: limits.maxOutreachPerDay,
+      maxOutreachLifetime: limits.maxOutreachLifetime,
       maxOutreachPerMonth: limits.maxOutreachPerMonth,
       maxProspects: limits.maxProspects,
-      isLifetime: limits.isLifetime,
     },
-    outreach: {
-      used: quota.used,
-      remaining: quota.remaining,
-      limit: quota.limit,
-    },
+    outreach: quota,
   }
 
   if (limits.maxProspects !== null) {

@@ -480,6 +480,78 @@
       max-width: 620px;
     }
 
+    /* ===== Install block ===== */
+    .install-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+      max-width: 980px;
+    }
+    @media (max-width: 720px) {
+      .install-grid { grid-template-columns: 1fr; }
+    }
+    .install-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: linear-gradient(180deg, rgba(34, 35, 43, 0.85) 0%, rgba(26, 27, 36, 0.92) 100%);
+      overflow: hidden;
+      font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+      font-size: 13px;
+      line-height: 1.65;
+    }
+    .install-card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(20, 21, 32, 0.5);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .install-step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: var(--page);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .install-step-label { flex: 1; color: var(--text-secondary); }
+    .install-copy {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .install-copy:hover { color: var(--text); border-color: var(--text-muted); }
+    .install-copy.copied { color: #8B9E78; border-color: #8B9E78; }
+    .install-card pre {
+      margin: 0;
+      padding: 18px 20px;
+      color: var(--text);
+      white-space: pre;
+      overflow-x: auto;
+    }
+    .install-note {
+      margin-top: 28px;
+      max-width: 720px;
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
     /* ===== Compare ===== */
     .compare {
       border: 1px solid var(--border);
@@ -618,11 +690,12 @@
     /* ===== Pricing ===== */
     .pricing-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
-      max-width: 1000px;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      max-width: 1180px;
       margin: 0 auto;
     }
+    @media (max-width: 1080px) { .pricing-grid { grid-template-columns: repeat(2, 1fr); max-width: 720px; } }
     .price-card {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -860,6 +933,7 @@
       leadace
     </div>
     <div class="nav-links">
+      <a href="#get-started">Get started</a>
       <a href="#how">How it works</a>
       <a href="#open-source">Open source</a>
       <a href="#pricing">Pricing</a>
@@ -867,7 +941,7 @@
     </div>
     <div class="nav-actions">
       <a href="https://app.leadace.ai/login" class="nav-login">Login</a>
-      <a href="https://app.leadace.ai/login?signup=1" class="nav-cta">Get LeadAce</a>
+      <a href="#get-started" class="nav-cta">Start free</a>
     </div>
   </div>
 </nav>
@@ -890,13 +964,13 @@
           Every email, individually written. Your inbox, your reputation.
         </p>
         <div class="cta-row reveal-up" style="--delay: 0.82s">
-          <a href="https://app.leadace.ai/login?signup=1" class="btn btn-primary" id="cta-primary">
-            <span>Get LeadAce — from $29/mo</span>
+          <a href="#get-started" class="btn btn-primary" id="cta-primary">
+            <span>Start free — install in 60s</span>
             <span class="arrow">→</span>
           </a>
           <a href="#how" class="btn btn-secondary">See how it works</a>
         </div>
-        <div class="meta-note reveal-up" style="--delay: 0.92s">macOS · Claude Code (Pro or Max) · from $29/mo</div>
+        <div class="meta-note reveal-up" style="--delay: 0.92s">Free tier · macOS · Claude Code (Pro or Max)</div>
       </div>
 
       <!-- Animated terminal -->
@@ -915,10 +989,41 @@
   </div>
 </header>
 
+<!-- ===== Get started ===== -->
+<section id="get-started">
+  <div class="container">
+    <div class="section-label reveal">01 / Get started</div>
+    <h2 class="reveal">Two commands. <span class="dim">Then point it at a homepage.</span></h2>
+    <p class="section-sub reveal">Free tier — no credit card. 5 outreach actions per day, 500 prospects, your inbox.</p>
+
+    <div class="install-grid">
+      <div class="install-card reveal" style="--delay: 0ms">
+        <div class="install-card-header">
+          <span class="install-step-num">1</span>
+          <span class="install-step-label">In Claude Code</span>
+          <button type="button" class="install-copy" data-copy="install-cmd-1">Copy</button>
+        </div>
+        <pre id="install-cmd-1">/plugin marketplace add aitit-inc/lead-ace
+/plugin install lead-ace@lead-ace</pre>
+      </div>
+      <div class="install-card reveal" style="--delay: 80ms">
+        <div class="install-card-header">
+          <span class="install-step-num">2</span>
+          <span class="install-step-label">Point it at a URL</span>
+          <button type="button" class="install-copy" data-copy="install-cmd-2">Copy</button>
+        </div>
+        <pre id="install-cmd-2">/lead-ace https://your-company.com</pre>
+      </div>
+    </div>
+
+    <p class="install-note reveal">A browser tab opens to authorize Claude Code with your Google account. Sign-up happens in the same step — no separate signup form. Then you're done. Read your <code>/lead-ace</code> output for the first prospects, hand-pick what to send, and ship.</p>
+  </div>
+</section>
+
 <!-- ===== Why different ===== -->
 <section id="why">
   <div class="container">
-    <div class="section-label reveal">01 / The difference</div>
+    <div class="section-label reveal">02 / The difference</div>
     <h2 class="reveal">Not another mass-mailer. <span class="dim">AI reads every prospect first.</span></h2>
     <p class="section-sub reveal">Outbound broke because tools optimized for volume. LeadAce optimizes for signal.</p>
 
@@ -950,7 +1055,7 @@
 <!-- ===== How it works ===== -->
 <section id="how">
   <div class="container">
-    <div class="section-label reveal">02 / How it works</div>
+    <div class="section-label reveal">03 / How it works</div>
     <h2 class="reveal">Four commands. <span class="dim">That's the product.</span></h2>
     <p class="section-sub reveal">Installed as a Claude Code plugin. Your pipeline runs as slash commands.</p>
 
@@ -982,7 +1087,7 @@
 <!-- ===== Ownership ===== -->
 <section id="own">
   <div class="container">
-    <div class="section-label reveal">03 / Your inbox, your reputation</div>
+    <div class="section-label reveal">04 / Your inbox, your reputation</div>
     <h2 class="reveal">No shared IPs. <span class="dim">No pooled warmup.</span></h2>
     <p class="section-sub reveal">Your emails are sent from your own account. Your sending reputation belongs to you alone.</p>
 
@@ -1014,7 +1119,7 @@
 <!-- ===== Open source / self-host ===== -->
 <section id="open-source">
   <div class="container">
-    <div class="section-label reveal">04 / Open source</div>
+    <div class="section-label reveal">05 / Open source</div>
     <h2 class="reveal">Or run it yourself. <span class="dim">Same code, your infra.</span></h2>
     <p class="section-sub reveal">Don't want to depend on us? LeadAce's full backend is on GitHub. Deploy it to your own Cloudflare + Supabase and pay nothing to LeadAce.</p>
 
@@ -1049,12 +1154,24 @@
 <!-- ===== Pricing ===== -->
 <section id="pricing">
   <div class="container">
-    <div class="section-label reveal">05 / Pricing</div>
+    <div class="section-label reveal">06 / Pricing</div>
     <h2 class="reveal">Simple plans. <span class="dim">Scale when you need to.</span></h2>
     <p class="section-sub reveal">All plans include the Claude Code plugin, cloud dashboard, and all future updates.</p>
 
     <div class="pricing-grid">
       <div class="price-card reveal" style="--delay: 0ms">
+        <div class="price-tier">Free</div>
+        <div class="price-amount"><span class="currency">$</span>0<span class="period">/mo</span></div>
+        <div class="price-note">No credit card required</div>
+        <ul class="price-features">
+          <li><strong>5</strong> outreach/day (50 lifetime)</li>
+          <li>500 prospects</li>
+          <li>1 project</li>
+          <li>Full dashboard</li>
+        </ul>
+        <a href="#get-started" class="btn btn-secondary">Start free</a>
+      </div>
+      <div class="price-card reveal" style="--delay: 80ms">
         <div class="price-tier">Starter</div>
         <div class="price-amount"><span class="currency">$</span>29<span class="period">/mo</span></div>
         <div class="price-note">$290/yr (save 17%)</div>
@@ -1064,9 +1181,9 @@
           <li>Cloud dashboard</li>
           <li>All templates &amp; history</li>
         </ul>
-        <a href="https://app.leadace.ai/login?signup=1" class="btn btn-secondary">Get started</a>
+        <a href="https://app.leadace.ai/login?signup=1" class="btn btn-secondary">Get Starter</a>
       </div>
-      <div class="price-card featured reveal" style="--delay: 80ms">
+      <div class="price-card featured reveal" style="--delay: 160ms">
         <div class="price-tier">Pro</div>
         <div class="price-amount"><span class="currency">$</span>79<span class="period">/mo</span></div>
         <div class="price-note">$790/yr (save 17%)</div>
@@ -1078,7 +1195,7 @@
         </ul>
         <a href="https://app.leadace.ai/login?signup=1" class="btn btn-primary">Get Pro</a>
       </div>
-      <div class="price-card reveal" style="--delay: 160ms">
+      <div class="price-card reveal" style="--delay: 240ms">
         <div class="price-tier">Scale</div>
         <div class="price-amount"><span class="currency">$</span>199<span class="period">/mo</span></div>
         <div class="price-note">$1,990/yr (save 17%)</div>
@@ -1101,10 +1218,13 @@
 <!-- ===== FAQ ===== -->
 <section id="faq">
   <div class="container">
-    <div class="section-label reveal">06 / FAQ</div>
+    <div class="section-label reveal">07 / FAQ</div>
     <h2 class="reveal">Questions.</h2>
 
     <div class="faq-list">
+      <details class="reveal"><summary>What does the Free tier cover?</summary>
+        <p>5 outreach actions per day with a 50 lifetime cap, 500 prospect registrations, and 1 project. No card required. Once you've sent 50 outreach actions total or want more daily volume, upgrade to a paid plan from your dashboard.</p>
+      </details>
       <details class="reveal"><summary>Do I need Claude Code?</summary>
         <p>Yes. LeadAce is a Claude Code plugin — it runs inside Claude Code on your Mac. You'll need a Pro or Max plan from Anthropic. Both work.</p>
       </details>
@@ -1465,6 +1585,29 @@ const REDUCED = false;
   }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
 
   document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+})();
+
+/* ===== Install copy buttons ===== */
+(function() {
+  document.querySelectorAll('.install-copy').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const targetId = btn.getAttribute('data-copy');
+      if (!targetId) return;
+      const target = document.getElementById(targetId);
+      if (!target) return;
+      const text = target.textContent || '';
+      try {
+        await navigator.clipboard.writeText(text.trim());
+        const original = btn.textContent;
+        btn.textContent = 'Copied';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = original;
+          btn.classList.remove('copied');
+        }, 1800);
+      } catch (e) { /* clipboard unavailable — user can select manually */ }
+    });
+  });
 })();
 
 /* ===== Cookie notice ===== */

@@ -10,7 +10,7 @@ import {
   responses,
   channelEnum,
 } from '../../db/schema'
-import { getRemainingOutreachQuota } from '../plan-limits'
+import { getRemainingOutreachQuota, formatOutreachQuotaError } from '../plan-limits'
 import {
   sendGmailForUser,
   buildUnsubscribeAttachments,
@@ -47,7 +47,7 @@ outreachRouter.post('/outreach', zValidator('json', recordOutreachSchema), async
     if (quota.remaining !== null && quota.remaining <= 0) {
       return c.json({
         error: 'Outreach limit reached',
-        detail: `Your ${quota.plan} plan allows ${quota.limit} outreach actions. Upgrade your plan to continue.`,
+        detail: formatOutreachQuotaError(quota),
       }, 403)
     }
   }
@@ -127,7 +127,7 @@ outreachRouter.post(
       return c.json(
         {
           error: 'Outreach limit reached',
-          detail: `Your ${quota.plan} plan allows ${quota.limit} outreach actions. Upgrade your plan to continue.`,
+          detail: formatOutreachQuotaError(quota),
         },
         403,
       )
@@ -385,7 +385,7 @@ outreachRouter.post('/outreach/drafts/:id/send', async (c) => {
     return c.json(
       {
         error: 'Outreach limit reached',
-        detail: `Your ${quota.plan} plan allows ${quota.limit} outreach actions. Upgrade your plan to continue.`,
+        detail: formatOutreachQuotaError(quota),
       },
       403,
     )

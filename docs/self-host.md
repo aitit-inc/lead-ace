@@ -1,9 +1,9 @@
 # Self-Host LeadAce
 
 LeadAce's backend is open source and runs on free tiers of Cloudflare and
-Supabase. The Free plan (1 project, 30 prospects, 10 outreach lifetime) is
-free in the cloud; running it yourself just means owning the accounts and
-the deploy.
+Supabase. The Free plan (1 project, 500 prospects, 5 outreach actions/day
+with a 50 lifetime cap) is free in the cloud; running it yourself just
+means owning the accounts and the deploy.
 
 ## Two paths
 

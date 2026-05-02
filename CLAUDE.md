@@ -59,15 +59,16 @@ Clearly separate what the LLM should handle from what MCP tools handle.
 
 Subscription is managed via Stripe. The API enforces limits based on user plan.
 
-| | Free (trial) | Starter $29/mo | Pro $79/mo | Scale $199/mo |
+| | Free | Starter $29/mo | Pro $79/mo | Scale $199/mo |
 |---|---|---|---|---|
 | Projects | 1 | 1 | 5 | Unlimited |
-| Outreach actions | 10 (lifetime) | 1,500/mo | 10,000/mo | Unlimited |
-| Prospect registration | 30 (lifetime) | — | — | — |
+| Outreach actions | 5/day (50 lifetime cap) | 1,500/mo | 10,000/mo | Unlimited |
+| Prospect registration | 500 (lifetime) | — | — | — |
 
-- **Free limits are lifetime** (one-time trial, not monthly reset). Paid limits reset monthly.
+- **Free has two outreach caps**: `5/day` AND `50 lifetime`. Both apply — whichever runs out first blocks send. Paid plans use a single monthly cap that resets at the Stripe `current_period_start`.
+- **Daily window** is UTC midnight-to-midnight (no per-tenant timezone).
 - **Outreach actions** = `record_outreach` with `status: "sent"`. Failed attempts do not count.
-- **Quota enforcement**: `get_outbound_targets` returns `min(requested, remainingQuota, availableTargets)`. When quota is 0, returns empty list with upgrade message. `record_outreach` also guards as a safety net.
+- **Quota enforcement**: `get_outbound_targets` returns `min(requested, remainingQuota, availableTargets)` where `remainingQuota` is the binding cap (smallest remaining across all applicable windows). When binding-remaining is 0, returns empty list with a constraint-specific message ("try again tomorrow" for daily, "upgrade" for lifetime/monthly). `record_outreach` and `/outreach/send-and-record` also guard as a safety net.
 - **Billing**: Stripe Checkout for new subscriptions, Stripe Customer Portal for upgrades/downgrades/cancellation. No billing UI in our app.
 - **Self-host**: code is open source on GitHub. Users run their own Supabase + Cloudflare deploy (see [docs/self-host.md](docs/self-host.md)). No quota enforcement difference — the same plan-limits code runs; defaults to Free.
 

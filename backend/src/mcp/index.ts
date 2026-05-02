@@ -342,17 +342,37 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
         const err = data as { error: string }
         return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
       }
+      type QuotaWindow = { used: number; limit: number; remaining: number }
       const result = data as {
         prospects: unknown[]
         total: number
         byChannel: { email: number; formOnly: number; snsOnly: number }
-        quota?: { remaining: number | null; limit: number | null; used: number; plan: string }
+        quota?: {
+          remaining: number | null
+          limit: number | null
+          used: number
+          plan: string
+          bindingConstraint: 'daily' | 'lifetime' | 'monthly' | null
+          daily?: QuotaWindow
+          lifetime?: QuotaWindow
+          monthly?: QuotaWindow
+        }
         message?: string
       }
 
-      const quotaLine = result.quota
-        ? `\nOutreach quota: ${result.quota.remaining === null ? 'unlimited' : `${result.quota.remaining} remaining`} (used ${result.quota.used}${result.quota.limit ? `/${result.quota.limit}` : ''}, plan: ${result.quota.plan})`
-        : ''
+      const formatWindow = (label: string, w: QuotaWindow) =>
+        `${label} ${w.remaining}/${w.limit} remaining (used ${w.used})`
+      const quotaLine = (() => {
+        if (!result.quota) return ''
+        const q = result.quota
+        if (q.remaining === null) return `\nOutreach quota: unlimited (plan: ${q.plan})`
+        const parts: string[] = []
+        if (q.daily) parts.push(formatWindow('daily', q.daily))
+        if (q.lifetime) parts.push(formatWindow('lifetime', q.lifetime))
+        if (q.monthly) parts.push(formatWindow('monthly', q.monthly))
+        const summary = parts.length > 0 ? parts.join(', ') : `${q.remaining}/${q.limit} remaining (used ${q.used})`
+        return `\nOutreach quota: ${summary} (plan: ${q.plan})`
+      })()
       const msgLine = result.message ? `\n⚠️ ${result.message}` : ''
 
       return {

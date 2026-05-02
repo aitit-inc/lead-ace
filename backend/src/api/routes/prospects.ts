@@ -9,7 +9,7 @@ import {
   formTypeEnum,
   prospectStatusEnum,
 } from '../../db/schema'
-import { getRemainingOutreachQuota, getTenantPlan, getPlanLimits, countTenantProspects } from '../plan-limits'
+import { getRemainingOutreachQuota, getTenantPlan, getPlanLimits, countTenantProspects, formatOutreachQuotaError } from '../plan-limits'
 import type { Env, Variables } from '../types'
 import type { SnsAccounts } from '../../db/schema'
 import { verifyProject, findExistingProjectLink } from '../project-helpers'
@@ -632,8 +632,8 @@ prospectsRouter.get('/projects/:id/prospects/reachable', async (c) => {
       prospects: [],
       total: 0,
       byChannel: { email: 0, formOnly: 0, snsOnly: 0 },
-      quota: { remaining: 0, limit: quota.limit, used: quota.used, plan: quota.plan },
-      message: `Outreach limit reached (${quota.used}/${quota.limit}). Upgrade your plan to continue.`,
+      quota,
+      message: formatOutreachQuotaError(quota),
     })
   }
 
@@ -693,12 +693,7 @@ prospectsRouter.get('/projects/:id/prospects/reachable', async (c) => {
       formOnly: summary.formOnly,
       snsOnly: summary.snsOnly,
     },
-    quota: {
-      remaining: quota.remaining,
-      limit: quota.limit,
-      used: quota.used,
-      plan: quota.plan,
-    },
+    quota,
   })
 })
 

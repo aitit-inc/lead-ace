@@ -155,20 +155,40 @@ export interface OrganizationProspect {
 
 export type PlanTier = 'free' | 'starter' | 'pro' | 'scale' | 'unlimited';
 
+export type OutreachWindowKind = 'daily' | 'lifetime' | 'monthly';
+
 export interface QuotaUsage {
   used: number;
   remaining: number;
   limit: number | null;
 }
 
+export interface OutreachQuotaWindow {
+  used: number;
+  remaining: number;
+  limit: number;
+}
+
+export interface OutreachQuota {
+  plan: PlanTier;
+  remaining: number | null;
+  limit: number | null;
+  used: number;
+  bindingConstraint: OutreachWindowKind | null;
+  daily?: OutreachQuotaWindow;
+  lifetime?: OutreachQuotaWindow;
+  monthly?: OutreachQuotaWindow;
+}
+
 export interface PlanInfo {
   plan: PlanTier;
   limits: {
     maxProjects: number | null;
+    maxOutreachPerDay: number | null;
+    maxOutreachLifetime: number | null;
     maxOutreachPerMonth: number | null;
     maxProspects: number | null;
-    isLifetime: boolean;
   };
-  outreach: QuotaUsage;
+  outreach: OutreachQuota;
   prospects?: QuotaUsage;
 }

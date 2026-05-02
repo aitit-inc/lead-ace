@@ -110,7 +110,15 @@
           <div class="flex items-center justify-between mb-1">
             <span class="capitalize font-medium text-text">{p.plan}</span>
             <span class="text-[10px] text-text-muted uppercase tracking-wider">
-              {p.plan === 'unlimited' ? '∞' : p.limits.isLifetime ? 'trial' : 'monthly'}
+              {p.plan === 'unlimited'
+                ? '∞'
+                : p.outreach.bindingConstraint === 'daily'
+                  ? 'daily'
+                  : p.outreach.bindingConstraint === 'lifetime'
+                    ? 'trial'
+                    : p.outreach.bindingConstraint === 'monthly'
+                      ? 'monthly'
+                      : ''}
             </span>
           </div>
           <div class="font-mono text-[11px] text-text-muted">

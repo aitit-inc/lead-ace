@@ -4,10 +4,10 @@ Autonomous lead generation plugin for Claude Code. Builds prospect lists, runs
 outbound outreach, and iterates on strategy — all hands-free.
 
 > **Two ways to run it.** Use the hosted service at [app.leadace.ai](https://app.leadace.ai)
-> (free trial, paid plans from $29/mo), or self-host the backend on your own
-> Cloudflare + Supabase — see [docs/self-host.md](../docs/self-host.md). The
-> plugin is the same in either case; set `LEADACE_MCP_URL` to point it at your
-> own MCP server.
+> (Free tier — 5 outreach/day, paid plans from $29/mo), or self-host the
+> backend on your own Cloudflare + Supabase — see
+> [docs/self-host.md](../docs/self-host.md). The plugin is the same in either
+> case; set `LEADACE_MCP_URL` to point it at your own MCP server.
 
 ## For Users
 
@@ -118,7 +118,7 @@ https://app.leadace.ai.
 This plugin is provided under a proprietary license from SurpassOne Inc. See
 [LICENSE](../../LICENSE) for details.
 
-- **Free trial:** 1 project, 30 prospect registrations and 10 outreach actions (lifetime)
+- **Free tier:** 1 project, 500 prospects, 5 outreach actions per day (50 lifetime cap)
 - **Paid plans** start at $29/month. Manage your subscription from the web app.
 
 ---
