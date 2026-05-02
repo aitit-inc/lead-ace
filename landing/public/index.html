@@ -544,6 +544,24 @@
       white-space: pre;
       overflow-x: auto;
     }
+    .install-cmd-line {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .install-cmd-line:last-child { border-bottom: none; }
+    .install-cmd-line code {
+      flex: 1;
+      min-width: 0;
+      font-family: inherit;
+      font-size: 13px;
+      color: var(--text);
+      background: transparent;
+      white-space: pre;
+      overflow-x: auto;
+    }
     .install-note {
       margin-top: 28px;
       max-width: 720px;
@@ -1000,19 +1018,26 @@
       <div class="install-card reveal" style="--delay: 0ms">
         <div class="install-card-header">
           <span class="install-step-num">1</span>
-          <span class="install-step-label">In Claude Code</span>
-          <button type="button" class="install-copy" data-copy="install-cmd-1">Copy</button>
+          <span class="install-step-label">In Claude Code — run each line</span>
         </div>
-        <pre id="install-cmd-1">/plugin marketplace add aitit-inc/lead-ace
-/plugin install lead-ace@lead-ace</pre>
+        <div class="install-cmd-line">
+          <code id="install-cmd-1a">/plugin marketplace add aitit-inc/lead-ace</code>
+          <button type="button" class="install-copy" data-copy="install-cmd-1a">Copy</button>
+        </div>
+        <div class="install-cmd-line">
+          <code id="install-cmd-1b">/plugin install lead-ace@lead-ace</code>
+          <button type="button" class="install-copy" data-copy="install-cmd-1b">Copy</button>
+        </div>
       </div>
       <div class="install-card reveal" style="--delay: 80ms">
         <div class="install-card-header">
           <span class="install-step-num">2</span>
           <span class="install-step-label">Point it at a URL</span>
+        </div>
+        <div class="install-cmd-line">
+          <code id="install-cmd-2">/lead-ace https://your-company.com</code>
           <button type="button" class="install-copy" data-copy="install-cmd-2">Copy</button>
         </div>
-        <pre id="install-cmd-2">/lead-ace https://your-company.com</pre>
       </div>
     </div>
 
