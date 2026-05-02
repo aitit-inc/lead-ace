@@ -1,0 +1,27 @@
+services:
+  harness:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lead-ace-e2e-harness:latest
+    working_dir: /repo
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      LEADACE_MCP_URL: ${LEADACE_MCP_URL:-https://mcp.leadace.ai/mcp}
+    volumes:
+      - claude-state:/root/.claude
+      - ../:/repo:ro
+      - ./output:/output
+    stdin_open: true
+    tty: true
+
+  # Login service: same image, but interactive entrypoint for one-time Claude Code login.
+  # Run once: docker compose run --rm login
+  # Then exit; the persisted state stays in the claude-state volume.
+  login:
+    extends: harness
+    entrypoint: ["bash"]
+    command: ["-lc", "echo 'Run: claude  (then sign in interactively, exit when done)' && bash"]
+
+volumes:
+  claude-state:
