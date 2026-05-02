@@ -10,6 +10,7 @@
   import ProjectCreateDialog from '$lib/components/ProjectCreateDialog.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import Logo from '$lib/components/Logo.svelte';
+  import { formatQuotaCompact, OUTREACH_WINDOW_LABEL } from '$lib/format';
 
   let { children } = $props();
   let showCreate = $state(false);
@@ -112,17 +113,13 @@
             <span class="text-[10px] text-text-muted uppercase tracking-wider">
               {p.plan === 'unlimited'
                 ? '∞'
-                : p.outreach.bindingConstraint === 'daily'
-                  ? 'daily'
-                  : p.outreach.bindingConstraint === 'lifetime'
-                    ? 'trial'
-                    : p.outreach.bindingConstraint === 'monthly'
-                      ? 'monthly'
-                      : ''}
+                : (p.outreach.bindingConstraint
+                    ? OUTREACH_WINDOW_LABEL[p.outreach.bindingConstraint]
+                    : '')}
             </span>
           </div>
           <div class="font-mono text-[11px] text-text-muted">
-            Outreach {p.outreach.used}{p.outreach.limit !== null ? `/${p.outreach.limit}` : ''}
+            Outreach {formatQuotaCompact(p.outreach.used, p.outreach.limit)}
           </div>
           {#if p.outreach.limit !== null}
             <div class="mt-1 h-0.5 w-full rounded-full bg-surface">

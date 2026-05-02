@@ -7,6 +7,7 @@
   import { plan } from '$lib/stores/plan';
   import { supabase } from '$lib/auth';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+  import { formatQuota } from '$lib/format';
   import type { OutboundMode, PlanTier, Project } from '$lib/types';
 
   type ProjectSettings = {
@@ -254,10 +255,6 @@
     }
   }
 
-  function formatQuota(used: number, limit: number | null): string {
-    if (limit === null) return `${used.toLocaleString()} used`;
-    return `${used.toLocaleString()} / ${limit.toLocaleString()}`;
-  }
 </script>
 
 <h2 class="text-lg font-semibold text-text mb-6">Settings</h2>
@@ -458,7 +455,7 @@
 
       <div class="grid grid-cols-2 gap-6">
         <div class="space-y-3">
-          {#if p.plan === 'unlimited' || (p.outreach.daily == null && p.outreach.lifetime == null && p.outreach.monthly == null)}
+          {#if p.outreach.bindingConstraint === null}
             <div>
               <p class="text-xs text-text-muted mb-1">Outreach (unlimited)</p>
               <p class="font-mono text-lg text-text">
@@ -466,54 +463,27 @@
               </p>
             </div>
           {:else}
-            {#if p.outreach.daily}
-              <div>
-                <p class="text-xs text-text-muted mb-1">Outreach (today)</p>
-                <p class="font-mono text-lg text-text">
-                  {formatQuota(p.outreach.daily.used, p.outreach.daily.limit)}
-                </p>
-                <div class="mt-1.5 h-1 w-full rounded-full bg-surface">
-                  <div
-                    class="h-1 rounded-full {p.outreach.daily.remaining === 0
-                      ? 'bg-accent'
-                      : 'bg-text'}"
-                    style="width: {Math.min(100, (p.outreach.daily.used / p.outreach.daily.limit) * 100)}%"
-                  ></div>
+            {@const windows = [
+              { label: 'today', window: p.outreach.daily },
+              { label: 'lifetime', window: p.outreach.lifetime },
+              { label: 'this month', window: p.outreach.monthly },
+            ]}
+            {#each windows as { label, window } (label)}
+              {#if window}
+                <div>
+                  <p class="text-xs text-text-muted mb-1">Outreach ({label})</p>
+                  <p class="font-mono text-lg text-text">
+                    {formatQuota(window.used, window.limit)}
+                  </p>
+                  <div class="mt-1.5 h-1 w-full rounded-full bg-surface">
+                    <div
+                      class="h-1 rounded-full {window.remaining === 0 ? 'bg-accent' : 'bg-text'}"
+                      style="width: {Math.min(100, (window.used / window.limit) * 100)}%"
+                    ></div>
+                  </div>
                 </div>
-              </div>
-            {/if}
-            {#if p.outreach.lifetime}
-              <div>
-                <p class="text-xs text-text-muted mb-1">Outreach (lifetime)</p>
-                <p class="font-mono text-lg text-text">
-                  {formatQuota(p.outreach.lifetime.used, p.outreach.lifetime.limit)}
-                </p>
-                <div class="mt-1.5 h-1 w-full rounded-full bg-surface">
-                  <div
-                    class="h-1 rounded-full {p.outreach.lifetime.remaining === 0
-                      ? 'bg-accent'
-                      : 'bg-text'}"
-                    style="width: {Math.min(100, (p.outreach.lifetime.used / p.outreach.lifetime.limit) * 100)}%"
-                  ></div>
-                </div>
-              </div>
-            {/if}
-            {#if p.outreach.monthly}
-              <div>
-                <p class="text-xs text-text-muted mb-1">Outreach (this month)</p>
-                <p class="font-mono text-lg text-text">
-                  {formatQuota(p.outreach.monthly.used, p.outreach.monthly.limit)}
-                </p>
-                <div class="mt-1.5 h-1 w-full rounded-full bg-surface">
-                  <div
-                    class="h-1 rounded-full {p.outreach.monthly.remaining === 0
-                      ? 'bg-accent'
-                      : 'bg-text'}"
-                    style="width: {Math.min(100, (p.outreach.monthly.used / p.outreach.monthly.limit) * 100)}%"
-                  ></div>
-                </div>
-              </div>
-            {/if}
+              {/if}
+            {/each}
           {/if}
         </div>
         {#if p.prospects}

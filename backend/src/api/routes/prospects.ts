@@ -9,7 +9,14 @@ import {
   formTypeEnum,
   prospectStatusEnum,
 } from '../../db/schema'
-import { getRemainingOutreachQuota, getTenantPlan, getPlanLimits, countTenantProspects, formatOutreachQuotaError } from '../plan-limits'
+import {
+  getRemainingOutreachQuota,
+  getTenantPlan,
+  getPlanLimits,
+  countTenantProspects,
+  formatOutreachQuotaError,
+  isOutreachQuotaExhausted,
+} from '../plan-limits'
 import type { Env, Variables } from '../types'
 import type { SnsAccounts } from '../../db/schema'
 import { verifyProject, findExistingProjectLink } from '../project-helpers'
@@ -627,7 +634,7 @@ prospectsRouter.get('/projects/:id/prospects/reachable', async (c) => {
   // Check outreach quota
   const quota = await getRemainingOutreachQuota(db, tenantId)
 
-  if (quota.remaining !== null && quota.remaining === 0) {
+  if (isOutreachQuotaExhausted(quota)) {
     return c.json({
       prospects: [],
       total: 0,

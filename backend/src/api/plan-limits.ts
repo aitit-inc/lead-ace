@@ -1,4 +1,4 @@
-import { eq, and, gte, sql } from 'drizzle-orm'
+import { eq, and, sql } from 'drizzle-orm'
 import { tenantPlans, outreachLogs, projectProspects } from '../db/schema'
 import type { createDb } from '../db/connection'
 
@@ -69,24 +69,8 @@ export async function getTenantPlan(db: Db, tenantId: string): Promise<{
 }
 
 // ---------------------------------------------------------------------------
-// Count sent outreach in a window
+// Window helpers
 // ---------------------------------------------------------------------------
-
-// `since=null` means lifetime (no lower bound).
-async function countSentOutreach(db: Db, tenantId: string, since: Date | null): Promise<number> {
-  const conditions = [
-    eq(outreachLogs.tenantId, tenantId),
-    eq(outreachLogs.status, 'sent'),
-  ]
-  if (since) conditions.push(gte(outreachLogs.sentAt, since))
-
-  const [result] = await db
-    .select({ total: sql<number>`COUNT(*)::int` })
-    .from(outreachLogs)
-    .where(and(...conditions))
-
-  return result?.total ?? 0
-}
 
 function startOfTodayUtc(): Date {
   const now = new Date()
@@ -143,54 +127,53 @@ export async function getRemainingOutreachQuota(
   tenantId: string,
 ): Promise<OutreachQuota> {
   const tp = await getTenantPlan(db, tenantId)
+  return getRemainingOutreachQuotaForPlan(db, tenantId, tp)
+}
+
+// Variant for callers that already loaded the tenant plan (e.g. /me/plan) so
+// we don't re-query tenant_plans on the same request.
+export async function getRemainingOutreachQuotaForPlan(
+  db: Db,
+  tenantId: string,
+  tp: { plan: PlanTier; currentPeriodStart: Date | null },
+): Promise<OutreachQuota> {
   const limits = getPlanLimits(tp.plan)
 
-  const candidates: { kind: OutreachWindowKind; window: OutreachQuotaWindow }[] = []
+  const dailySince = limits.maxOutreachPerDay !== null ? startOfTodayUtc() : null
+  const monthlySince = limits.maxOutreachPerMonth !== null && tp.currentPeriodStart
+    ? tp.currentPeriodStart
+    : null
+  const includeLifetime = limits.maxOutreachLifetime !== null
 
-  if (limits.maxOutreachPerDay !== null) {
-    const used = await countSentOutreach(db, tenantId, startOfTodayUtc())
-    candidates.push({
-      kind: 'daily',
-      window: {
-        used,
-        limit: limits.maxOutreachPerDay,
-        remaining: Math.max(0, limits.maxOutreachPerDay - used),
-      },
-    })
-  }
-  if (limits.maxOutreachLifetime !== null) {
-    const used = await countSentOutreach(db, tenantId, null)
-    candidates.push({
-      kind: 'lifetime',
-      window: {
-        used,
-        limit: limits.maxOutreachLifetime,
-        remaining: Math.max(0, limits.maxOutreachLifetime - used),
-      },
-    })
-  }
-  if (limits.maxOutreachPerMonth !== null && tp.currentPeriodStart) {
-    const used = await countSentOutreach(db, tenantId, tp.currentPeriodStart)
-    candidates.push({
-      kind: 'monthly',
-      window: {
-        used,
-        limit: limits.maxOutreachPerMonth,
-        remaining: Math.max(0, limits.maxOutreachPerMonth - used),
-      },
-    })
-  } else if (limits.maxOutreachPerMonth !== null) {
-    // Paid plan with no period start yet (shouldn't happen post-checkout, but
-    // guard just in case): treat as fresh window.
-    candidates.push({
-      kind: 'monthly',
-      window: { used: 0, limit: limits.maxOutreachPerMonth, remaining: limits.maxOutreachPerMonth },
-    })
-  }
-
-  if (candidates.length === 0) {
+  if (!dailySince && !monthlySince && !includeLifetime) {
     return { plan: tp.plan, remaining: null, limit: null, used: 0, bindingConstraint: null }
   }
+
+  // One pass over outreach_logs with conditional FILTER aggregates — replaces
+  // up to 2 sequential scans for free (daily + lifetime). Unused windows are
+  // selected as 0::int constants which Postgres folds out.
+  const [row] = await db
+    .select({
+      dailyUsed: dailySince
+        ? sql<number>`COUNT(*) FILTER (WHERE ${outreachLogs.sentAt} >= ${dailySince})::int`
+        : sql<number>`0::int`,
+      monthlyUsed: monthlySince
+        ? sql<number>`COUNT(*) FILTER (WHERE ${outreachLogs.sentAt} >= ${monthlySince})::int`
+        : sql<number>`0::int`,
+      lifetimeUsed: includeLifetime
+        ? sql<number>`COUNT(*)::int`
+        : sql<number>`0::int`,
+    })
+    .from(outreachLogs)
+    .where(and(eq(outreachLogs.tenantId, tenantId), eq(outreachLogs.status, 'sent')))
+
+  const candidates: { kind: OutreachWindowKind; window: OutreachQuotaWindow }[] = []
+  const addWindow = (kind: OutreachWindowKind, limit: number, used: number) => {
+    candidates.push({ kind, window: { used, limit, remaining: Math.max(0, limit - used) } })
+  }
+  if (limits.maxOutreachPerDay !== null) addWindow('daily', limits.maxOutreachPerDay, row?.dailyUsed ?? 0)
+  if (includeLifetime) addWindow('lifetime', limits.maxOutreachLifetime!, row?.lifetimeUsed ?? 0)
+  if (monthlySince) addWindow('monthly', limits.maxOutreachPerMonth!, row?.monthlyUsed ?? 0)
 
   // Binding cap = smallest `remaining`; ties broken by TIE_BREAK_ORDER.
   candidates.sort((a, b) => {
@@ -212,17 +195,31 @@ export async function getRemainingOutreachQuota(
   return result
 }
 
+// True when the binding cap has been exhausted. Unlimited plans
+// (`remaining === null`) always return false.
+export function isOutreachQuotaExhausted(quota: OutreachQuota): boolean {
+  return quota.remaining !== null && quota.remaining <= 0
+}
+
+// Standard 403 body shape for an exhausted-quota response.
+export function outreachQuotaExhaustedBody(quota: OutreachQuota): { error: string; detail: string } {
+  return { error: 'Outreach limit reached', detail: formatOutreachQuotaError(quota) }
+}
+
 // Human-readable detail message for a 403 outreach-limit response. Picks the
 // most actionable phrasing based on the binding constraint.
 export function formatOutreachQuotaError(quota: OutreachQuota): string {
-  switch (quota.bindingConstraint) {
+  const kind = quota.bindingConstraint
+  switch (kind) {
     case 'daily':
       return `Your ${quota.plan} plan allows ${quota.limit} outreach per day. Try again tomorrow or upgrade for higher limits.`
     case 'lifetime':
       return `Your ${quota.plan} plan lifetime limit (${quota.limit}) is reached. Upgrade to keep sending.`
     case 'monthly':
       return `Your ${quota.plan} plan allows ${quota.limit} outreach this month. Upgrade your plan to continue.`
-    default:
+    case null:
+      // Unreachable when called via isOutreachQuotaExhausted (null binding ⇔ unlimited).
+      // Kept for type exhaustiveness.
       return 'Outreach limit reached.'
   }
 }

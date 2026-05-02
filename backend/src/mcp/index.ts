@@ -3,6 +3,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { z } from 'zod'
 import { verifySupabaseJwt } from '../auth/verify-jwt'
 import { OUTBOUND_MODES } from '../db/schema'
+import type { OutreachQuota, OutreachQuotaWindow } from '../api/plan-limits'
 import {
   handleMetadata,
   handleResourceMetadata,
@@ -342,25 +343,15 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
         const err = data as { error: string }
         return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
       }
-      type QuotaWindow = { used: number; limit: number; remaining: number }
       const result = data as {
         prospects: unknown[]
         total: number
         byChannel: { email: number; formOnly: number; snsOnly: number }
-        quota?: {
-          remaining: number | null
-          limit: number | null
-          used: number
-          plan: string
-          bindingConstraint: 'daily' | 'lifetime' | 'monthly' | null
-          daily?: QuotaWindow
-          lifetime?: QuotaWindow
-          monthly?: QuotaWindow
-        }
+        quota?: OutreachQuota
         message?: string
       }
 
-      const formatWindow = (label: string, w: QuotaWindow) =>
+      const formatWindow = (label: string, w: OutreachQuotaWindow) =>
         `${label} ${w.remaining}/${w.limit} remaining (used ${w.used})`
       const quotaLine = (() => {
         if (!result.quota) return ''

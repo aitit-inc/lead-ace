@@ -10,7 +10,11 @@ import {
   responses,
   channelEnum,
 } from '../../db/schema'
-import { getRemainingOutreachQuota, formatOutreachQuotaError } from '../plan-limits'
+import {
+  getRemainingOutreachQuota,
+  isOutreachQuotaExhausted,
+  outreachQuotaExhaustedBody,
+} from '../plan-limits'
 import {
   sendGmailForUser,
   buildUnsubscribeAttachments,
@@ -44,11 +48,8 @@ outreachRouter.post('/outreach', zValidator('json', recordOutreachSchema), async
 
   if (input.status === 'sent') {
     const quota = await getRemainingOutreachQuota(db, tenantId)
-    if (quota.remaining !== null && quota.remaining <= 0) {
-      return c.json({
-        error: 'Outreach limit reached',
-        detail: formatOutreachQuotaError(quota),
-      }, 403)
+    if (isOutreachQuotaExhausted(quota)) {
+      return c.json(outreachQuotaExhaustedBody(quota), 403)
     }
   }
 
@@ -123,14 +124,8 @@ outreachRouter.post(
     if (!verified) {
       return c.json({ error: 'Project not found' }, 404)
     }
-    if (quota.remaining !== null && quota.remaining <= 0) {
-      return c.json(
-        {
-          error: 'Outreach limit reached',
-          detail: formatOutreachQuotaError(quota),
-        },
-        403,
-      )
+    if (isOutreachQuotaExhausted(quota)) {
+      return c.json(outreachQuotaExhaustedBody(quota), 403)
     }
 
     const unsubscribe = await buildUnsubscribeAttachments({
@@ -381,14 +376,8 @@ outreachRouter.post('/outreach/drafts/:id/send', async (c) => {
   if (draft.doNotContact) {
     return c.json({ error: 'Prospect is on do-not-contact list' }, 422)
   }
-  if (quota.remaining !== null && quota.remaining <= 0) {
-    return c.json(
-      {
-        error: 'Outreach limit reached',
-        detail: formatOutreachQuotaError(quota),
-      },
-      403,
-    )
+  if (isOutreachQuotaExhausted(quota)) {
+    return c.json(outreachQuotaExhaustedBody(quota), 403)
   }
 
   const sendSettings = await loadProjectSendSettings(db, draft.projectId)

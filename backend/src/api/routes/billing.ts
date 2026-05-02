@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { eq } from 'drizzle-orm'
 import { tenantPlans } from '../../db/schema'
-import { getTenantPlan, getPlanLimits, getRemainingOutreachQuota, countTenantProspects } from '../plan-limits'
+import { getTenantPlan, getPlanLimits, getRemainingOutreachQuotaForPlan, countTenantProspects } from '../plan-limits'
 import type { Env, Variables } from '../types'
 
 // ---------------------------------------------------------------------------
@@ -49,7 +49,11 @@ billingRouter.get('/me/plan', async (c) => {
 
   const tenantPlan = await getTenantPlan(db, tenantId)
   const limits = getPlanLimits(tenantPlan.plan)
-  const quota = await getRemainingOutreachQuota(db, tenantId)
+
+  const [quota, prospectCount] = await Promise.all([
+    getRemainingOutreachQuotaForPlan(db, tenantId, tenantPlan),
+    limits.maxProspects !== null ? countTenantProspects(db, tenantId) : Promise.resolve(null),
+  ])
 
   const result: Record<string, unknown> = {
     plan: tenantPlan.plan,
@@ -63,8 +67,7 @@ billingRouter.get('/me/plan', async (c) => {
     outreach: quota,
   }
 
-  if (limits.maxProspects !== null) {
-    const prospectCount = await countTenantProspects(db, tenantId)
+  if (limits.maxProspects !== null && prospectCount !== null) {
     result['prospects'] = {
       used: prospectCount,
       remaining: Math.max(0, limits.maxProspects - prospectCount),
