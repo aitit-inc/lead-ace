@@ -36,6 +36,8 @@ Project task management lives in [docs/tasks.local.md](docs/tasks.local.md). It 
 
 **Always read it at the start of a session before suggesting work.** Update it as tasks complete, scope changes, or new tasks emerge — keeping it current is part of the work, not a separate cleanup pass. Carry-over items between sessions go at the top under "次セッション開始時の確認事項" so the next session immediately sees what's pending.
 
+When the user signals end of session (e.g.「セッション終わる」「今日はここまで」), update `tasks.local.md` for the next session before wrapping up: reflect what was completed, move pending/carry-over items to "次セッション開始時の確認事項", and note any new tasks or decisions surfaced during the session.
+
 ## Development Policy
 
 The plugin prioritizes **stability, reliability, controllability, and versatility**.
