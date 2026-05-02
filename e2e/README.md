@@ -7,7 +7,8 @@ For the full operational workflow (when to run, how to interpret output, how to 
 ## Strategy
 
 - **Real Gmail send.** No dry-run / stub paths. The harness drives the same code that prod users hit.
-- **Dedicated test tenant.** A separate Google account signed up at `app.leadace.ai`, on Free plan, with no real prospects. Quota caps the blast radius (5/day, 50 lifetime).
+- **Dedicated test tenant per plan tier.** Five separate Google accounts (one per plan: free / starter / pro / scale / unlimited), signed up at `app.leadace.ai`. Tier definitions live in `e2e/accounts.local.json` (gitignored — copy from `accounts.local.json.example`). Selected at runtime via `TIER=<tier>`.
+- **Per-tier Docker volume.** `run.sh` sets `COMPOSE_PROJECT_NAME=lead-ace-e2e-${TIER}` so Claude Code login state and MCP OAuth tokens are isolated per tier. First run of each tier requires its own login + OAuth flow.
 - **Personal aliases as recipients.** Use Gmail sub-addressing (`leouno12+001@gmail.com`, `leouno12+002@gmail.com`, …) when registering test prospects. Each alias is a unique row per the `prospects.email` unique constraint, but Gmail routes them all to a single inbox you control. Visual confirmation is automatic.
 - **Re-test by deleting log rows.** Removing the `outreach_logs` row (and resetting `project_prospects.status` back to `'new'`) restores both the daily and lifetime quota — they're computed as `COUNT(*) WHERE status = 'sent'`. See the project skill for the exact SQL.
 
@@ -39,20 +40,29 @@ For the full operational workflow (when to run, how to interpret output, how to 
    docker compose -f e2e/docker-compose.yml build
    ```
 
-2. Sign in to Claude Code inside the container (persisted to the `claude-state` volume):
+2. Copy the accounts template and fill in your tier-specific Gmail addresses + tenant IDs:
 
    ```bash
-   docker compose -f e2e/docker-compose.yml run --rm login
+   cp e2e/accounts.local.json.example e2e/accounts.local.json
+   # edit e2e/accounts.local.json
+   ```
+
+3. **Per tier you want to test**, sign in to Claude Code inside the container (persisted to a tier-namespaced volume):
+
+   ```bash
+   TIER=<tier> docker compose -f e2e/docker-compose.yml run --rm login
    # inside the container:  claude   (sign in interactively, then exit)
    ```
 
-3. Authorize the LeadAce MCP server. The first `/lead-ace` run will print an `https://mcp.leadace.ai/authorize?...` URL; open it in your host browser and complete the OAuth flow with your **test tenant's** Google account. Tokens persist in the `claude-state` volume.
+4. **Per tier**, authorize the LeadAce MCP server. The first `TIER=<tier> ./e2e/run.sh ...` run will print an `https://mcp.leadace.ai/authorize?...` URL; open it in your host browser and complete the OAuth flow with **that tier's** Google account. Tokens persist in `lead-ace-e2e-<tier>_claude-state`.
 
 ## Running
 
 ```bash
-./e2e/run.sh "<claude prompt>"
+TIER=<tier> ./e2e/run.sh "<claude prompt>"
 ```
+
+`TIER` defaults to `free` if unset. Allowed: `free`, `starter`, `pro`, `scale`, `unlimited`.
 
 The wrapper passes:
 - `--plugin-dir /repo/plugin` — load LeadAce plugin from the bind-mounted repo (no marketplace install needed)
@@ -74,8 +84,11 @@ Output JSON is emitted to stdout. Capture it with `> e2e/output/run-$(date +%s).
 ## Cleanup
 
 ```bash
-# Wipe the persisted login + MCP state to start over from scratch
-docker compose -f e2e/docker-compose.yml down -v
+# Wipe a single tier's login + MCP state
+TIER=<tier> docker compose -f e2e/docker-compose.yml down -v
+
+# List all tier volumes
+docker volume ls | grep lead-ace-e2e-
 ```
 
 For per-test cleanup (deleting outreach_logs rows so you can re-test the same prospect / restore quota), see the project skill.

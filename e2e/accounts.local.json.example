@@ -1,0 +1,27 @@
+{
+  "free": {
+    "email": "leouno12+test-free@gmail.com",
+    "tenant_id": "",
+    "notes": "Free plan: 5/day, 50 lifetime cap"
+  },
+  "starter": {
+    "email": "leouno12+test-starter@gmail.com",
+    "tenant_id": "",
+    "notes": "Starter $29/mo: 1500/mo cap"
+  },
+  "pro": {
+    "email": "leouno12+test-pro@gmail.com",
+    "tenant_id": "",
+    "notes": "Pro $79/mo: 10000/mo cap"
+  },
+  "scale": {
+    "email": "leouno12+test-scale@gmail.com",
+    "tenant_id": "",
+    "notes": "Scale $199/mo: unlimited cap"
+  },
+  "unlimited": {
+    "email": "leouno12+test-unlimited@gmail.com",
+    "tenant_id": "",
+    "notes": "Internal/admin tier (no plan caps)"
+  }
+}
