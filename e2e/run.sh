@@ -11,20 +11,21 @@
 # Defaults to "free" if unset.
 #
 # Pre-reqs:
-#   1. ANTHROPIC_API_KEY exported in shell.
-#   2. e2e/accounts.local.json exists (copy from accounts.local.json.example
+#   1. e2e/accounts.local.json exists (copy from accounts.local.json.example
 #      and fill in tenant_id per tier).
-#   3. One-time login completed inside the container for the chosen tier:
+#   2. One-time login completed inside the container for the chosen tier:
 #        TIER=<tier> docker compose -f e2e/docker-compose.yml run --rm login
-#        # inside container: claude  (sign in with that tier's Google account)
+#        # inside container: claude  (sign in with the developer's Anthropic
+#        # subscription account; persisted in the tier-namespaced volume)
 #        # exit
-#   4. One-time MCP authorize completed by running any /lead-ace prompt once
+#   3. One-time MCP authorize completed by running any /lead-ace prompt once
 #      with the same TIER and following the OAuth URL.
 
 set -euo pipefail
 
 PROMPT="${1:?usage: TIER=<tier> $0 \"<claude prompt>\"}"
 TIER="${TIER:-free}"
+MAX_BUDGET_USD="${MAX_BUDGET_USD:-1.50}"
 COMPOSE_FILE="$(dirname "$0")/docker-compose.yml"
 
 case "$TIER" in
@@ -34,11 +35,6 @@ case "$TIER" in
     exit 1
     ;;
 esac
-
-if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
-  echo "ERROR: ANTHROPIC_API_KEY is not set in the environment." >&2
-  exit 1
-fi
 
 mkdir -p "$(dirname "$0")/output"
 
@@ -52,7 +48,7 @@ exec docker compose -f "$COMPOSE_FILE" run --rm \
   --settings /repo/e2e/settings.json \
   --setting-sources user \
   --permission-mode dontAsk \
-  --max-budget-usd 0.50 \
+  --max-budget-usd "$MAX_BUDGET_USD" \
   --output-format json \
   --no-session-persistence \
   --print \

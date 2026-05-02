@@ -29,12 +29,13 @@ description: "本番LeadAce環境でE2Eテストする時に使う。「本番E2
 | 項目 | 確認方法 |
 |---|---|
 | Docker 起動中 | `docker info` がエラーなく返る |
-| `ANTHROPIC_API_KEY` 設定済み | `[ -n "$ANTHROPIC_API_KEY" ] && echo OK \|\| echo MISSING` |
 | ハーネス image build 済み | `docker images \| grep lead-ace-e2e-harness` |
 | `e2e/accounts.local.json` 存在 | `[ -f e2e/accounts.local.json ] && echo OK` |
 | 対象プランの `tenant_id` が JSON に書き込まれている | `jq -r ".${TIER}.tenant_id" e2e/accounts.local.json` が非空 |
-| 対象プラン用 Claude Code ログイン済み | `docker volume ls \| grep lead-ace-e2e-${TIER}_claude-state` |
+| 対象プラン用 Claude Code ログイン済み | `docker volume ls \| grep lead-ace-e2e-${TIER}_claude-state`（初回ログイン後に作成される） |
 | 対象プラン用 MCP OAuth 済み | 過去に同 `TIER` で `/lead-ace` 実行・OAuth 完了 |
+
+Claude Code 認証はサブスクリプション login を `claude-state` volume に永続化する方式。`ANTHROPIC_API_KEY` は不要。
 
 ハーネス自体の初回セットアップは [`e2e/README.md`](../../../e2e/README.md) 参照。
 
@@ -44,28 +45,56 @@ description: "本番LeadAce環境でE2Eテストする時に使う。「本番E2
 
 ```bash
 # Step 1: Claude Code をプラン別 volume にログイン
-TIER=<plan> docker compose -f e2e/docker-compose.yml run --rm login
-# 内部で `claude` 起動 → 対話ログイン → exit
+TIER=<plan> ./e2e/login.sh
+# 内部で `claude` 起動 → 対話ログイン → /exit → exit
+# 生 docker compose を直接叩くと COMPOSE_PROJECT_NAME がプラン別にならず、
+# volume が `e2e_claude-state` のような共通名になるので必ず login.sh を経由する。
 
 # Step 2: MCP OAuth（LeadAce 接続）をそのプランのアカウントで完了
-TIER=<plan> ./e2e/run.sh "/setup"
-# OAuth URL が出る → ホストブラウザで該当プランの Google アカウントでログイン → 完了
+TIER=<plan> ./e2e/oauth.sh
+# 内部で interactive Claude Code → `/setup` を投げて MCP authorize URL を出させる
+# → ホストブラウザで該当プランの Google アカウントで Allow → callback がコンテナ内に到達して完了
+# → /exit → exit。refresh token が claude-state volume に永続化される。
+# コンテナ側の OAuth callback port は 47291 に固定 + ホスト 127.0.0.1 に publish 済み
+# （MCP_OAUTH_CALLBACK_PORT + docker-compose の ports 設定）。
 ```
 
 ## 実行手順
 
-### 1. Worker ログ tail（並行起動）
+### 0. 標準スモーク（onboarding chain）
 
-別ターミナルで起動するか、Bash の `run_in_background` で並行起動：
+`/lead-ace` の onboarding chain（intent 分類 + env_check Mode B + strategy_drafting Mode B + 4B-4 サマリー）を完走させて、最後に作られたプロジェクトを自動 cleanup する 1 コマンドラッパー：
 
 ```bash
-cd backend && npx wrangler tail --config wrangler.api.jsonc --env production --format pretty
+TIER=unlimited ./e2e/smoke.sh                      # https://leadace.ai (default)
+TIER=unlimited ./e2e/smoke.sh https://example.com  # 別 URL
+TIER=unlimited SKIP_CLEANUP=1 ./e2e/smoke.sh       # 作ったプロジェクトを残す（手動 inspect 用）
+```
+
+挙動：
+- prompt に「no interactive Q&A available, sensible defaults, do not send outreach」を含めて headless 完走
+- `/lead-ace` の result 末尾に `PROJECT_ID=<id>` をプリントさせる→shell で grep
+- `SKIP_CLEANUP=1` でなければ `/delete-project <id>` を続けて invoke、tenant をクリーンに戻す
+- 出力 JSON は `e2e/output/smoke-${TIER}-leadace-*.json` と `smoke-${TIER}-cleanup-*.json`
+- exit code: 0 = 全 OK / 1 = /lead-ace 失敗 / 2 = PROJECT_ID パース失敗 / 3 = cleanup 失敗
+
+ハーネス側 budget の default は `--max-budget-usd 1.50`（`MAX_BUDGET_USD` env で上書き可）。1 run = `/lead-ace` ~$1.0 + cleanup ~$0.2 / 計 ~3.5 分。**コスト表示はサブスク認証時の API 換算参考値で、実課金されない**（Claude Max 20x の rate quota を消費するのみ）。
+
+### 1. Worker ログ tail（任意・並行）
+
+`smoke.sh` は Worker ログを参照しない。バグ調査や挙動の深掘り時のみ別ターミナルで tail：
+
+```bash
+# MCP Worker（OAuth セッションで動くので bg / 別ターミナル両対応）
 cd backend && npx wrangler tail --config wrangler.mcp.jsonc --env production --format pretty
+
+# API Worker（bg だと CLOUDFLARE_API_TOKEN 必須、別ターミナルで対話 login が楽）
+cd backend && npx wrangler tail --config wrangler.api.jsonc --env production --format pretty
 ```
 
 ログ量が多い場合は `--search '<keyword>'` でフィルタ可。リクエスト ID で API ⇔ MCP のログを照合できる。
 
-### 2. ハーネスコンテナでシナリオ実行
+### 2. 任意シナリオの実行（smoke.sh の枠を超えるとき）
 
 ```bash
 TIER=<plan> ./e2e/run.sh "<prompt>"
@@ -78,7 +107,7 @@ TIER=free ./e2e/run.sh "/lead-ace https://example.com"
 TIER=pro ./e2e/run.sh "/daily-cycle <project-id>"
 ```
 
-出力 JSON は stdout に流れる。保存したい場合は `> e2e/output/run-${TIER}-$(date +%s).json`。
+prompt に対話 Q&A 不在の文脈を含めて defaults を促すパターンが定石（`smoke.sh` の prompt が雛形）。出力 JSON は stdout に流れる。保存したい場合は `> e2e/output/run-${TIER}-$(date +%s).json`。
 
 ### 3. メール到達確認
 

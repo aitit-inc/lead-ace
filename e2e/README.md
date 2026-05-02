@@ -29,7 +29,7 @@ For the full operational workflow (when to run, how to interpret output, how to 
 ## Pre-requisites
 
 - Docker Desktop running
-- `ANTHROPIC_API_KEY` exported in your shell (Claude Code in the container authenticates via API key, not keychain)
+- An Anthropic subscription account (Claude Pro / Max / Team) for Claude Code login. The first `login` run signs in interactively; the credentials are persisted to a tier-namespaced Docker volume (`/root/.claude`), so subsequent runs do not need an API key or further sign-in.
 - A test tenant + test Google account (one-time setup)
 
 ## One-time setup
@@ -50,19 +50,41 @@ For the full operational workflow (when to run, how to interpret output, how to 
 3. **Per tier you want to test**, sign in to Claude Code inside the container (persisted to a tier-namespaced volume):
 
    ```bash
-   TIER=<tier> docker compose -f e2e/docker-compose.yml run --rm login
+   TIER=<tier> ./e2e/login.sh
    # inside the container:  claude   (sign in interactively, then exit)
    ```
 
-4. **Per tier**, authorize the LeadAce MCP server. The first `TIER=<tier> ./e2e/run.sh ...` run will print an `https://mcp.leadace.ai/authorize?...` URL; open it in your host browser and complete the OAuth flow with **that tier's** Google account. Tokens persist in `lead-ace-e2e-<tier>_claude-state`.
+   The wrapper sets `COMPOSE_PROJECT_NAME=lead-ace-e2e-<tier>` so the resulting `claude-state` volume is named per tier and stays isolated from other tiers.
+
+4. **Per tier**, authorize the LeadAce MCP server:
+
+   ```bash
+   TIER=<tier> ./e2e/oauth.sh
+   ```
+
+   Inside the resulting interactive Claude session, type `/setup` (or any prompt that triggers an MCP call). Claude prints a `https://mcp.leadace.ai/authorize?...` URL — open it in your host browser, sign in with **that tier's** Google account, and click Allow. The browser is redirected to `http://localhost:47291/callback?...`; the harness publishes that port back to the container so Claude Code completes the handshake automatically. Tokens persist in `lead-ace-e2e-<tier>_claude-state`. After confirmation, `/exit` then `exit` to leave.
+
+   The fixed callback port (47291) is set via `MCP_OAUTH_CALLBACK_PORT` and published to the host's loopback in `docker-compose.yml`, because Docker Desktop on macOS does not bridge a random in-container port to the host browser.
 
 ## Running
+
+### Standard onboarding-chain smoke (recommended)
+
+```bash
+TIER=unlimited ./e2e/smoke.sh                       # https://leadace.ai (default)
+TIER=unlimited ./e2e/smoke.sh https://example.com   # custom URL
+TIER=unlimited SKIP_CLEANUP=1 ./e2e/smoke.sh        # keep the project for manual inspection
+```
+
+`smoke.sh` runs `/lead-ace <url>` headless with a prompt that pre-resolves every interactive Q&A (`env_check` defaults to `unsure`, sender values become placeholders, no outreach is sent). It parses the project id printed on the last line of the result and runs `/delete-project <id>` to leave the tenant clean. JSON outputs go to `e2e/output/smoke-${TIER}-leadace-*.json` and `smoke-${TIER}-cleanup-*.json`. Exit codes: `0` all good, `1` `/lead-ace` failed, `2` couldn't parse project id, `3` cleanup failed.
+
+### Arbitrary scenarios
 
 ```bash
 TIER=<tier> ./e2e/run.sh "<claude prompt>"
 ```
 
-`TIER` defaults to `free` if unset. Allowed: `free`, `starter`, `pro`, `scale`, `unlimited`.
+`TIER` defaults to `free` if unset. Allowed: `free`, `starter`, `pro`, `scale`, `unlimited`. `MAX_BUDGET_USD` overrides the `--max-budget-usd` cap (default `1.50`).
 
 The wrapper passes:
 - `--plugin-dir /repo/plugin` — load LeadAce plugin from the bind-mounted repo (no marketplace install needed)
@@ -70,11 +92,15 @@ The wrapper passes:
 - `--settings /repo/e2e/settings.json` — minimal allowlist for `mcp__api__*` and shell utilities
 - `--setting-sources user` — ignore the project-level `.claude/settings.json` so the harness is isolated
 - `--permission-mode dontAsk` — respect the allowlist; deny everything else without prompting
-- `--max-budget-usd 0.50` — cap API spend per run
+- `--max-budget-usd $MAX_BUDGET_USD` — cap per run (default 1.50; this is an API-equivalent figure, not a real charge when the container is signed in via subscription)
 - `--output-format json` — structured output for assertions
 - `--no-session-persistence` — clean run, no session pollution
 
 Output JSON is emitted to stdout. Capture it with `> e2e/output/run-$(date +%s).json` to inspect later.
+
+### A note on cost
+
+`total_cost_usd` in the JSON output is the API-equivalent value calculated from token usage, *not* a charge. When the container is logged in via a Claude subscription (Pro/Max/Team), running `claude` consumes the subscription's rate quota and is not billed per token. The harness explicitly relies on subscription auth (no `ANTHROPIC_API_KEY` is exported) so `total_cost_usd` reads as informational only.
 
 ## Known gaps
 

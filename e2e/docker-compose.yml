@@ -6,8 +6,18 @@ services:
     image: lead-ace-e2e-harness:latest
     working_dir: /repo
     environment:
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       LEADACE_MCP_URL: ${LEADACE_MCP_URL:-https://mcp.leadace.ai/mcp}
+      # Pin Claude Code's MCP OAuth callback to a fixed port so we can publish
+      # it to the host. Without this the CLI picks a random ephemeral port and
+      # the host browser cannot reach the in-container callback server (the
+      # browser is told `http://localhost:<random>/callback` and macOS Docker
+      # Desktop does not bridge that back to the container).
+      MCP_OAUTH_CALLBACK_PORT: 47291
+    ports:
+      # Map container's fixed callback port to host, so the redirected browser
+      # request `http://localhost:47291/callback?code=...` reaches the in-container
+      # Claude Code OAuth server. Only needed during one-time MCP OAuth setup.
+      - "127.0.0.1:47291:47291"
     volumes:
       - claude-state:/root/.claude
       - ../:/repo:ro

@@ -5,6 +5,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       curl \
       git \
       ca-certificates \
+      python3 \
+      python3-requests \
     && rm -rf /var/lib/apt/lists/*
 
 ARG CLAUDE_CODE_VERSION=2.1.126
