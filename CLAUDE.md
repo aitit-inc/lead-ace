@@ -174,6 +174,10 @@ See `README.md` -> For Developers for full details.
 - Auth via `@supabase/supabase-js` (client-side JWT)
 - Environment variables: `VITE_API_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
 
+## Production E2E Testing
+
+Project-internal skill at [.claude/skills/prod-e2e/SKILL.md](.claude/skills/prod-e2e/SKILL.md) holds the full prerequisite knowledge for running E2E tests against the live backend (Docker harness in `e2e/`, Worker log tailing, test tenant + `+`-alias scheme, cleanup SQL). Invoke it when the user asks to run a production E2E.
+
 ## Pre-Release Checklist (Required)
 
 **Backend (TypeScript):**
