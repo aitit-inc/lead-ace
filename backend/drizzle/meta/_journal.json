@@ -92,6 +92,13 @@
       "when": 1777768537155,
       "tag": "0012_flippant_cobalt_man",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1777798717825,
+      "tag": "0013_safe_wolfpack",
+      "breakpoints": true
     }
   ]
 }

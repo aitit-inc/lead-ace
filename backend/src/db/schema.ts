@@ -276,6 +276,10 @@ export const prospects = pgTable('prospects', {
   snsAccounts: jsonb('sns_accounts').$type<SnsAccounts>(),
   doNotContact: boolean('do_not_contact').notNull().default(false),
   notes: text('notes'),
+  // When set in the future, get_outbound_targets skips this prospect until the
+  // timestamp passes. Populated by record_response when a rejection carries a
+  // preferred_recontact_window of 3/6/12 months.
+  nextOutreachAfter: timestamp('next_outreach_after', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [

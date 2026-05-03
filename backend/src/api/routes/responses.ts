@@ -83,6 +83,26 @@ function feedbackForcesDoNotContact(fb: RejectionFeedbackV1): boolean {
   )
 }
 
+// Reapproach signal: a rejection that's conditional on time, not preference.
+// The prospect should be re-eligible for outreach once the window passes,
+// so we set prospects.next_outreach_after and roll the project_prospects
+// status back to 'new' (overriding the 'rejected' flip the responseType
+// would otherwise produce).
+const REAPPROACH_REASONS: readonly RejectionPrimaryReason[] = ['wrong_timing', 'budget']
+const REAPPROACH_WINDOW_MONTHS: Record<RejectionRecontactWindow, number | null> = {
+  never: null,
+  '3_months': 3,
+  '6_months': 6,
+  '12_months': 12,
+  unspecified: null,
+}
+
+function reapproachWindowMonths(fb: RejectionFeedbackV1): number | null {
+  if (!REAPPROACH_REASONS.includes(fb.primary_reason)) return null
+  if (!fb.preferred_recontact_window) return null
+  return REAPPROACH_WINDOW_MONTHS[fb.preferred_recontact_window]
+}
+
 export const responsesRouter = new Hono<{ Bindings: Env; Variables: Variables }>()
 
 // POST /responses — record a response and update prospect status
@@ -157,6 +177,15 @@ responsesRouter.post('/responses', zValidator('json', recordResponseSchema), asy
       break
   }
 
+  // A rejection with a recontact window in 3/6/12 months is a deferral, not a
+  // permanent no — flip the status back to 'new' so the prospect is re-eligible
+  // once next_outreach_after passes. DNC overrides this (the feedbackForcesDoNotContact
+  // check below still ratchets do_not_contact=true regardless of newStatus).
+  const reapproachMonths = input.rejectionFeedback ? reapproachWindowMonths(input.rejectionFeedback) : null
+  if (newStatus === 'rejected' && reapproachMonths !== null) {
+    newStatus = 'new'
+  }
+
   if (newStatus) {
     await db
       .update(projectProspects)
@@ -167,6 +196,15 @@ responsesRouter.post('/responses', zValidator('json', recordResponseSchema), asy
           eq(projectProspects.prospectId, log.prospectId),
         ),
       )
+  }
+
+  if (reapproachMonths !== null) {
+    const nextOutreachAfter = new Date(receivedAt)
+    nextOutreachAfter.setUTCMonth(nextOutreachAfter.getUTCMonth() + reapproachMonths)
+    await db
+      .update(prospects)
+      .set({ nextOutreachAfter, updatedAt: new Date() })
+      .where(eq(prospects.id, log.prospectId))
   }
 
   // DNC ratchet: caller-requested OR bounce OR feedback signals a hard opt-out.

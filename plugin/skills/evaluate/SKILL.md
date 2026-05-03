@@ -39,7 +39,7 @@ If `get_eval_data` returns a "Project not found" error, instruct the user to run
 
 `get_rejection_feedback_summary` (scope="tactical", windowDays=30) response includes:
 - `total`, `primaryReasonDistribution`: counts of `not_relevant` / `wrong_timing` / `budget` / `not_decision_maker` / `unsubscribe_request` / `other`
-- `recontactWindows`: prospects that asked to be recontacted in 3/6/12 months — actionable list pending automation
+- `recontactWindows`: prospects that asked to be recontacted in 3/6/12 months — auto-deferred (next_outreach_after is set on rejection; `get_outbound_targets` skips them until the window passes), so this list is informational
 - `decisionMakerPointers`: prospects that pointed to a different decision-maker — actionable list pending automation
 - `notRelevantNotes`: per-row data with `industry`, `organizationName`, `freeText` — drives targeting hints in step 4
 
@@ -84,7 +84,7 @@ Retrieve analysis frameworks via `mcp__plugin_lead-ace_api__get_master_document`
 **Rejection Tactical Analysis (from `get_rejection_feedback_summary` scope="tactical"):**
 - `primaryReasonDistribution`: which tactical reasons dominate (e.g. `not_relevant` heavy → targeting issue; `wrong_timing` / `budget` heavy → pipeline issue; `not_decision_maker` heavy → outreach is reaching wrong contacts)
 - `notRelevantNotes`: group rows by `industry` (and by `organizationName` when industries are missing). An industry with multiple `not_relevant` hits is a targeting-mismatch signal — use it in step 4 to update SEARCH_NOTES
-- `recontactWindows`: count by `window` (3/6/12_months). Each row is a real prospect that asked to be recontacted later — surface in the report (auto-scheduling is not yet implemented)
+- `recontactWindows`: count by `window` (3/6/12_months). Each row is a real prospect that asked to be recontacted later — auto-deferred via `prospects.next_outreach_after`, so they re-enter the outbound queue automatically when the window passes. Surface in the report as a transparency log only
 - `decisionMakerPointers`: each row is a referral to another contact — surface in the report (auto-prospect-creation is not yet implemented)
 
 ### 4. Determine and Apply Improvement Actions
@@ -161,7 +161,7 @@ Report the following directly to the user (no file output needed -- evaluation d
 - List of improvements applied
 - **Tactical rejection signals** (from step 1's `get_rejection_feedback_summary`):
   - Tactical reason distribution (counts by `not_relevant` / `wrong_timing` / `budget` / `not_decision_maker` / `unsubscribe_request` / `other`). Show whenever tactical `total` > 0 — non-recontact reasons like `not_relevant` and `unsubscribe_request` still belong here
-  - **Recontact queue** — list `recontactWindows` rows (prospect, organization, requested window). State that auto-scheduling is not yet implemented, so manual follow-up is required for now. Omit this sub-bullet when `recontactWindows` is empty
+  - **Recontact queue** — list `recontactWindows` rows (prospect, organization, requested window). State that the prospect is auto-deferred (`prospects.next_outreach_after` set on rejection) and will re-enter the outbound queue automatically once the window passes — no manual action required. Omit this sub-bullet when `recontactWindows` is empty
   - **Decision-maker referrals** — list `decisionMakerPointers` rows (referring prospect → pointer name/email/role). State that auto-prospect-creation is not yet implemented, so manual registration is required for now. Omit this sub-bullet when `decisionMakerPointers` is empty
   - Skip the whole section only when tactical `total` is 0 (no tactical rejections at all)
 - Next actions to take (`/build-list` for additional exploration, `/outbound` for re-approach, etc.)

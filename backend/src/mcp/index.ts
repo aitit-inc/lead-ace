@@ -582,7 +582,7 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
   // --- record_response ---
   server.tool(
     'record_response',
-    'Record a response (email reply, SNS DM, etc.) to an outreach. Updates prospect status and optionally marks do-not-contact. For rejections, pass rejectionFeedback to capture the structured reason — feature_gap notes are tracked as PMF signal, and unsubscribe_request / preferred_recontact_window=never / consent.* opt-outs auto-flip do_not_contact.',
+    'Record a response (email reply, SNS DM, etc.) to an outreach. Updates prospect status and optionally marks do-not-contact. For rejections, pass rejectionFeedback to capture the structured reason — feature_gap notes are tracked as PMF signal; unsubscribe_request / preferred_recontact_window=never / consent.* opt-outs auto-flip do_not_contact; primary_reason wrong_timing/budget + preferred_recontact_window 3/6/12_months auto-defers (sets prospects.next_outreach_after, status reset to "new") so the prospect re-enters the outbound queue when the window passes.',
     {
       outreachLogId: z.number().int().describe('ID of the outreach log this response is for'),
       channel: z.enum(['email', 'form', 'sns_twitter', 'sns_linkedin']),
@@ -625,7 +625,7 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
   // --- get_rejection_feedback_summary ---
   server.tool(
     'get_rejection_feedback_summary',
-    'Aggregate rejection_feedback. With scope="pmf" returns the PMF slice (feature_gap, already_have_solution, competitor_locked) — primary_reason distribution + feature_gap free-text notes, with total and percentages computed within the PMF subset. Used by /check-feedback. With scope="tactical" returns the non-PMF slice — primary_reason distribution + recontact windows + decision_maker_pointer + not_relevant notes (with industry context). Used by /evaluate to drive targeting/recontact/pointer follow-up. scope="all" (default) returns the unfiltered union.',
+    'Aggregate rejection_feedback. With scope="pmf" returns the PMF slice (feature_gap, already_have_solution, competitor_locked) — primary_reason distribution + feature_gap free-text notes, with total and percentages computed within the PMF subset. Used by /check-feedback. With scope="tactical" returns the non-PMF slice — primary_reason distribution + recontact windows + decision_maker_pointer + not_relevant notes (with industry context). Used by /evaluate to drive targeting and pointer follow-up; recontact-window prospects are auto-deferred at record_response time and surface here as a transparency log only. scope="all" (default) returns the unfiltered union.',
     {
       projectId: z.string().describe('Project name or ID'),
       windowDays: z.number().int().min(1).max(3650).optional().describe('Restrict to rejections received within the last N days. Omit for all-time.'),

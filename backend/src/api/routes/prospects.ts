@@ -651,6 +651,7 @@ prospectsRouter.get('/projects/:id/prospects/reachable', async (c) => {
     eq(projectProspects.tenantId, tenantId),
     eq(projectProspects.status, 'new'),
     eq(prospects.doNotContact, false),
+    sql`(${prospects.nextOutreachAfter} IS NULL OR ${prospects.nextOutreachAfter} <= NOW())`,
   )
 
   const [rows, summaryRows] = await Promise.all([
