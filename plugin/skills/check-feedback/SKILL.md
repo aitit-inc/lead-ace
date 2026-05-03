@@ -54,7 +54,7 @@ Render side-by-side: 30-day vs all-time. From `primaryReasonDistribution`, **sho
 - `already_have_solution` — incumbent vendor presence (competitive pressure)
 - `competitor_locked` — multi-year contract / renewal-only window (competitive pressure)
 
-Skip rows where both windows are 0. Compute the total from these three reasons only — do **not** include tactical reasons (`not_relevant` / `wrong_timing` / `budget` / `not_decision_maker` / `unsubscribe_request` / `other`) in the total or the table.
+Skip rows where both windows are 0. **Recompute the total and percentages locally from these three reasons only** — the API-supplied `percentage` field is computed against the all-rejections denominator (all 9 enum values) and is misleading for this PMF-only view. Any reason not listed above (`not_relevant` / `wrong_timing` / `budget` / `not_decision_maker` / `unsubscribe_request` / `other`, plus any unknown future enum values) is treated as tactical and excluded.
 
 ```
 Reason                   30 days        all-time
@@ -68,12 +68,19 @@ If all three are 0 in both windows, render: "No PMF-relevant rejections recorded
 
 ### 4. Closing Note
 
-End with one short, plain-English summary of what the PMF data suggests. Three examples to anchor tone:
+End with one short, plain-English summary. Decide which line to write in this order — first match wins:
 
-- Many `feature_gap` notes around the same capability: "Multiple recent rejections cite `<feature>` — strongest PMF signal is for that. Consider `/strategy` revision or product roadmap input."
-- Many `already_have_solution` mentioning the same vendor: "Repeated rejections cite `<vendor>` as incumbent — competitive pressure from a specific player. Consider differentiation messaging in `/strategy`."
-- Mixed but no dominant pattern: "Rejection volume is N over 30 days, no single PMF signal dominates. Continue monitoring."
+1. **Thin signal** — if PMF-relevant total (recomputed in step 3.b) is < 3, say so and recommend continued data collection. Stop.
+2. **Capability clustering in `featureGapNotes`** — scan `featureGapNotes[].freeText` for repeated capability/feature terms across entries. If ≥2 notes name the same capability, use the dominant-feature example.
+3. **Competitor-pressure share** — if `already_have_solution` + `competitor_locked` together exceed half of the PMF-relevant total, use the competitor example. (Free-text is not returned for these reasons, so do not name a specific vendor.)
+4. **Otherwise** — use the mixed example.
 
-If signal is too thin (PMF-relevant total < 3), say so and recommend continued data collection. Do not invent product/strategy actions when the data does not support them.
+Example tones:
 
-This is a read-only skill — no DB writes, no side effects, no tactical recommendations.
+- Dominant feature_gap capability: "Multiple recent rejections cite `<feature>` — strongest PMF signal is for that. Consider `/strategy` revision or product roadmap input."
+- High competitor pressure: "A large share of rejections cite an incumbent solution or contract lock-in — competitive pressure is the dominant PMF signal. Consider differentiation messaging in `/strategy`."
+- Mixed: "Rejection volume is N over 30 days, no single PMF signal dominates. Continue monitoring."
+
+Do not invent product/strategy actions when the data does not support them.
+
+This is a read-only skill — no DB writes, no side effects.
