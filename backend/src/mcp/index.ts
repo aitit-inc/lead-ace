@@ -36,7 +36,7 @@ type Env = {
 // that the old plugin cannot tolerate (removed tool, renamed required arg,
 // changed response shape). See .claude/rules/release.md.
 const SERVER_VERSION = '1.0.0'
-const MIN_PLUGIN_VERSION = '0.5.38'
+const MIN_PLUGIN_VERSION = '0.5.63'
 
 // ---------------------------------------------------------------------------
 // Auth helpers
@@ -582,7 +582,7 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
   // --- record_response ---
   server.tool(
     'record_response',
-    'Record a response (email reply, SNS DM, etc.) to an outreach. Updates prospect status and optionally marks do-not-contact. For rejections, pass rejectionFeedback to capture the structured reason — feature_gap notes are tracked as PMF signal; unsubscribe_request / preferred_recontact_window=never / consent.* opt-outs auto-flip do_not_contact; primary_reason wrong_timing/budget + preferred_recontact_window 3/6/12_months auto-defers (sets status="deferred" and prospects.next_outreach_after) so the prospect re-enters the outbound queue when the window passes.',
+    'Record a response (email reply, SNS DM, etc.) to an outreach. Updates prospect status and optionally marks do-not-contact. For rejections, pass rejectionFeedback to capture the structured reason — feature_gap notes are tracked as PMF signal; unsubscribe_request / preferred_recontact_window=never / consent.* opt-outs auto-flip do_not_contact; primary_reason wrong_timing/budget + preferred_recontact_window 3/6/12_months auto-defers (sets status="deferred" and prospects.next_outreach_after) so the prospect re-enters the outbound queue when the window passes; decision_maker_pointer with email auto-creates a new prospect (linked to every project the referring prospect is in, status="new", priority preserved) inheriting org/overview/websiteUrl/industry — pointer.name only without email updates an existing same-org contact role/department instead, returned as derivedProspects.',
     {
       outreachLogId: z.number().int().describe('ID of the outreach log this response is for'),
       channel: z.enum(['email', 'form', 'sns_twitter', 'sns_linkedin']),
@@ -617,15 +617,19 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
         const err = data as { error: string }
         return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
       }
-      const result = data as { id: number }
-      return { content: [{ type: 'text' as const, text: `Response recorded (id: ${result.id}).` }] }
+      const result = data as { id: number; derivedProspects?: { id: number; name: string; action: 'created' | 'matched_existing' }[] }
+      const derived = result.derivedProspects ?? []
+      const derivedNote = derived.length === 0
+        ? ''
+        : ' Derived prospects: ' + derived.map((p) => `${p.name} (id ${p.id}, ${p.action})`).join(', ') + '.'
+      return { content: [{ type: 'text' as const, text: `Response recorded (id: ${result.id}).${derivedNote}` }] }
     },
   )
 
   // --- get_rejection_feedback_summary ---
   server.tool(
     'get_rejection_feedback_summary',
-    'Aggregate rejection_feedback. With scope="pmf" returns the PMF slice (feature_gap, already_have_solution, competitor_locked) — primary_reason distribution + feature_gap free-text notes, with total and percentages computed within the PMF subset. Used by /check-feedback. With scope="tactical" returns the non-PMF slice — primary_reason distribution + recontact windows + decision_maker_pointer + not_relevant notes (with industry context). Used by /evaluate to drive targeting and pointer follow-up; recontact-window prospects are auto-deferred at record_response time and surface here as a transparency log only. scope="all" (default) returns the unfiltered union.',
+    'Aggregate rejection_feedback. With scope="pmf" returns the PMF slice (feature_gap, already_have_solution, competitor_locked) — primary_reason distribution + feature_gap free-text notes, with total and percentages computed within the PMF subset. Used by /check-feedback. With scope="tactical" returns the non-PMF slice — primary_reason distribution + recontact windows + decision_maker_pointer + not_relevant notes (with industry context). Used by /evaluate to drive targeting; recontact-window prospects are auto-deferred and decision_maker_pointer rows auto-create or update prospects at record_response time, both surface here as a transparency log only. scope="all" (default) returns the unfiltered union.',
     {
       projectId: z.string().describe('Project name or ID'),
       windowDays: z.number().int().min(1).max(3650).optional().describe('Restrict to rejections received within the last N days. Omit for all-time.'),

@@ -40,7 +40,7 @@ If `get_eval_data` returns a "Project not found" error, instruct the user to run
 `get_rejection_feedback_summary` (scope="tactical", windowDays=30) response includes:
 - `total`, `primaryReasonDistribution`: counts of `not_relevant` / `wrong_timing` / `budget` / `not_decision_maker` / `unsubscribe_request` / `other`
 - `recontactWindows`: prospects that asked to be recontacted in 3/6/12 months — auto-deferred (next_outreach_after is set on rejection; `get_outbound_targets` skips them until the window passes), so this list is informational
-- `decisionMakerPointers`: prospects that pointed to a different decision-maker — actionable list pending automation
+- `decisionMakerPointers`: prospects that pointed to a different decision-maker — auto-prospect-created at record_response time (new prospect linked to every project the referring prospect is in, or role updated on an existing same-org contact), surface here as a transparency log only
 - `notRelevantNotes`: per-row data with `industry`, `organizationName`, `freeText` — drives targeting hints in step 4
 
 If `get_rejection_feedback_summary` errors, continue with the eval data only and note the failure in the report.
@@ -85,7 +85,7 @@ Retrieve analysis frameworks via `mcp__plugin_lead-ace_api__get_master_document`
 - `primaryReasonDistribution`: which tactical reasons dominate (e.g. `not_relevant` heavy → targeting issue; `wrong_timing` / `budget` heavy → pipeline issue; `not_decision_maker` heavy → outreach is reaching wrong contacts)
 - `notRelevantNotes`: group rows by `industry` (and by `organizationName` when industries are missing). An industry with multiple `not_relevant` hits is a targeting-mismatch signal — use it in step 4 to update SEARCH_NOTES
 - `recontactWindows`: count by `window` (3/6/12_months). Each row is a real prospect that asked to be recontacted later — auto-deferred via `prospects.next_outreach_after`, so they re-enter the outbound queue automatically when the window passes. Surface in the report as a transparency log only
-- `decisionMakerPointers`: each row is a referral to another contact — surface in the report (auto-prospect-creation is not yet implemented)
+- `decisionMakerPointers`: each row is a referral to another contact. Auto-prospect-creation runs at record_response time (pointer with email creates a new prospect; pointer with name only updates an existing same-org contact's role). Surface in the report as a transparency log
 
 ### 4. Determine and Apply Improvement Actions
 
@@ -162,6 +162,6 @@ Report the following directly to the user (no file output needed -- evaluation d
 - **Tactical rejection signals** (from step 1's `get_rejection_feedback_summary`):
   - Tactical reason distribution (counts by `not_relevant` / `wrong_timing` / `budget` / `not_decision_maker` / `unsubscribe_request` / `other`). Show whenever tactical `total` > 0 — non-recontact reasons like `not_relevant` and `unsubscribe_request` still belong here
   - **Recontact queue** — list `recontactWindows` rows (prospect, organization, requested window). State that the prospect is auto-deferred (`prospects.next_outreach_after` set on rejection) and will re-enter the outbound queue automatically once the window passes — no manual action required. Omit this sub-bullet when `recontactWindows` is empty
-  - **Decision-maker referrals** — list `decisionMakerPointers` rows (referring prospect → pointer name/email/role). State that auto-prospect-creation is not yet implemented, so manual registration is required for now. Omit this sub-bullet when `decisionMakerPointers` is empty
+  - **Decision-maker referrals** — list `decisionMakerPointers` rows (referring prospect → pointer name/email/role). State that auto-prospect-creation runs at record_response time (pointer with email creates a new prospect linked to the same projects; pointer with name only updates an existing same-org contact's role/department), so no manual registration is required. Omit this sub-bullet when `decisionMakerPointers` is empty
   - Skip the whole section only when tactical `total` is 0 (no tactical rejections at all)
 - Next actions to take (`/build-list` for additional exploration, `/outbound` for re-approach, etc.)

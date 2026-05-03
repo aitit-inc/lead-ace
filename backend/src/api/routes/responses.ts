@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { eq, and, desc, sql, gte, isNotNull } from 'drizzle-orm'
+import { eq, and, desc, sql, gte, isNotNull, ilike } from 'drizzle-orm'
 import {
   projects,
   outreachLogs,
@@ -19,6 +19,7 @@ import {
   type RejectionRecontactWindow,
 } from '../../db/schema'
 import type { Env, Variables } from '../types'
+import type { Db } from '../../db/connection'
 
 // Typed sentinels so SQL literals stay in sync with the schema enums (a rename
 // in REJECTION_PRIMARY_REASONS would otherwise leave these strings as silent
@@ -101,6 +102,181 @@ function reapproachWindowMonths(fb: RejectionFeedbackV1): number | null {
   if (!REAPPROACH_REASONS.includes(fb.primary_reason)) return null
   if (!fb.preferred_recontact_window) return null
   return REAPPROACH_WINDOW_MONTHS[fb.preferred_recontact_window]
+}
+
+type DerivedProspectAction = 'created' | 'matched_existing'
+
+type DerivedProspect = {
+  id: number
+  name: string
+  action: DerivedProspectAction
+}
+
+// Materialise a decision_maker_pointer into an actual prospect row.
+//
+// Dedup ladder:
+//   1. pointer.email → search by (tenant, email). DNC blocks any update.
+//      - hit → fill missing contactName/department only; never overwrite
+//      - miss → create a new prospect, inheriting org/overview/websiteUrl/industry
+//        from the referring prospect, and link it to every project the
+//        referring prospect is in (priority preserved per-link)
+//   2. pointer.email absent + pointer.name → search by (tenant, organizationId,
+//      contactName ILIKE name). Hit fills missing department. Miss is a no-op
+//      because a contact-channel-less prospect would violate the schema refine.
+//   3. neither → no-op.
+//
+// Self-references (pointer matches the referring prospect's own email or
+// contactName) are skipped to avoid recursive defer/role-flip loops.
+async function derivePointerProspect(
+  db: Db,
+  tenantId: string,
+  referringProspectId: number,
+  pointer: { name?: string; email?: string; role?: string },
+  now: Date,
+): Promise<DerivedProspect | null> {
+  const pointerName = pointer.name?.trim() || null
+  const pointerEmail = pointer.email?.trim().toLowerCase() || null
+  const pointerRole = pointer.role?.trim() || null
+
+  if (!pointerName && !pointerEmail) return null
+
+  const [referring] = await db
+    .select({
+      id: prospects.id,
+      name: prospects.name,
+      contactName: prospects.contactName,
+      organizationId: prospects.organizationId,
+      overview: prospects.overview,
+      websiteUrl: prospects.websiteUrl,
+      industry: prospects.industry,
+      email: prospects.email,
+    })
+    .from(prospects)
+    .where(eq(prospects.id, referringProspectId))
+    .limit(1)
+
+  if (!referring) return null
+
+  if (pointerEmail && referring.email && referring.email.toLowerCase() === pointerEmail) return null
+  if (pointerName && referring.contactName && referring.contactName.toLowerCase() === pointerName.toLowerCase()) return null
+
+  if (pointerEmail) {
+    const [existing] = await db
+      .select({
+        id: prospects.id,
+        name: prospects.name,
+        contactName: prospects.contactName,
+        department: prospects.department,
+        doNotContact: prospects.doNotContact,
+      })
+      .from(prospects)
+      .where(and(eq(prospects.tenantId, tenantId), eq(prospects.email, pointerEmail)))
+      .limit(1)
+
+    if (existing) {
+      if (existing.doNotContact) return null
+      const patch: { contactName?: string; department?: string; updatedAt?: Date } = {}
+      if (!existing.contactName && pointerName) patch.contactName = pointerName
+      if (!existing.department && pointerRole) patch.department = pointerRole
+      if (Object.keys(patch).length > 0) {
+        patch.updatedAt = now
+        await db.update(prospects).set(patch).where(eq(prospects.id, existing.id))
+      }
+      return { id: existing.id, name: existing.name, action: 'matched_existing' }
+    }
+
+    return await createDerivedProspect(db, tenantId, referring, referringProspectId, {
+      name: pointerName,
+      email: pointerEmail,
+      role: pointerRole,
+    }, now)
+  }
+
+  // pointer.email absent — only update an existing same-org contactName match.
+  // Cannot create: schema requires at least one contact channel and we have none.
+  const [existing] = await db
+    .select({
+      id: prospects.id,
+      name: prospects.name,
+      department: prospects.department,
+      doNotContact: prospects.doNotContact,
+    })
+    .from(prospects)
+    .where(
+      and(
+        eq(prospects.tenantId, tenantId),
+        eq(prospects.organizationId, referring.organizationId),
+        ilike(prospects.contactName, pointerName!),
+      ),
+    )
+    .limit(1)
+
+  if (!existing) return null
+  if (existing.doNotContact) return null
+  if (!existing.department && pointerRole) {
+    await db.update(prospects).set({ department: pointerRole, updatedAt: now }).where(eq(prospects.id, existing.id))
+  }
+  return { id: existing.id, name: existing.name, action: 'matched_existing' }
+}
+
+async function createDerivedProspect(
+  db: Db,
+  tenantId: string,
+  referring: {
+    name: string
+    organizationId: number
+    overview: string
+    websiteUrl: string
+    industry: string | null
+  },
+  referringProspectId: number,
+  pointer: { name: string | null; email: string; role: string | null },
+  now: Date,
+): Promise<DerivedProspect> {
+  const dateStr = now.toISOString().slice(0, 10)
+  const newName = pointer.name ?? (pointer.role ? `${pointer.role} (${referring.name})` : pointer.email)
+  const [created] = await db
+    .insert(prospects)
+    .values({
+      tenantId,
+      name: newName,
+      contactName: pointer.name,
+      organizationId: referring.organizationId,
+      department: pointer.role,
+      overview: referring.overview,
+      industry: referring.industry,
+      websiteUrl: referring.websiteUrl,
+      email: pointer.email,
+      notes: `Auto-created from decision-maker referral by ${referring.name} on ${dateStr}`,
+      doNotContact: false,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning({ id: prospects.id, name: prospects.name })
+
+  if (!created) throw new Error('Failed to insert derived prospect')
+
+  const refLinks = await db
+    .select({ projectId: projectProspects.projectId, priority: projectProspects.priority })
+    .from(projectProspects)
+    .where(and(eq(projectProspects.tenantId, tenantId), eq(projectProspects.prospectId, referringProspectId)))
+
+  if (refLinks.length > 0) {
+    await db.insert(projectProspects).values(
+      refLinks.map((link) => ({
+        tenantId,
+        projectId: link.projectId,
+        prospectId: created.id,
+        matchReason: `Decision-maker referral from ${referring.name}`,
+        priority: link.priority as 1 | 2 | 3 | 4 | 5,
+        status: 'new' as const,
+        createdAt: now,
+        updatedAt: now,
+      })),
+    )
+  }
+
+  return { id: created.id, name: created.name, action: 'created' }
 }
 
 export const responsesRouter = new Hono<{ Bindings: Env; Variables: Variables }>()
@@ -212,7 +388,17 @@ responsesRouter.post('/responses', zValidator('json', recordResponseSchema), asy
       .where(eq(prospects.id, log.prospectId))
   }
 
-  return c.json({ id: newResponse?.id }, 201)
+  // Decision-maker pointer → auto-prospect. Only when not a DNC-forcing reject
+  // (a referral from someone who unsubscribed shouldn't seed a new contact),
+  // and not when the rejection itself ratcheted DNC on the referring prospect.
+  const derivedProspects: DerivedProspect[] = []
+  const pointer = input.rejectionFeedback?.decision_maker_pointer
+  if (pointer && !forceDnc) {
+    const derived = await derivePointerProspect(db, tenantId, log.prospectId, pointer, new Date())
+    if (derived) derivedProspects.push(derived)
+  }
+
+  return c.json({ id: newResponse?.id, derivedProspects }, 201)
 })
 
 // GET /projects/:id/responses — list responses for a project
