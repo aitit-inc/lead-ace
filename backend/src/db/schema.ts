@@ -82,6 +82,47 @@ export type SnsAccounts = {
   facebook?: string
 }
 
+export const REJECTION_PRIMARY_REASONS = [
+  'not_relevant',
+  'wrong_timing',
+  'budget',
+  'feature_gap',
+  'already_have_solution',
+  'competitor_locked',
+  'not_decision_maker',
+  'unsubscribe_request',
+  'other',
+] as const
+
+export const REJECTION_RECONTACT_WINDOWS = [
+  'never',
+  '3_months',
+  '6_months',
+  '12_months',
+  'unspecified',
+] as const
+
+export type RejectionPrimaryReason = (typeof REJECTION_PRIMARY_REASONS)[number]
+export type RejectionRecontactWindow = (typeof REJECTION_RECONTACT_WINDOWS)[number]
+
+// Wire format mirrors landing/public/schema/rejection-feedback-v1.json.
+// Keep field names snake_case to match the published JSON Schema URI.
+export type RejectionFeedbackV1 = {
+  version: 1
+  primary_reason: RejectionPrimaryReason
+  secondary_reasons?: RejectionPrimaryReason[]
+  free_text?: string
+  decision_maker_pointer?: { name?: string; email?: string; role?: string }
+  preferred_recontact_window?: RejectionRecontactWindow
+  consent?: {
+    gdpr_erasure_request?: boolean
+    ccpa_opt_out?: boolean
+    marketing_opt_out?: boolean
+  }
+  submitted_at: string
+  tenant_signature?: string
+}
+
 export type EvaluationMetrics = {
   totalOutreach: number
   channelCounts: Array<{ channel: string; count: number }>
@@ -317,6 +358,7 @@ export const responses = pgTable('responses', {
   sentiment: sentimentEnum('sentiment').notNull(),
   responseType: responseTypeEnum('response_type').notNull(),
   receivedAt: timestamp('received_at', { withTimezone: true }).defaultNow().notNull(),
+  rejectionFeedback: jsonb('rejection_feedback').$type<RejectionFeedbackV1>(),
 }, (table) => [
   index('idx_responses_tenant').on(table.tenantId),
   index('idx_responses_outreach').on(table.outreachLogId),

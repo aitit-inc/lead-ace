@@ -39,42 +39,65 @@ for details and troubleshooting.
 
 ### Usage
 
-Run the slash commands in pipeline order. The first argument is your project
-name (chosen at `/setup`).
+The first argument to every command is your project name (chosen at `/setup`).
 
-| Command | Description |
+| Command | Purpose |
 |---|---|
-| `/setup <name>` | Create a LeadAce project (cloud-managed) |
-| `/strategy <name>` | Define sales & marketing strategy |
-| `/build-list <name>` | Build prospect list via web search |
-| `/outbound <name>` | Outreach via email, forms, and SNS DMs |
-| `/check-results <name>` | Check and record responses |
-| `/evaluate <name>` | Improve strategy based on data analysis (PDCA) |
-| `/daily-cycle <name> [count]` | Auto-run daily cycle (check-results → outbound + build-list) |
-| `/delete-project <name>` | Delete project and all its data |
+| **Setup** | |
+| `/lead-ace` | Intro / hub — first-time orientation, version, skill list |
+| `/setup <name>` | Create a LeadAce project + verify env (MCP, Gmail, local tools) |
+| `/strategy <name>` | Define / update sales & marketing strategy |
+| **Add prospects** (pick one) | |
+| `/build-list <name>` | Web search for new prospects |
+| `/import-prospects <name>` | Load CSV / Excel / SQLite |
+| `/match-prospects <name>` | Reuse prospects already in your tenant |
+| **Sales loop** | |
+| `/outbound <name>` | Send via email, contact forms, SNS DMs |
+| `/check-results <name>` | Collect Gmail + SNS replies → DB |
+| `/evaluate <name>` | PDCA — analyse and auto-improve strategy |
+| **Reflection** | |
+| `/check-feedback <name>` | Aggregate rejection trends (PMF signals, reapproach, decision-maker referrals) |
+| **Automation** | |
+| `/daily-cycle <name> [count]` | One-shot bundle: check-results → evaluate → outbound + build-list |
+| `/setup-cron <name>` | Schedule `/daily-cycle` on the OS (LaunchAgent / Task / cron) |
+| **Maintenance** | |
+| `/delete-project <name>` | Permanently delete a project and all its data |
 
 Projects, prospects, outreach logs, and strategy documents live in the cloud
 — there are no local files to manage. Review everything in the web app at
 https://app.leadace.ai.
 
-### Basic Flow
+### Flow
 
-```
-/setup my-product
-/strategy my-product        # Enter business info interactively
-/build-list my-product      # Collect prospects via web search
-/outbound my-product        # Automated outbound sales
-/check-results my-product   # Check responses
-/evaluate my-product        # Analyze results and auto-improve strategy
+```mermaid
+flowchart TD
+  LA["/lead-ace<br/>intro / hub"] -. first time .-> SU
+  SU["/setup"] --> ST["/strategy"]
+  ST --> P{add prospects}
+
+  P -- web search --> BL["/build-list"]
+  P -- CSV / Excel --> IP["/import-prospects"]
+  P -- reuse tenant --> MP["/match-prospects"]
+
+  BL --> OB["/outbound"]
+  IP --> OB
+  MP --> OB
+
+  OB --> CR["/check-results"]
+  CR --> EV["/evaluate"]
+  EV -- next round --> P
+
+  CR -. rejections .-> CF["/check-feedback"]
+  CF -. tune .-> ST
+
+  DC["/daily-cycle<br/>check + outbound + build, one shot"]
+  SC["/setup-cron<br/>OS schedule"] --> DC
+  DC -. replaces manual loop .-> P
+
+  DEL["/delete-project"]
 ```
 
-After initial setup, use `/daily-cycle` to automate daily sales activities:
-
-```
-/daily-cycle my-product      # Run daily: check replies → ~30 outreach → replenish list
-/daily-cycle my-product 50   # Specify count
-/evaluate my-product         # Improve strategy weekly
-```
+Solid arrows = the main loop. Dashed = optional / occasional / wrapper.
 
 ---
 

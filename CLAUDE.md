@@ -93,6 +93,9 @@ All data is isolated by tenant. Each user auto-gets a tenant on first API access
 - Use `${CLAUDE_PLUGIN_ROOT}` for path references; do not hard-code paths (`${CLAUDE_PLUGIN_ROOT}` points to `plugin/`)
 - Language: English (both code comments and documentation)
 - Use `fetch_url.py` for web page retrieval (WebFetch is prohibited due to freeze issues and lack of SPA support). Use the `--raw` flag when raw HTML is needed
+- **Types express the spec**: design types so invalid states cannot be constructed. `any` is prohibited (see Backend TypeScript Rules). When behavior depends on a runtime check, encode it in the type (discriminated union, branded type, narrowed return) instead of leaving it implicit
+- **Don't reach for `null` / `undefined` reflexively**: each optional field multiplies the states callers must handle. Before adding one, ask: is the value truly absent sometimes, can a sensible default replace it, or should the type be split into variants where each variant has the field present? Use optionality only when absence is a real, distinct state
+- **Stick to the orthodox path**: prefer the boring, obvious implementation over a clever one. Code should read top-to-bottom without the reader having to reconstruct hidden context. If a passage needs a comment to be understood, restructure the code instead
 
 ## Writing Skills (Following Official Best Practices)
 

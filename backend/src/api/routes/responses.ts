@@ -1,18 +1,58 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { eq, and, desc } from 'drizzle-orm'
+import { eq, and, desc, sql, gte, isNotNull } from 'drizzle-orm'
 import {
   projects,
   outreachLogs,
   responses,
   projectProspects,
   prospects,
+  organizations,
   sentimentEnum,
   responseTypeEnum,
   channelEnum,
+  REJECTION_PRIMARY_REASONS,
+  REJECTION_RECONTACT_WINDOWS,
+  type RejectionFeedbackV1,
+  type RejectionPrimaryReason,
+  type RejectionRecontactWindow,
 } from '../../db/schema'
 import type { Env, Variables } from '../types'
+
+// Typed sentinels so SQL literals stay in sync with the schema enums (a rename
+// in REJECTION_PRIMARY_REASONS would otherwise leave these strings as silent
+// 0-row filters with no compile error).
+const FEATURE_GAP_REASON: RejectionPrimaryReason = 'feature_gap'
+const REAPPROACH_WINDOWS: readonly RejectionRecontactWindow[] = ['3_months', '6_months', '12_months']
+const DECISION_MAKER_LIMIT = 50
+
+function clampInt(raw: string | undefined, min: number, max: number): number | null {
+  if (!raw) return null
+  const n = parseInt(raw, 10)
+  if (Number.isNaN(n)) return null
+  return Math.max(min, Math.min(n, max))
+}
+
+const rejectionFeedbackSchema = z.object({
+  version: z.literal(1),
+  primary_reason: z.enum(REJECTION_PRIMARY_REASONS),
+  secondary_reasons: z.array(z.enum(REJECTION_PRIMARY_REASONS)).max(5).optional(),
+  free_text: z.string().max(500).optional(),
+  decision_maker_pointer: z.object({
+    name: z.string().max(200).optional(),
+    email: z.email().max(320).optional(),
+    role: z.string().max(200).optional(),
+  }).optional(),
+  preferred_recontact_window: z.enum(REJECTION_RECONTACT_WINDOWS).optional(),
+  consent: z.object({
+    gdpr_erasure_request: z.boolean().optional(),
+    ccpa_opt_out: z.boolean().optional(),
+    marketing_opt_out: z.boolean().optional(),
+  }).optional(),
+  submitted_at: z.iso.datetime(),
+  tenant_signature: z.string().optional(),
+})
 
 const recordResponseSchema = z.object({
   outreachLogId: z.number().int().positive(),
@@ -20,10 +60,23 @@ const recordResponseSchema = z.object({
   content: z.string().min(1),
   sentiment: z.enum(sentimentEnum.enumValues),
   responseType: z.enum(responseTypeEnum.enumValues),
-  receivedAt: z.string().datetime().optional(),
+  receivedAt: z.iso.datetime().optional(),
   // If true, mark the prospect as do_not_contact across all projects
   markDoNotContact: z.boolean().default(false),
+  rejectionFeedback: rejectionFeedbackSchema.optional(),
 })
+
+// Returns true if the rejection feedback indicates a hard opt-out that must
+// flip do_not_contact regardless of the markDoNotContact flag the caller passed.
+function feedbackForcesDoNotContact(fb: RejectionFeedbackV1): boolean {
+  return (
+    fb.primary_reason === 'unsubscribe_request' ||
+    fb.preferred_recontact_window === 'never' ||
+    fb.consent?.gdpr_erasure_request === true ||
+    fb.consent?.ccpa_opt_out === true ||
+    fb.consent?.marketing_opt_out === true
+  )
+}
 
 export const responsesRouter = new Hono<{ Bindings: Env; Variables: Variables }>()
 
@@ -32,6 +85,10 @@ responsesRouter.post('/responses', zValidator('json', recordResponseSchema), asy
   const input = c.req.valid('json')
   const tenantId = c.get('tenantId')
   const db = c.get('db')
+
+  if (input.rejectionFeedback && input.responseType !== 'rejection') {
+    return c.json({ error: 'rejectionFeedback may only be set when responseType is "rejection"' }, 400)
+  }
 
   // Fetch the outreach log to verify project ownership and get prospect info
   const [log] = await db
@@ -71,6 +128,7 @@ responsesRouter.post('/responses', zValidator('json', recordResponseSchema), asy
       sentiment: input.sentiment,
       responseType: input.responseType,
       receivedAt,
+      rejectionFeedback: input.rejectionFeedback,
     })
     .returning({ id: responses.id })
 
@@ -106,8 +164,9 @@ responsesRouter.post('/responses', zValidator('json', recordResponseSchema), asy
       )
   }
 
-  // Mark do_not_contact globally if requested or if bounce
-  if (input.markDoNotContact || input.responseType === 'bounce') {
+  // DNC ratchet: caller-requested OR bounce OR feedback signals a hard opt-out.
+  const forceDnc = input.rejectionFeedback ? feedbackForcesDoNotContact(input.rejectionFeedback) : false
+  if (input.markDoNotContact || input.responseType === 'bounce' || forceDnc) {
     await db
       .update(prospects)
       .set({ doNotContact: true, updatedAt: new Date() })
@@ -134,8 +193,7 @@ responsesRouter.get('/projects/:id/responses', async (c) => {
     return c.json({ error: 'Project not found' }, 404)
   }
 
-  const limitParam = c.req.query('limit')
-  const limit = limitParam ? Math.min(parseInt(limitParam, 10), 200) : 100
+  const limit = clampInt(c.req.query('limit'), 1, 200) ?? 100
   const sentimentFilter = c.req.query('sentiment')
   const responseTypeFilter = c.req.query('responseType')
 
@@ -157,6 +215,7 @@ responsesRouter.get('/projects/:id/responses', async (c) => {
       sentiment: responses.sentiment,
       responseType: responses.responseType,
       receivedAt: responses.receivedAt,
+      rejectionFeedback: responses.rejectionFeedback,
       prospectId: outreachLogs.prospectId,
       prospectName: prospects.name,
       outreachSubject: outreachLogs.subject,
@@ -169,4 +228,158 @@ responsesRouter.get('/projects/:id/responses', async (c) => {
     .limit(limit)
 
   return c.json({ responses: rows })
+})
+
+// GET /projects/:id/rejection-feedback/summary — aggregate rejection_feedback for /check-feedback
+//
+// Optional query params:
+//   windowDays: number — restrict to rejections received within the last N days (omit for all-time)
+//   freeTextLimit: number — cap on the feature_gap free_text rows (default 20)
+//   recontactLimit: number — cap on rows per recontact-window bucket (default 20)
+responsesRouter.get('/projects/:id/rejection-feedback/summary', async (c) => {
+  const projectId = c.req.param('id')
+  const tenantId = c.get('tenantId')
+  const db = c.get('db')
+
+  const [project] = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
+    .limit(1)
+
+  if (!project) {
+    return c.json({ error: 'Project not found' }, 404)
+  }
+
+  const windowDays = clampInt(c.req.query('windowDays'), 1, 3650)
+  const freeTextLimit = clampInt(c.req.query('freeTextLimit'), 1, 100) ?? 20
+  const recontactLimit = clampInt(c.req.query('recontactLimit'), 1, 100) ?? 20
+
+  const since = windowDays
+    ? new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000)
+    : null
+
+  const baseConditions = [
+    eq(responses.tenantId, tenantId),
+    eq(outreachLogs.projectId, projectId),
+    eq(responses.responseType, 'rejection'),
+    isNotNull(responses.rejectionFeedback),
+  ]
+  if (since) baseConditions.push(gte(responses.receivedAt, since))
+
+  const reapproachWindowList = sql.join(
+    REAPPROACH_WINDOWS.map((w) => sql`${w}`),
+    sql`, `,
+  )
+
+  // 4 independent reads — pipelined over the RLS transaction connection.
+  // recontactRows uses limit * 3 because the IN-list has 3 buckets and we
+  // want up to recontactLimit rows per bucket in the worst (uneven) case.
+  const [reasonRows, featureGapRows, recontactRows, decisionMakerRows] = await Promise.all([
+    // primary_reason distribution
+    db
+      .select({
+        reason: sql<string>`${responses.rejectionFeedback}->>'primary_reason'`,
+        count: sql<number>`COUNT(*)::int`,
+      })
+      .from(responses)
+      .innerJoin(outreachLogs, eq(outreachLogs.id, responses.outreachLogId))
+      .where(and(...baseConditions))
+      .groupBy(sql`${responses.rejectionFeedback}->>'primary_reason'`),
+
+    // feature_gap free_text — top N most recent
+    db
+      .select({
+        receivedAt: responses.receivedAt,
+        freeText: sql<string | null>`${responses.rejectionFeedback}->>'free_text'`,
+        prospectId: outreachLogs.prospectId,
+        prospectName: prospects.name,
+        organizationName: organizations.name,
+      })
+      .from(responses)
+      .innerJoin(outreachLogs, eq(outreachLogs.id, responses.outreachLogId))
+      .innerJoin(prospects, eq(prospects.id, outreachLogs.prospectId))
+      .innerJoin(organizations, eq(organizations.id, prospects.organizationId))
+      .where(and(
+        ...baseConditions,
+        sql`${responses.rejectionFeedback}->>'primary_reason' = ${FEATURE_GAP_REASON}`,
+      ))
+      .orderBy(desc(responses.receivedAt))
+      .limit(freeTextLimit),
+
+    // recontact windows — 3/6/12 month buckets (skip 'never' / 'unspecified' / null)
+    db
+      .select({
+        window: sql<string>`${responses.rejectionFeedback}->>'preferred_recontact_window'`,
+        receivedAt: responses.receivedAt,
+        prospectId: outreachLogs.prospectId,
+        prospectName: prospects.name,
+        organizationName: organizations.name,
+      })
+      .from(responses)
+      .innerJoin(outreachLogs, eq(outreachLogs.id, responses.outreachLogId))
+      .innerJoin(prospects, eq(prospects.id, outreachLogs.prospectId))
+      .innerJoin(organizations, eq(organizations.id, prospects.organizationId))
+      .where(and(
+        ...baseConditions,
+        sql`${responses.rejectionFeedback}->>'preferred_recontact_window' IN (${reapproachWindowList})`,
+      ))
+      .orderBy(desc(responses.receivedAt))
+      .limit(recontactLimit * REAPPROACH_WINDOWS.length),
+
+    // decision_maker_pointer — referrals to the actual buyer
+    db
+      .select({
+        receivedAt: responses.receivedAt,
+        prospectId: outreachLogs.prospectId,
+        prospectName: prospects.name,
+        organizationName: organizations.name,
+        pointer: sql<{ name?: string; email?: string; role?: string } | null>`${responses.rejectionFeedback}->'decision_maker_pointer'`,
+      })
+      .from(responses)
+      .innerJoin(outreachLogs, eq(outreachLogs.id, responses.outreachLogId))
+      .innerJoin(prospects, eq(prospects.id, outreachLogs.prospectId))
+      .innerJoin(organizations, eq(organizations.id, prospects.organizationId))
+      .where(and(
+        ...baseConditions,
+        sql`${responses.rejectionFeedback}->'decision_maker_pointer' IS NOT NULL`,
+      ))
+      .orderBy(desc(responses.receivedAt))
+      .limit(DECISION_MAKER_LIMIT),
+  ])
+
+  const total = reasonRows.reduce((sum, r) => sum + r.count, 0)
+
+  return c.json({
+    windowDays,
+    total,
+    primaryReasonDistribution: reasonRows
+      .map((r) => ({
+        reason: r.reason,
+        count: r.count,
+        percentage: total > 0 ? Math.round((r.count / total) * 1000) / 10 : 0,
+      }))
+      .sort((a, b) => b.count - a.count),
+    featureGapNotes: featureGapRows.map((r) => ({
+      receivedAt: r.receivedAt,
+      freeText: r.freeText,
+      prospectId: r.prospectId,
+      prospectName: r.prospectName,
+      organizationName: r.organizationName,
+    })),
+    recontactWindows: recontactRows.map((r) => ({
+      window: r.window,
+      receivedAt: r.receivedAt,
+      prospectId: r.prospectId,
+      prospectName: r.prospectName,
+      organizationName: r.organizationName,
+    })),
+    decisionMakerPointers: decisionMakerRows.map((r) => ({
+      receivedAt: r.receivedAt,
+      prospectId: r.prospectId,
+      prospectName: r.prospectName,
+      organizationName: r.organizationName,
+      pointer: r.pointer,
+    })),
+  })
 })

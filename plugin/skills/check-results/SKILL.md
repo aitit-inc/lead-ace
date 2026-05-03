@@ -114,6 +114,7 @@ For each response found, call `mcp__plugin_lead-ace_api__record_response` with:
 - `responseType`: `reply` / `auto_reply` / `bounce` / `meeting_request` / `rejection`
 - `markDoNotContact`: set `true` for bounces or explicit opt-out requests
 - `receivedAt`: ISO 8601 timestamp if known
+- `rejectionFeedback`: **only when `responseType` is `rejection`** -- best-effort structured reason inferred from the body. See "Rejection feedback inference" below.
 
 The server automatically determines the prospect status update based on `responseType` and `sentiment`:
 - Positive reply / meeting_request -> `responded`
@@ -126,6 +127,39 @@ The server automatically determines the prospect status update based on `respons
 If they simply declined this project's proposal (e.g., "we'll pass this time"), the server sets `rejected` via the responseType -- do not set `markDoNotContact`.
 
 **Edge case override**: If the automatic status is incorrect (e.g., a negative-sentiment reply that's actually a "not now, try again later"), use `mcp__plugin_lead-ace_api__update_prospect_status` to set the correct status.
+
+#### Rejection feedback inference
+
+When `responseType` is `rejection`, also pass `rejectionFeedback` to capture the structured reason. The server uses this for `/check-feedback` aggregation (especially `feature_gap` notes which are PMF signal) and auto-flips `do_not_contact` for unsubscribe / GDPR / CCPA / "never" recontact intents.
+
+Schema URI: `https://leadace.ai/schema/rejection-feedback-v1.json`
+
+Pick `primary_reason` from the body — choose the single best fit:
+
+| value | when to pick it |
+|---|---|
+| `not_relevant` | Content/role mismatch ("not what we do", "wrong department") |
+| `wrong_timing` | Interested but not now ("come back next quarter", "busy season") |
+| `budget` | Money is the blocker ("no budget", "next fiscal year") |
+| `feature_gap` | Specific missing capability ("we'd need X integration", "no SSO support") -- **highest PMF value, prefer over `not_relevant` when a concrete feature is named** |
+| `already_have_solution` | Existing tool covers it ("we use Foo already") |
+| `competitor_locked` | Multi-year contract / renewal-only window |
+| `not_decision_maker` | Forwarding to someone else / "not my call" |
+| `unsubscribe_request` | Explicit "remove me" / "stop emailing" / "opt out" |
+| `other` | None of the above clearly fit, or confidence is low |
+
+Optional fields to fill when the body supports them:
+- `secondary_reasons`: up to 5 additional values from the same enum, only if multiple are clearly stated
+- `free_text`: short note (≤ 500 chars). Use the original-language body excerpt (≤ 200 chars). For `primary_reason: 'other'`, always include this so the reason isn't lost
+- `preferred_recontact_window`: one of `'never'` / `'3_months'` / `'6_months'` / `'12_months'` / `'unspecified'` -- pick from explicit phrases ("try us in Q3", "ask again next year")
+- `decision_maker_pointer`: `{ name?, email?, role? }` -- only when the body literally points to another contact ("contact tanaka@... for this", "speak to our CTO")
+- `consent`: `{ gdpr_erasure_request, ccpa_opt_out, marketing_opt_out }` -- set the relevant boolean to `true` when the body invokes the corresponding right
+- `submitted_at`: ISO 8601 of `received_at` (or `new Date().toISOString()` if unknown)
+- `version`: always `1`
+
+**When to omit `rejectionFeedback`**: if `responseType !== 'rejection'`, omit it entirely (the server returns 400 if you pass it).
+
+**DNC interaction**: setting `primary_reason: 'unsubscribe_request'`, `preferred_recontact_window: 'never'`, or any `consent.*: true` automatically forces `do_not_contact = true` even if you didn't pass `markDoNotContact: true`. You can still pass `markDoNotContact` explicitly for plain "stop emailing me" with no structured form.
 
 ### 6. Create Reply Drafts
 
@@ -158,5 +192,6 @@ Report the following:
 - **Reply drafts created: N** (number created in step 6; report even if 0. If drafts exist, guide the user to check Gmail drafts)
 - Summary of notable replies
 - Guide the user to run `/evaluate` as the next step
+- If any `rejection` responses were recorded in step 5, also mention: "`/check-feedback` shows aggregated rejection trends (PMF signals, reapproach candidates, decision-maker referrals)."
 
 Report directly to the user (no file output needed -- response data is stored in the DB).

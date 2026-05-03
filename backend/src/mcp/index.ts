@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { z } from 'zod'
 import { verifySupabaseJwt } from '../auth/verify-jwt'
-import { OUTBOUND_MODES } from '../db/schema'
+import { OUTBOUND_MODES, REJECTION_PRIMARY_REASONS, REJECTION_RECONTACT_WINDOWS } from '../db/schema'
 import type { OutreachQuota, OutreachQuotaWindow } from '../api/plan-limits'
 import {
   handleMetadata,
@@ -582,7 +582,7 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
   // --- record_response ---
   server.tool(
     'record_response',
-    'Record a response (email reply, SNS DM, etc.) to an outreach. Updates prospect status and optionally marks do-not-contact.',
+    'Record a response (email reply, SNS DM, etc.) to an outreach. Updates prospect status and optionally marks do-not-contact. For rejections, pass rejectionFeedback to capture the structured reason — feature_gap notes are tracked as PMF signal, and unsubscribe_request / preferred_recontact_window=never / consent.* opt-outs auto-flip do_not_contact.',
     {
       outreachLogId: z.number().int().describe('ID of the outreach log this response is for'),
       channel: z.enum(['email', 'form', 'sns_twitter', 'sns_linkedin']),
@@ -591,6 +591,25 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
       responseType: z.enum(['reply', 'auto_reply', 'bounce', 'meeting_request', 'rejection']),
       receivedAt: z.string().datetime().optional(),
       markDoNotContact: z.boolean().default(false).describe('Set true for bounces or unsubscribes'),
+      rejectionFeedback: z.object({
+        version: z.literal(1),
+        primary_reason: z.enum(REJECTION_PRIMARY_REASONS),
+        secondary_reasons: z.array(z.enum(REJECTION_PRIMARY_REASONS)).max(5).optional(),
+        free_text: z.string().max(500).optional(),
+        decision_maker_pointer: z.object({
+          name: z.string().max(200).optional(),
+          email: z.email().max(320).optional(),
+          role: z.string().max(200).optional(),
+        }).optional(),
+        preferred_recontact_window: z.enum(REJECTION_RECONTACT_WINDOWS).optional(),
+        consent: z.object({
+          gdpr_erasure_request: z.boolean().optional(),
+          ccpa_opt_out: z.boolean().optional(),
+          marketing_opt_out: z.boolean().optional(),
+        }).optional(),
+        submitted_at: z.string().datetime(),
+        tenant_signature: z.string().optional(),
+      }).optional().describe('Only valid when responseType="rejection". Schema: https://leadace.ai/schema/rejection-feedback-v1.json'),
     },
     async (input) => {
       const { ok, data } = await callApi('POST', '/responses', input, apiUrl, authHeader)
@@ -600,6 +619,29 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
       }
       const result = data as { id: number }
       return { content: [{ type: 'text' as const, text: `Response recorded (id: ${result.id}).` }] }
+    },
+  )
+
+  // --- get_rejection_feedback_summary ---
+  server.tool(
+    'get_rejection_feedback_summary',
+    'Aggregate rejection_feedback across a project. Returns primary_reason distribution, feature_gap free-text notes (PMF signal), recontact-window prospects (3/6/12 months), and decision_maker_pointer referrals. Used by /check-feedback.',
+    {
+      projectId: z.string().describe('Project name or ID'),
+      windowDays: z.number().int().min(1).max(3650).optional().describe('Restrict to rejections received within the last N days. Omit for all-time.'),
+    },
+    async ({ projectId, windowDays }) => {
+      const resolved = await resolveProjectId(projectId, apiUrl, authHeader)
+      if (!resolved.id) {
+        return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
+      }
+      const qs = windowDays ? `?windowDays=${windowDays}` : ''
+      const { ok, data } = await callApi('GET', `/projects/${resolved.id}/rejection-feedback/summary${qs}`, null, apiUrl, authHeader)
+      if (!ok) {
+        const err = data as { error: string }
+        return { content: [{ type: 'text' as const, text: `Error: ${err.error}` }], isError: true }
+      }
+      return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] }
     },
   )
 

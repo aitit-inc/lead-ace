@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://leadace.ai/schema/rejection-feedback-v1.json",
+  "title": "LeadAce Rejection Feedback v1",
+  "description": "Structured rejection / opt-out feedback returned by a recipient (or recipient-side agent) in response to outbound outreach. Designed to be carried in an A2A DataPart but usable standalone.",
+  "type": "object",
+  "required": ["version", "primary_reason", "submitted_at"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": 1 },
+    "primary_reason": {
+      "type": "string",
+      "enum": [
+        "not_relevant",
+        "wrong_timing",
+        "budget",
+        "feature_gap",
+        "already_have_solution",
+        "competitor_locked",
+        "not_decision_maker",
+        "unsubscribe_request",
+        "other"
+      ]
+    },
+    "secondary_reasons": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "not_relevant",
+          "wrong_timing",
+          "budget",
+          "feature_gap",
+          "already_have_solution",
+          "competitor_locked",
+          "not_decision_maker",
+          "unsubscribe_request",
+          "other"
+        ]
+      },
+      "uniqueItems": true,
+      "maxItems": 5
+    },
+    "free_text": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "Free-form note. Stored as-is, never used for routing decisions."
+    },
+    "decision_maker_pointer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name":  { "type": "string", "maxLength": 200 },
+        "email": { "type": "string", "format": "email", "maxLength": 320 },
+        "role":  { "type": "string", "maxLength": 200 }
+      }
+    },
+    "preferred_recontact_window": {
+      "type": "string",
+      "enum": ["never", "3_months", "6_months", "12_months", "unspecified"]
+    },
+    "consent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gdpr_erasure_request": { "type": "boolean", "default": false },
+        "ccpa_opt_out":         { "type": "boolean", "default": false },
+        "marketing_opt_out":    { "type": "boolean", "default": false }
+      }
+    },
+    "submitted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 with timezone."
+    },
+    "tenant_signature": {
+      "type": "string",
+      "description": "Optional JWS (issuer = LeadAce). Phase 2.5+ when production-grade impersonation defense is required."
+    }
+  }
+}
