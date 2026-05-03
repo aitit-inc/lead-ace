@@ -104,7 +104,7 @@ After receiving the summary from the sub-agent, report it to the user.
 
 ### 6. Check List Remaining and Determine Execution Order
 
-Check the number of uncontacted (status = 'new') prospects:
+Check the number of reachable prospects (status = 'new' plus 'deferred' prospects whose recontact window has passed):
 
 Call `mcp__plugin_lead-ace_api__get_outbound_targets` with `projectId: "$0"` and `limit: 1`.
 

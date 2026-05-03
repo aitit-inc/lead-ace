@@ -649,7 +649,7 @@ prospectsRouter.get('/projects/:id/prospects/reachable', async (c) => {
   const reachableCondition = and(
     eq(projectProspects.projectId, projectId),
     eq(projectProspects.tenantId, tenantId),
-    eq(projectProspects.status, 'new'),
+    inArray(projectProspects.status, ['new', 'deferred']),
     eq(prospects.doNotContact, false),
     sql`(${prospects.nextOutreachAfter} IS NULL OR ${prospects.nextOutreachAfter} <= NOW())`,
   )

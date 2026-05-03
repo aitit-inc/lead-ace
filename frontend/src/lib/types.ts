@@ -1,4 +1,4 @@
-export type ProspectStatus = 'new' | 'contacted' | 'responded' | 'converted' | 'rejected' | 'inactive';
+export type ProspectStatus = 'new' | 'contacted' | 'responded' | 'converted' | 'rejected' | 'inactive' | 'deferred';
 export type Channel = 'email' | 'form' | 'sns_twitter' | 'sns_linkedin';
 export type OutreachStatus = 'sent' | 'failed' | 'pending_review';
 export type Sentiment = 'positive' | 'neutral' | 'negative';

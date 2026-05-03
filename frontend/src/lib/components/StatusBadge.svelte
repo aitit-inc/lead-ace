@@ -10,6 +10,7 @@
     converted: 'bg-success/15 text-success',
     rejected: 'bg-danger/15 text-danger',
     inactive: 'bg-surface-2 text-text-muted',
+    deferred: 'bg-warning/15 text-warning',
   };
 </script>
 

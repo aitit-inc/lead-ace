@@ -6,7 +6,7 @@
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
 
-  const statuses: ProspectStatus[] = ['new', 'contacted', 'responded', 'converted', 'rejected', 'inactive'];
+  const statuses: ProspectStatus[] = ['new', 'contacted', 'responded', 'converted', 'rejected', 'inactive', 'deferred'];
 
   let prospects = $state<Prospect[]>([]);
   let total = $state(0);

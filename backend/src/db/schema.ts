@@ -34,6 +34,10 @@ export const prospectStatusEnum = pgEnum('prospect_status', [
   'converted',
   'rejected',
   'inactive',
+  // 'deferred' = sent but the prospect asked to be re-approached later
+  // (wrong_timing / budget + recontact_window 3/6/12_months). Re-enters the
+  // outbound queue automatically once prospects.next_outreach_after passes.
+  'deferred',
 ])
 
 export const channelEnum = pgEnum('channel', [

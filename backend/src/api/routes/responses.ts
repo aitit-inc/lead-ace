@@ -85,9 +85,9 @@ function feedbackForcesDoNotContact(fb: RejectionFeedbackV1): boolean {
 
 // Reapproach signal: a rejection that's conditional on time, not preference.
 // The prospect should be re-eligible for outreach once the window passes,
-// so we set prospects.next_outreach_after and roll the project_prospects
-// status back to 'new' (overriding the 'rejected' flip the responseType
-// would otherwise produce).
+// so we set prospects.next_outreach_after and put project_prospects into
+// 'deferred' (a distinct status from 'new' so we don't conflate "never
+// contacted" with "contacted, waiting").
 const REAPPROACH_REASONS: readonly RejectionPrimaryReason[] = ['wrong_timing', 'budget']
 const REAPPROACH_WINDOW_MONTHS: Record<RejectionRecontactWindow, number | null> = {
   never: null,
@@ -178,12 +178,13 @@ responsesRouter.post('/responses', zValidator('json', recordResponseSchema), asy
   }
 
   // A rejection with a recontact window in 3/6/12 months is a deferral, not a
-  // permanent no — flip the status back to 'new' so the prospect is re-eligible
-  // once next_outreach_after passes. DNC overrides this (the feedbackForcesDoNotContact
-  // check below still ratchets do_not_contact=true regardless of newStatus).
+  // permanent no — set status='deferred' so the prospect re-enters the outbound
+  // queue once next_outreach_after passes (reachable WHERE includes deferred +
+  // gates on next_outreach_after). DNC still ratchets do_not_contact=true via
+  // the feedbackForcesDoNotContact check below regardless of newStatus.
   const reapproachMonths = input.rejectionFeedback ? reapproachWindowMonths(input.rejectionFeedback) : null
   if (newStatus === 'rejected' && reapproachMonths !== null) {
-    newStatus = 'new'
+    newStatus = 'deferred'
   }
 
   if (newStatus) {
