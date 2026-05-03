@@ -135,7 +135,7 @@ async function derivePointerProspect(
   now: Date,
 ): Promise<DerivedProspect | null> {
   const pointerName = pointer.name?.trim() || null
-  const pointerEmail = pointer.email?.trim().toLowerCase() || null
+  const pointerEmail = pointer.email?.trim() || null
   const pointerRole = pointer.role?.trim() || null
 
   if (!pointerName && !pointerEmail) return null
@@ -157,7 +157,7 @@ async function derivePointerProspect(
 
   if (!referring) return null
 
-  if (pointerEmail && referring.email && referring.email.toLowerCase() === pointerEmail) return null
+  if (pointerEmail && referring.email === pointerEmail) return null
   if (pointerName && referring.contactName && referring.contactName.toLowerCase() === pointerName.toLowerCase()) return null
 
   if (pointerEmail) {
@@ -185,7 +185,7 @@ async function derivePointerProspect(
       return { id: existing.id, name: existing.name, action: 'matched_existing' }
     }
 
-    return await createDerivedProspect(db, tenantId, referring, referringProspectId, {
+    return await createDerivedProspect(db, tenantId, referring, {
       name: pointerName,
       email: pointerEmail,
       role: pointerRole,
@@ -223,13 +223,13 @@ async function createDerivedProspect(
   db: Db,
   tenantId: string,
   referring: {
+    id: number
     name: string
     organizationId: number
     overview: string
     websiteUrl: string
     industry: string | null
   },
-  referringProspectId: number,
   pointer: { name: string | null; email: string; role: string | null },
   now: Date,
 ): Promise<DerivedProspect> {
@@ -259,7 +259,7 @@ async function createDerivedProspect(
   const refLinks = await db
     .select({ projectId: projectProspects.projectId, priority: projectProspects.priority })
     .from(projectProspects)
-    .where(and(eq(projectProspects.tenantId, tenantId), eq(projectProspects.prospectId, referringProspectId)))
+    .where(and(eq(projectProspects.tenantId, tenantId), eq(projectProspects.prospectId, referring.id)))
 
   if (refLinks.length > 0) {
     await db.insert(projectProspects).values(
