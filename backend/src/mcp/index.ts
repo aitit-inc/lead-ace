@@ -625,7 +625,7 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
   // --- get_rejection_feedback_summary ---
   server.tool(
     'get_rejection_feedback_summary',
-    'Aggregate rejection_feedback across a project. Returns primary_reason distribution, feature_gap free-text notes (PMF signal), recontact-window prospects (3/6/12 months), and decision_maker_pointer referrals. Used by /check-feedback.',
+    'Aggregate rejection_feedback for /check-feedback PMF reflection. Returns primary_reason distribution and feature_gap free-text notes (PMF signal). Tactical fields (recontact-window prospects, decision_maker_pointer referrals) are also returned in the payload but reserved for future /evaluate consumption — do not surface them to users from this endpoint.',
     {
       projectId: z.string().describe('Project name or ID'),
       windowDays: z.number().int().min(1).max(3650).optional().describe('Restrict to rejections received within the last N days. Omit for all-time.'),

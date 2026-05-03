@@ -192,6 +192,6 @@ Report the following:
 - **Reply drafts created: N** (number created in step 6; report even if 0. If drafts exist, guide the user to check Gmail drafts)
 - Summary of notable replies
 - Guide the user to run `/evaluate` as the next step
-- If any `rejection` responses were recorded in step 5, also mention: "`/check-feedback` shows aggregated rejection trends (PMF signals, reapproach candidates, decision-maker referrals)."
+- If any `rejection` responses with `feature_gap` / `already_have_solution` / `competitor_locked` reasons were recorded in step 5, also mention: "`/check-feedback` surfaces PMF signals from rejection feedback (feature gaps, competitor presence)." Do not mention `/check-feedback` for tactical-only rejections (`not_relevant`, `wrong_timing`, `budget`, `not_decision_maker`) — those will be consumed by `/evaluate` automatically.
 
 Report directly to the user (no file output needed -- response data is stored in the DB).

@@ -56,7 +56,7 @@ The first argument to every command is your project name (chosen at `/setup`).
 | `/check-results <name>` | Collect Gmail + SNS replies → DB |
 | `/evaluate <name>` | PDCA — analyse and auto-improve strategy |
 | **Reflection** | |
-| `/check-feedback <name>` | Aggregate rejection trends (PMF signals, reapproach, decision-maker referrals) |
+| `/check-feedback <name>` | Surface PMF signals from rejection feedback (feature gaps, competitor presence) — ad-hoc product reflection |
 | **Automation** | |
 | `/daily-cycle <name> [count]` | One-shot bundle: check-results → evaluate → outbound + build-list |
 | `/setup-cron <name>` | Schedule `/daily-cycle` on the OS (LaunchAgent / Task / cron) |
@@ -87,8 +87,8 @@ flowchart TD
   CR --> EV["/evaluate"]
   EV -- next round --> P
 
-  CR -. rejections .-> CF["/check-feedback"]
-  CF -. tune .-> ST
+  CR -. PMF signals .-> CF["/check-feedback"]
+  CF -. revisit product .-> ST
 
   DC["/daily-cycle<br/>check + outbound + build, one shot"]
   SC["/setup-cron<br/>OS schedule"] --> DC
