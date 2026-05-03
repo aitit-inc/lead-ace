@@ -625,17 +625,21 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
   // --- get_rejection_feedback_summary ---
   server.tool(
     'get_rejection_feedback_summary',
-    'Aggregate rejection_feedback for /check-feedback PMF reflection. Returns primary_reason distribution and feature_gap free-text notes. PMF-relevant reasons are feature_gap, already_have_solution, competitor_locked. Tactical fields (recontact windows, decision_maker_pointer) are also returned but reserved for future /evaluate consumption.',
+    'Aggregate rejection_feedback. With scope="pmf" returns the PMF slice (feature_gap, already_have_solution, competitor_locked) — primary_reason distribution + feature_gap free-text notes, with total and percentages computed within the PMF subset. Used by /check-feedback. Other scopes: "tactical" (non-PMF reasons, recontact windows, decision_maker_pointer) reserved for future /evaluate consumption; "all" (default) returns the unfiltered union.',
     {
       projectId: z.string().describe('Project name or ID'),
       windowDays: z.number().int().min(1).max(3650).optional().describe('Restrict to rejections received within the last N days. Omit for all-time.'),
+      scope: z.enum(['pmf', 'tactical', 'all']).optional().describe('"pmf" → PMF slice only; "tactical" → non-PMF slice only; "all" (default) → unfiltered union.'),
     },
-    async ({ projectId, windowDays }) => {
+    async ({ projectId, windowDays, scope }) => {
       const resolved = await resolveProjectId(projectId, apiUrl, authHeader)
       if (!resolved.id) {
         return { content: [{ type: 'text' as const, text: `Error: ${resolved.error}` }], isError: true }
       }
-      const qs = windowDays ? `?windowDays=${windowDays}` : ''
+      const params = new URLSearchParams()
+      if (windowDays != null) params.set('windowDays', String(windowDays))
+      if (scope != null) params.set('scope', scope)
+      const qs = params.toString() ? `?${params.toString()}` : ''
       const { ok, data } = await callApi('GET', `/projects/${resolved.id}/rejection-feedback/summary${qs}`, null, apiUrl, authHeader)
       if (!ok) {
         const err = data as { error: string }

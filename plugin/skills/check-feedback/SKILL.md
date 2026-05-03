@@ -22,14 +22,14 @@ Return an error if `$0` is empty.
 
 ### 2. Fetch Two Windows in Parallel
 
-Call `mcp__plugin_lead-ace_api__get_rejection_feedback_summary` twice in parallel:
+Call `mcp__plugin_lead-ace_api__get_rejection_feedback_summary` twice in parallel, both with `scope: "pmf"`:
 
-1. `projectId: "$0"`, `windowDays: 30` -> recent
-2. `projectId: "$0"` (no `windowDays`) -> all-time
+1. `projectId: "$0"`, `windowDays: 30`, `scope: "pmf"` -> recent
+2. `projectId: "$0"`, `scope: "pmf"` (no `windowDays`) -> all-time
 
 If the tool returns "Project not found", instruct the user to run `/setup` first and abort.
 
-The response includes both PMF fields (`primaryReasonDistribution`, `featureGapNotes`) and tactical fields (`recontactWindows`, `decisionMakerPointers`). **Ignore the tactical fields** — they are present for future `/evaluate` consumption and are not part of this skill's output.
+With `scope: "pmf"` the server filters to PMF-relevant reasons only and computes `total` + `percentage` within the PMF subset. `recontactWindows` and `decisionMakerPointers` are returned as empty arrays — they are tactical and consumed by `/evaluate`, not by this skill.
 
 ### 3. Format Report
 
@@ -48,13 +48,13 @@ If empty in both windows, render: "No `feature_gap` rejections recorded yet."
 
 #### b. PMF-Relevant Reason Distribution
 
-Render side-by-side: 30-day vs all-time. From `primaryReasonDistribution`, **show only the three PMF-relevant reasons**:
+Render side-by-side: 30-day vs all-time. With `scope: "pmf"` the response's `primaryReasonDistribution` contains only:
 
 - `feature_gap` — concrete missing capability (highest PMF signal)
 - `already_have_solution` — incumbent vendor presence (competitive pressure)
 - `competitor_locked` — multi-year contract / renewal-only window (competitive pressure)
 
-Skip rows where both windows are 0. **Recompute the total and percentages locally from these three reasons only** — the API-supplied `percentage` field is computed against the all-rejections denominator (all 9 enum values) and is misleading for this PMF-only view. Any reason not listed above (`not_relevant` / `wrong_timing` / `budget` / `not_decision_maker` / `unsubscribe_request` / `other`, plus any unknown future enum values) is treated as tactical and excluded.
+`count`, `percentage`, and `total` are all computed within the PMF subset by the server — render them as-is. Skip rows where both windows are 0.
 
 ```
 Reason                   30 days        all-time
@@ -64,13 +64,13 @@ competitor_locked        N (PP%)        N (PP%)
 PMF-relevant total       N              N
 ```
 
-If all three are 0 in both windows, render: "No PMF-relevant rejections recorded yet."
+If `total` is 0 in both windows, render: "No PMF-relevant rejections recorded yet."
 
 ### 4. Closing Note
 
 End with one short, plain-English summary. Decide which line to write in this order — first match wins:
 
-1. **Thin signal** — if PMF-relevant total (recomputed in step 3.b) is < 3, say so and recommend continued data collection. Stop.
+1. **Thin signal** — if `total` (from the response) is < 3, say so and recommend continued data collection. Stop.
 2. **Capability clustering in `featureGapNotes`** — scan `featureGapNotes[].freeText` for repeated capability/feature terms across entries. If ≥2 notes name the same capability, use the dominant-feature example.
 3. **Competitor-pressure share** — if `already_have_solution` + `competitor_locked` together exceed half of the PMF-relevant total, use the competitor example. (Free-text is not returned for these reasons, so do not name a specific vendor.)
 4. **Otherwise** — use the mixed example.

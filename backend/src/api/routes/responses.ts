@@ -24,8 +24,12 @@ import type { Env, Variables } from '../types'
 // in REJECTION_PRIMARY_REASONS would otherwise leave these strings as silent
 // 0-row filters with no compile error).
 const FEATURE_GAP_REASON: RejectionPrimaryReason = 'feature_gap'
+const PMF_RELEVANT_REASONS: readonly RejectionPrimaryReason[] = ['feature_gap', 'already_have_solution', 'competitor_locked']
 const REAPPROACH_WINDOWS: readonly RejectionRecontactWindow[] = ['3_months', '6_months', '12_months']
 const DECISION_MAKER_LIMIT = 50
+
+const REJECTION_SCOPES = ['pmf', 'tactical', 'all'] as const
+type RejectionScope = typeof REJECTION_SCOPES[number]
 
 function clampInt(raw: string | undefined, min: number, max: number): number | null {
   if (!raw) return null
@@ -230,12 +234,18 @@ responsesRouter.get('/projects/:id/responses', async (c) => {
   return c.json({ responses: rows })
 })
 
-// GET /projects/:id/rejection-feedback/summary — aggregate rejection_feedback for /check-feedback
+// GET /projects/:id/rejection-feedback/summary — aggregate rejection_feedback
 //
 // Optional query params:
 //   windowDays: number — restrict to rejections received within the last N days (omit for all-time)
 //   freeTextLimit: number — cap on the feature_gap free_text rows (default 20)
 //   recontactLimit: number — cap on rows per recontact-window bucket (default 20)
+//   scope: 'pmf' | 'tactical' | 'all' (default 'all')
+//     - 'pmf'      → only feature_gap / already_have_solution / competitor_locked;
+//                    skips recontact + decision_maker queries; total + percentages
+//                    are computed within the PMF subset
+//     - 'tactical' → only non-PMF reasons; skips feature_gap free_text query
+//     - 'all'      → no scope filter; full payload (legacy default)
 responsesRouter.get('/projects/:id/rejection-feedback/summary', async (c) => {
   const projectId = c.req.param('id')
   const tenantId = c.get('tenantId')
@@ -251,6 +261,12 @@ responsesRouter.get('/projects/:id/rejection-feedback/summary', async (c) => {
     return c.json({ error: 'Project not found' }, 404)
   }
 
+  const scopeParam = c.req.query('scope') ?? 'all'
+  if (!(REJECTION_SCOPES as readonly string[]).includes(scopeParam)) {
+    return c.json({ error: `Invalid scope: ${scopeParam} (allowed: ${REJECTION_SCOPES.join(', ')})` }, 400)
+  }
+  const scope = scopeParam as RejectionScope
+
   const windowDays = clampInt(c.req.query('windowDays'), 1, 3650)
   const freeTextLimit = clampInt(c.req.query('freeTextLimit'), 1, 100) ?? 20
   const recontactLimit = clampInt(c.req.query('recontactLimit'), 1, 100) ?? 20
@@ -259,6 +275,11 @@ responsesRouter.get('/projects/:id/rejection-feedback/summary', async (c) => {
     ? new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000)
     : null
 
+  const pmfReasonList = sql.join(
+    PMF_RELEVANT_REASONS.map((r) => sql`${r}`),
+    sql`, `,
+  )
+
   const baseConditions = [
     eq(responses.tenantId, tenantId),
     eq(outreachLogs.projectId, projectId),
@@ -266,17 +287,22 @@ responsesRouter.get('/projects/:id/rejection-feedback/summary', async (c) => {
     isNotNull(responses.rejectionFeedback),
   ]
   if (since) baseConditions.push(gte(responses.receivedAt, since))
+  if (scope === 'pmf') {
+    baseConditions.push(sql`${responses.rejectionFeedback}->>'primary_reason' IN (${pmfReasonList})`)
+  } else if (scope === 'tactical') {
+    baseConditions.push(sql`${responses.rejectionFeedback}->>'primary_reason' NOT IN (${pmfReasonList})`)
+  }
 
   const reapproachWindowList = sql.join(
     REAPPROACH_WINDOWS.map((w) => sql`${w}`),
     sql`, `,
   )
 
-  // 4 independent reads — pipelined over the RLS transaction connection.
-  // recontactRows uses limit * 3 because the IN-list has 3 buckets and we
-  // want up to recontactLimit rows per bucket in the worst (uneven) case.
+  // Up to 4 independent reads — pipelined over the RLS transaction connection.
+  // Queries irrelevant to the requested scope are skipped (Promise.all resolves
+  // null directly) so we don't pay for rows the caller will discard.
   const [reasonRows, featureGapRows, recontactRows, decisionMakerRows] = await Promise.all([
-    // primary_reason distribution
+    // primary_reason distribution — always run; baseConditions already constrains by scope
     db
       .select({
         reason: sql<string>`${responses.rejectionFeedback}->>'primary_reason'`,
@@ -287,71 +313,78 @@ responsesRouter.get('/projects/:id/rejection-feedback/summary', async (c) => {
       .where(and(...baseConditions))
       .groupBy(sql`${responses.rejectionFeedback}->>'primary_reason'`),
 
-    // feature_gap free_text — top N most recent
-    db
-      .select({
-        receivedAt: responses.receivedAt,
-        freeText: sql<string | null>`${responses.rejectionFeedback}->>'free_text'`,
-        prospectId: outreachLogs.prospectId,
-        prospectName: prospects.name,
-        organizationName: organizations.name,
-      })
-      .from(responses)
-      .innerJoin(outreachLogs, eq(outreachLogs.id, responses.outreachLogId))
-      .innerJoin(prospects, eq(prospects.id, outreachLogs.prospectId))
-      .innerJoin(organizations, eq(organizations.id, prospects.organizationId))
-      .where(and(
-        ...baseConditions,
-        sql`${responses.rejectionFeedback}->>'primary_reason' = ${FEATURE_GAP_REASON}`,
-      ))
-      .orderBy(desc(responses.receivedAt))
-      .limit(freeTextLimit),
+    // feature_gap free_text — only when PMF or all (the row set is empty under tactical anyway)
+    scope === 'tactical'
+      ? null
+      : db
+          .select({
+            receivedAt: responses.receivedAt,
+            freeText: sql<string | null>`${responses.rejectionFeedback}->>'free_text'`,
+            prospectId: outreachLogs.prospectId,
+            prospectName: prospects.name,
+            organizationName: organizations.name,
+          })
+          .from(responses)
+          .innerJoin(outreachLogs, eq(outreachLogs.id, responses.outreachLogId))
+          .innerJoin(prospects, eq(prospects.id, outreachLogs.prospectId))
+          .innerJoin(organizations, eq(organizations.id, prospects.organizationId))
+          .where(and(
+            ...baseConditions,
+            sql`${responses.rejectionFeedback}->>'primary_reason' = ${FEATURE_GAP_REASON}`,
+          ))
+          .orderBy(desc(responses.receivedAt))
+          .limit(freeTextLimit),
 
-    // recontact windows — 3/6/12 month buckets (skip 'never' / 'unspecified' / null)
-    db
-      .select({
-        window: sql<string>`${responses.rejectionFeedback}->>'preferred_recontact_window'`,
-        receivedAt: responses.receivedAt,
-        prospectId: outreachLogs.prospectId,
-        prospectName: prospects.name,
-        organizationName: organizations.name,
-      })
-      .from(responses)
-      .innerJoin(outreachLogs, eq(outreachLogs.id, responses.outreachLogId))
-      .innerJoin(prospects, eq(prospects.id, outreachLogs.prospectId))
-      .innerJoin(organizations, eq(organizations.id, prospects.organizationId))
-      .where(and(
-        ...baseConditions,
-        sql`${responses.rejectionFeedback}->>'preferred_recontact_window' IN (${reapproachWindowList})`,
-      ))
-      .orderBy(desc(responses.receivedAt))
-      .limit(recontactLimit * REAPPROACH_WINDOWS.length),
+    // recontact windows — only when tactical or all (PMF reasons rarely set this and it's not PMF-relevant)
+    scope === 'pmf'
+      ? null
+      : db
+          .select({
+            window: sql<string>`${responses.rejectionFeedback}->>'preferred_recontact_window'`,
+            receivedAt: responses.receivedAt,
+            prospectId: outreachLogs.prospectId,
+            prospectName: prospects.name,
+            organizationName: organizations.name,
+          })
+          .from(responses)
+          .innerJoin(outreachLogs, eq(outreachLogs.id, responses.outreachLogId))
+          .innerJoin(prospects, eq(prospects.id, outreachLogs.prospectId))
+          .innerJoin(organizations, eq(organizations.id, prospects.organizationId))
+          .where(and(
+            ...baseConditions,
+            sql`${responses.rejectionFeedback}->>'preferred_recontact_window' IN (${reapproachWindowList})`,
+          ))
+          .orderBy(desc(responses.receivedAt))
+          .limit(recontactLimit * REAPPROACH_WINDOWS.length),
 
-    // decision_maker_pointer — referrals to the actual buyer
-    db
-      .select({
-        receivedAt: responses.receivedAt,
-        prospectId: outreachLogs.prospectId,
-        prospectName: prospects.name,
-        organizationName: organizations.name,
-        pointer: sql<{ name?: string; email?: string; role?: string } | null>`${responses.rejectionFeedback}->'decision_maker_pointer'`,
-      })
-      .from(responses)
-      .innerJoin(outreachLogs, eq(outreachLogs.id, responses.outreachLogId))
-      .innerJoin(prospects, eq(prospects.id, outreachLogs.prospectId))
-      .innerJoin(organizations, eq(organizations.id, prospects.organizationId))
-      .where(and(
-        ...baseConditions,
-        sql`${responses.rejectionFeedback}->'decision_maker_pointer' IS NOT NULL`,
-      ))
-      .orderBy(desc(responses.receivedAt))
-      .limit(DECISION_MAKER_LIMIT),
+    // decision_maker_pointer — only when tactical or all
+    scope === 'pmf'
+      ? null
+      : db
+          .select({
+            receivedAt: responses.receivedAt,
+            prospectId: outreachLogs.prospectId,
+            prospectName: prospects.name,
+            organizationName: organizations.name,
+            pointer: sql<{ name?: string; email?: string; role?: string } | null>`${responses.rejectionFeedback}->'decision_maker_pointer'`,
+          })
+          .from(responses)
+          .innerJoin(outreachLogs, eq(outreachLogs.id, responses.outreachLogId))
+          .innerJoin(prospects, eq(prospects.id, outreachLogs.prospectId))
+          .innerJoin(organizations, eq(organizations.id, prospects.organizationId))
+          .where(and(
+            ...baseConditions,
+            sql`${responses.rejectionFeedback}->'decision_maker_pointer' IS NOT NULL`,
+          ))
+          .orderBy(desc(responses.receivedAt))
+          .limit(DECISION_MAKER_LIMIT),
   ])
 
   const total = reasonRows.reduce((sum, r) => sum + r.count, 0)
 
   return c.json({
     windowDays,
+    scope,
     total,
     primaryReasonDistribution: reasonRows
       .map((r) => ({
@@ -360,21 +393,21 @@ responsesRouter.get('/projects/:id/rejection-feedback/summary', async (c) => {
         percentage: total > 0 ? Math.round((r.count / total) * 1000) / 10 : 0,
       }))
       .sort((a, b) => b.count - a.count),
-    featureGapNotes: featureGapRows.map((r) => ({
+    featureGapNotes: (featureGapRows ?? []).map((r) => ({
       receivedAt: r.receivedAt,
       freeText: r.freeText,
       prospectId: r.prospectId,
       prospectName: r.prospectName,
       organizationName: r.organizationName,
     })),
-    recontactWindows: recontactRows.map((r) => ({
+    recontactWindows: (recontactRows ?? []).map((r) => ({
       window: r.window,
       receivedAt: r.receivedAt,
       prospectId: r.prospectId,
       prospectName: r.prospectName,
       organizationName: r.organizationName,
     })),
-    decisionMakerPointers: decisionMakerRows.map((r) => ({
+    decisionMakerPointers: (decisionMakerRows ?? []).map((r) => ({
       receivedAt: r.receivedAt,
       prospectId: r.prospectId,
       prospectName: r.prospectName,
