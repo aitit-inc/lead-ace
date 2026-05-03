@@ -625,7 +625,7 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
   // --- get_rejection_feedback_summary ---
   server.tool(
     'get_rejection_feedback_summary',
-    'Aggregate rejection_feedback. With scope="pmf" returns the PMF slice (feature_gap, already_have_solution, competitor_locked) — primary_reason distribution + feature_gap free-text notes, with total and percentages computed within the PMF subset. Used by /check-feedback. Other scopes: "tactical" (non-PMF reasons, recontact windows, decision_maker_pointer) reserved for future /evaluate consumption; "all" (default) returns the unfiltered union.',
+    'Aggregate rejection_feedback. With scope="pmf" returns the PMF slice (feature_gap, already_have_solution, competitor_locked) — primary_reason distribution + feature_gap free-text notes, with total and percentages computed within the PMF subset. Used by /check-feedback. With scope="tactical" returns the non-PMF slice — primary_reason distribution + recontact windows + decision_maker_pointer + not_relevant notes (with industry context). Used by /evaluate to drive targeting/recontact/pointer follow-up. scope="all" (default) returns the unfiltered union.',
     {
       projectId: z.string().describe('Project name or ID'),
       windowDays: z.number().int().min(1).max(3650).optional().describe('Restrict to rejections received within the last N days. Omit for all-time.'),

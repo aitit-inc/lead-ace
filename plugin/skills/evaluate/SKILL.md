@@ -7,6 +7,7 @@ allowed-tools:
   - Read
   - WebSearch
   - mcp__plugin_lead-ace_api__get_eval_data
+  - mcp__plugin_lead-ace_api__get_rejection_feedback_summary
   - mcp__plugin_lead-ace_api__get_evaluation_history
   - mcp__plugin_lead-ace_api__record_evaluation
   - mcp__plugin_lead-ace_api__get_document
@@ -24,15 +25,25 @@ A skill that analyzes sales activity result data and automatically evaluates and
 
 - Project ID: `$0` (required)
 
-Call `mcp__plugin_lead-ace_api__get_eval_data` with `projectId: "$0"`.
+In parallel, call:
+- `mcp__plugin_lead-ace_api__get_eval_data` with `projectId: "$0"`
+- `mcp__plugin_lead-ace_api__get_rejection_feedback_summary` with `projectId: "$0"`, `windowDays: 30`, `scope: "tactical"`
 
-If the tool returns a "Project not found" error, instruct the user to run `/setup` first and **abort**.
+If `get_eval_data` returns a "Project not found" error, instruct the user to run `/setup` first and **abort**.
 
-The response includes:
+`get_eval_data` response includes:
 - `metrics`: totalOutreach, channelCounts, responseCounts, sentimentBreakdown, priorityResponseRate, statusCounts, channelResponseRate
 - `respondedMessages`: all outreach bodies that received responses (with sentiment and responseType)
 - `noResponseSample`: sample of outreach bodies that received no response
 - `dataSufficiency`: `{ sufficient, totalSent, daysSinceLastSend }`
+
+`get_rejection_feedback_summary` (scope="tactical", windowDays=30) response includes:
+- `total`, `primaryReasonDistribution`: counts of `not_relevant` / `wrong_timing` / `budget` / `not_decision_maker` / `unsubscribe_request` / `other`
+- `recontactWindows`: prospects that asked to be recontacted in 3/6/12 months — actionable list pending automation
+- `decisionMakerPointers`: prospects that pointed to a different decision-maker — actionable list pending automation
+- `notRelevantNotes`: per-row data with `industry`, `organizationName`, `freeText` — drives targeting hints in step 4
+
+If `get_rejection_feedback_summary` errors, continue with the eval data only and note the failure in the report.
 
 ### 2. Load Existing Strategy
 
@@ -69,6 +80,12 @@ Retrieve analysis frameworks via `mcp__plugin_lead-ace_api__get_master_document`
 **Channel Analysis:**
 - Most effective channel
 - Cost-effectiveness by channel
+
+**Rejection Tactical Analysis (from `get_rejection_feedback_summary` scope="tactical"):**
+- `primaryReasonDistribution`: which tactical reasons dominate (e.g. `not_relevant` heavy → targeting issue; `wrong_timing` / `budget` heavy → pipeline issue; `not_decision_maker` heavy → outreach is reaching wrong contacts)
+- `notRelevantNotes`: group rows by `industry` (and by `organizationName` when industries are missing). An industry with multiple `not_relevant` hits is a targeting-mismatch signal — use it in step 4 to update SEARCH_NOTES
+- `recontactWindows`: count by `window` (3/6/12_months). Each row is a real prospect that asked to be recontacted later — surface in the report (auto-scheduling is not yet implemented)
+- `decisionMakerPointers`: each row is a referral to another contact — surface in the report (auto-prospect-creation is not yet implemented)
 
 ### 4. Determine and Apply Improvement Actions
 
@@ -119,6 +136,7 @@ Content to add:
 - Industries / segments with response rates above overall average -> "XX industry has X% response rate (vs overall average Y%). Explore more of this industry"
 - Characteristics similar to companies that responded (scale, business content, pain points) -> "Companies like XX respond well. Search for similar companies and competitors"
 - Segments with poor responses -> "XX industry has low response rate (X%). Lower priority"
+- **Industries with `not_relevant` rejection clusters** (from `notRelevantNotes` grouped by `industry`): if ≥2 rows in the same industry, add "XX industry has N `not_relevant` rejections — targeting mismatch, lower priority". Skip industries with only 1 hit (noise)
 
 Skip if the document is not found (build-list hasn't been run yet).
 
@@ -141,4 +159,9 @@ Report the following directly to the user (no file output needed -- evaluation d
 - Changes from previous evaluation (if any)
 - Important findings from the analysis
 - List of improvements applied
+- **Tactical rejection signals** (from step 1's `get_rejection_feedback_summary`):
+  - Tactical reason distribution (counts by `not_relevant` / `wrong_timing` / `budget` / `not_decision_maker` / `unsubscribe_request` / `other`). Show whenever tactical `total` > 0 — non-recontact reasons like `not_relevant` and `unsubscribe_request` still belong here
+  - **Recontact queue** — list `recontactWindows` rows (prospect, organization, requested window). State that auto-scheduling is not yet implemented, so manual follow-up is required for now. Omit this sub-bullet when `recontactWindows` is empty
+  - **Decision-maker referrals** — list `decisionMakerPointers` rows (referring prospect → pointer name/email/role). State that auto-prospect-creation is not yet implemented, so manual registration is required for now. Omit this sub-bullet when `decisionMakerPointers` is empty
+  - Skip the whole section only when tactical `total` is 0 (no tactical rejections at all)
 - Next actions to take (`/build-list` for additional exploration, `/outbound` for re-approach, etc.)

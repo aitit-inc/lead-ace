@@ -54,7 +54,7 @@ The first argument to every command is your project name (chosen at `/setup`).
 | **Sales loop** | |
 | `/outbound <name>` | Send via email, contact forms, SNS DMs |
 | `/check-results <name>` | Collect Gmail + SNS replies → DB |
-| `/evaluate <name>` | PDCA — analyse and auto-improve strategy |
+| `/evaluate <name>` | PDCA — analyse, auto-improve strategy, and surface tactical rejection signals (recontact queue, decision-maker referrals, targeting hints) |
 | **Reflection** | |
 | `/check-feedback <name>` | Surface PMF signals from rejection feedback (feature gaps, competitor presence) — ad-hoc product reflection |
 | **Automation** | |
@@ -98,6 +98,7 @@ flowchart TD
 ```
 
 Solid arrows = the main loop. Dashed = optional / occasional / wrapper.
+`/evaluate` also consumes the tactical slice of rejection feedback (recontact requests, decision-maker referrals, `not_relevant` industry clusters) recorded by `/check-results` — no separate user step.
 
 ---
 

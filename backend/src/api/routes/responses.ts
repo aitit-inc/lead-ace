@@ -24,6 +24,7 @@ import type { Env, Variables } from '../types'
 // in REJECTION_PRIMARY_REASONS would otherwise leave these strings as silent
 // 0-row filters with no compile error).
 const FEATURE_GAP_REASON: RejectionPrimaryReason = 'feature_gap'
+const NOT_RELEVANT_REASON: RejectionPrimaryReason = 'not_relevant'
 const PMF_RELEVANT_REASONS: readonly RejectionPrimaryReason[] = ['feature_gap', 'already_have_solution', 'competitor_locked']
 const REAPPROACH_WINDOWS: readonly RejectionRecontactWindow[] = ['3_months', '6_months', '12_months']
 const DECISION_MAKER_LIMIT = 50
@@ -240,9 +241,10 @@ responsesRouter.get('/projects/:id/responses', async (c) => {
 //   windowDays: number — restrict to rejections received within the last N days (omit for all-time)
 //   freeTextLimit: number — cap on the feature_gap free_text rows (default 20)
 //   recontactLimit: number — cap on rows per recontact-window bucket (default 20)
+//   notRelevantLimit: number — cap on the not_relevant rows with industry context (default 50)
 //   scope: 'pmf' | 'tactical' | 'all' (default 'all')
 //     - 'pmf'      → only feature_gap / already_have_solution / competitor_locked;
-//                    skips recontact + decision_maker queries; total + percentages
+//                    skips recontact + decision_maker + not_relevant queries; total + percentages
 //                    are computed within the PMF subset
 //     - 'tactical' → only non-PMF reasons; skips feature_gap free_text query
 //     - 'all'      → no scope filter; full payload (legacy default)
@@ -270,6 +272,7 @@ responsesRouter.get('/projects/:id/rejection-feedback/summary', async (c) => {
   const windowDays = clampInt(c.req.query('windowDays'), 1, 3650)
   const freeTextLimit = clampInt(c.req.query('freeTextLimit'), 1, 100) ?? 20
   const recontactLimit = clampInt(c.req.query('recontactLimit'), 1, 100) ?? 20
+  const notRelevantLimit = clampInt(c.req.query('notRelevantLimit'), 1, 200) ?? 50
 
   const since = windowDays
     ? new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000)
@@ -298,10 +301,10 @@ responsesRouter.get('/projects/:id/rejection-feedback/summary', async (c) => {
     sql`, `,
   )
 
-  // Up to 4 independent reads — pipelined over the RLS transaction connection.
+  // Up to 5 independent reads — pipelined over the RLS transaction connection.
   // Queries irrelevant to the requested scope are skipped (Promise.all resolves
   // null directly) so we don't pay for rows the caller will discard.
-  const [reasonRows, featureGapRows, recontactRows, decisionMakerRows] = await Promise.all([
+  const [reasonRows, featureGapRows, recontactRows, decisionMakerRows, notRelevantRows] = await Promise.all([
     // primary_reason distribution — always run; baseConditions already constrains by scope
     db
       .select({
@@ -378,6 +381,30 @@ responsesRouter.get('/projects/:id/rejection-feedback/summary', async (c) => {
           ))
           .orderBy(desc(responses.receivedAt))
           .limit(DECISION_MAKER_LIMIT),
+
+    // not_relevant rows with prospect industry — only when tactical or all.
+    // Lets /evaluate aggregate by industry / org to drive SEARCH_NOTES targeting.
+    scope === 'pmf'
+      ? null
+      : db
+          .select({
+            receivedAt: responses.receivedAt,
+            freeText: sql<string | null>`${responses.rejectionFeedback}->>'free_text'`,
+            prospectId: outreachLogs.prospectId,
+            prospectName: prospects.name,
+            organizationName: organizations.name,
+            industry: prospects.industry,
+          })
+          .from(responses)
+          .innerJoin(outreachLogs, eq(outreachLogs.id, responses.outreachLogId))
+          .innerJoin(prospects, eq(prospects.id, outreachLogs.prospectId))
+          .innerJoin(organizations, eq(organizations.id, prospects.organizationId))
+          .where(and(
+            ...baseConditions,
+            sql`${responses.rejectionFeedback}->>'primary_reason' = ${NOT_RELEVANT_REASON}`,
+          ))
+          .orderBy(desc(responses.receivedAt))
+          .limit(notRelevantLimit),
   ])
 
   const total = reasonRows.reduce((sum, r) => sum + r.count, 0)
@@ -413,6 +440,14 @@ responsesRouter.get('/projects/:id/rejection-feedback/summary', async (c) => {
       prospectName: r.prospectName,
       organizationName: r.organizationName,
       pointer: r.pointer,
+    })),
+    notRelevantNotes: (notRelevantRows ?? []).map((r) => ({
+      receivedAt: r.receivedAt,
+      freeText: r.freeText,
+      prospectId: r.prospectId,
+      prospectName: r.prospectName,
+      organizationName: r.organizationName,
+      industry: r.industry,
     })),
   })
 })
