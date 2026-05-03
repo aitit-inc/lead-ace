@@ -177,11 +177,6 @@ responsesRouter.post('/responses', zValidator('json', recordResponseSchema), asy
       break
   }
 
-  // A rejection with a recontact window in 3/6/12 months is a deferral, not a
-  // permanent no — set status='deferred' so the prospect re-enters the outbound
-  // queue once next_outreach_after passes (reachable WHERE includes deferred +
-  // gates on next_outreach_after). DNC still ratchets do_not_contact=true via
-  // the feedbackForcesDoNotContact check below regardless of newStatus.
   const reapproachMonths = input.rejectionFeedback ? reapproachWindowMonths(input.rejectionFeedback) : null
   if (newStatus === 'rejected' && reapproachMonths !== null) {
     newStatus = 'deferred'

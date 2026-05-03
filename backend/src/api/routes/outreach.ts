@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { eq, and, desc, ne, sql } from 'drizzle-orm'
+import { eq, and, desc, ne, sql, inArray } from 'drizzle-orm'
 import {
   outreachLogs,
   outreachStatusEnum,
@@ -9,6 +9,7 @@ import {
   prospects,
   responses,
   channelEnum,
+  REACHABLE_STATUSES,
 } from '../../db/schema'
 import {
   getRemainingOutreachQuota,
@@ -80,7 +81,7 @@ outreachRouter.post('/outreach', zValidator('json', recordOutreachSchema), async
         and(
           eq(projectProspects.projectId, input.projectId),
           eq(projectProspects.prospectId, input.prospectId),
-          eq(projectProspects.status, 'new'),
+          inArray(projectProspects.status, REACHABLE_STATUSES),
         ),
       )
   }
@@ -184,7 +185,7 @@ outreachRouter.post(
           and(
             eq(projectProspects.projectId, input.projectId),
             eq(projectProspects.prospectId, input.prospectId),
-            eq(projectProspects.status, 'new'),
+            inArray(projectProspects.status, REACHABLE_STATUSES),
           ),
         )
     }

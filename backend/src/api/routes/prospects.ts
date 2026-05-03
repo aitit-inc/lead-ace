@@ -8,6 +8,7 @@ import {
   projectProspects,
   formTypeEnum,
   prospectStatusEnum,
+  REACHABLE_STATUSES,
 } from '../../db/schema'
 import {
   getRemainingOutreachQuota,
@@ -649,7 +650,7 @@ prospectsRouter.get('/projects/:id/prospects/reachable', async (c) => {
   const reachableCondition = and(
     eq(projectProspects.projectId, projectId),
     eq(projectProspects.tenantId, tenantId),
-    inArray(projectProspects.status, ['new', 'deferred']),
+    inArray(projectProspects.status, REACHABLE_STATUSES),
     eq(prospects.doNotContact, false),
     sql`(${prospects.nextOutreachAfter} IS NULL OR ${prospects.nextOutreachAfter} <= NOW())`,
   )

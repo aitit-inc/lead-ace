@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { z } from 'zod'
 import { verifySupabaseJwt } from '../auth/verify-jwt'
-import { OUTBOUND_MODES, REJECTION_PRIMARY_REASONS, REJECTION_RECONTACT_WINDOWS } from '../db/schema'
+import { OUTBOUND_MODES, REJECTION_PRIMARY_REASONS, REJECTION_RECONTACT_WINDOWS, prospectStatusEnum } from '../db/schema'
 import type { OutreachQuota, OutreachQuotaWindow } from '../api/plan-limits'
 import {
   handleMetadata,
@@ -505,7 +505,7 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
     {
       projectId: z.string().describe('Project name or ID'),
       prospectId: z.number().int(),
-      status: z.enum(['new', 'contacted', 'responded', 'converted', 'rejected', 'inactive']),
+      status: z.enum(prospectStatusEnum.enumValues),
     },
     async ({ projectId, prospectId, status }) => {
       const resolved = await resolveProjectId(projectId, apiUrl, authHeader)
@@ -582,7 +582,7 @@ function createMcpServer(apiUrl: string, authHeader: string): McpServer {
   // --- record_response ---
   server.tool(
     'record_response',
-    'Record a response (email reply, SNS DM, etc.) to an outreach. Updates prospect status and optionally marks do-not-contact. For rejections, pass rejectionFeedback to capture the structured reason — feature_gap notes are tracked as PMF signal; unsubscribe_request / preferred_recontact_window=never / consent.* opt-outs auto-flip do_not_contact; primary_reason wrong_timing/budget + preferred_recontact_window 3/6/12_months auto-defers (sets prospects.next_outreach_after, status reset to "new") so the prospect re-enters the outbound queue when the window passes.',
+    'Record a response (email reply, SNS DM, etc.) to an outreach. Updates prospect status and optionally marks do-not-contact. For rejections, pass rejectionFeedback to capture the structured reason — feature_gap notes are tracked as PMF signal; unsubscribe_request / preferred_recontact_window=never / consent.* opt-outs auto-flip do_not_contact; primary_reason wrong_timing/budget + preferred_recontact_window 3/6/12_months auto-defers (sets status="deferred" and prospects.next_outreach_after) so the prospect re-enters the outbound queue when the window passes.',
     {
       outreachLogId: z.number().int().describe('ID of the outreach log this response is for'),
       channel: z.enum(['email', 'form', 'sns_twitter', 'sns_linkedin']),
